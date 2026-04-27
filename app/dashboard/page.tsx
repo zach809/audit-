@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 import { AuditSection } from '@/components/dashboard/audit-section'
 import { GmailConnectionStatus } from '@/components/dashboard/gmail-connection-status'
@@ -27,8 +28,9 @@ export default async function DashboardPage() {
     .eq('audit_date', today.toISOString().split('T')[0])
     .single()
 
-  // Check if Gmail is connected
-  const { data: gmailToken } = await supabase
+  // Check if Gmail is connected - use admin client to bypass RLS
+  const supabaseAdmin = createAdminClient()
+  const { data: gmailToken } = await supabaseAdmin
     .from('gmail_tokens')
     .select('email, updated_at')
     .limit(1)

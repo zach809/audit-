@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,9 +12,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
-
-  // Check Gmail connection
-  const { data: gmailToken } = await supabase
+  
+  // Check Gmail connection - use admin client to bypass RLS
+  const supabaseAdmin = createAdminClient()
+  const { data: gmailToken } = await supabaseAdmin
     .from('gmail_tokens')
     .select('email, updated_at')
     .limit(1)
