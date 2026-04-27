@@ -94,7 +94,9 @@ Return a JSON object with these exact fields:
   "missing_or_unclear": string or null (list what is missing or unclear),
   "audit_status": "needs_follow_up" | "no_reply" | "wrong_case_manager" | "needs_clarification" | "looks_good",
   "flags": string[] (any important flags or warnings),
-  "notes_for_zach": string or null (any special notes for Zach)
+  "notes_for_zach": string or null (any special notes for Zach),
+  "original_email_timestamp": string or null (ISO timestamp of the first email in thread),
+  "reply_timestamp": string or null (ISO timestamp of the case manager's reply)
 }`
 
   try {
@@ -143,8 +145,24 @@ Return a JSON object with these exact fields:
       audit_status: 'needs_follow_up',
       flags: ['AUDIT ERROR'],
       notes_for_zach: 'OpenAI analysis failed - manual review required',
+      response_time_minutes: null,
+      original_email_timestamp: null,
+      reply_timestamp: null,
     }
   }
+}
+
+// Calculate response time in minutes from timestamps
+function calculateResponseTime(originalTimestamp: string | null, replyTimestamp: string | null): number | null {
+  if (!originalTimestamp || !replyTimestamp) return null
+  
+  const originalDate = new Date(originalTimestamp)
+  const replyDate = new Date(replyTimestamp)
+  
+  if (isNaN(originalDate.getTime()) || isNaN(replyDate.getTime())) return null
+  
+  const diffMs = replyDate.getTime() - originalDate.getTime()
+  return Math.round(diffMs / (1000 * 60)) // Convert to minutes
 }
 
 export async function runFullAudit(threads: {
@@ -176,6 +194,8 @@ export async function runFullAudit(threads: {
     const attorneyKey = result.attorney?.toLowerCase()
     const assignment = attorneyKey ? assignments.get(attorneyKey) : undefined
 
+    const responseTime = calculateResponseTime(result.original_email_timestamp, result.reply_timestamp)
+    
     await supabase.from('email_audits').upsert({
       thread_id: thread.id,
       email_type: emailType,
@@ -197,6 +217,9 @@ export async function runFullAudit(threads: {
       notes_for_zach: result.notes_for_zach,
       raw_thread_json: thread,
       audited_at: new Date().toISOString(),
+      response_time_minutes: responseTime,
+      original_email_timestamp: result.original_email_timestamp,
+      reply_timestamp: result.reply_timestamp,
     }, {
       onConflict: 'thread_id',
     })

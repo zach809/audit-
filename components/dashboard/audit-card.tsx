@@ -20,6 +20,32 @@ interface AuditCardProps {
   audit: EmailAudit
 }
 
+// Format response time into human readable string
+function formatResponseTime(minutes: number | null): string {
+  if (minutes === null) return 'No reply'
+  if (minutes < 1) return 'Less than 1 min'
+  if (minutes < 60) return `${minutes} min`
+  
+  const hours = Math.floor(minutes / 60)
+  const remainingMins = minutes % 60
+  
+  if (hours < 24) {
+    return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`
+  }
+  
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`
+}
+
+// Get color based on response time (green = fast, yellow = moderate, red = slow)
+function getResponseTimeColor(minutes: number | null): string {
+  if (minutes === null) return 'text-muted-foreground'
+  if (minutes <= 30) return 'text-emerald-600' // Under 30 mins - great
+  if (minutes <= 120) return 'text-amber-600' // Under 2 hours - okay
+  return 'text-red-600' // Over 2 hours - slow
+}
+
 export function AuditCard({ audit }: AuditCardProps) {
   const getStatusBadge = () => {
     switch (audit.audit_status) {
@@ -103,6 +129,14 @@ export function AuditCard({ audit }: AuditCardProps) {
               </span>
             </div>
           )}
+
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Response Time:</span>
+            <span className={`font-medium ${getResponseTimeColor(audit.response_time_minutes)}`}>
+              {formatResponseTime(audit.response_time_minutes)}
+            </span>
+          </div>
         </div>
 
         {audit.case_manager_reply && (

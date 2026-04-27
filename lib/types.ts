@@ -40,6 +40,9 @@ export interface EmailAudit {
   raw_thread_json: unknown
   audited_at: string
   created_at: string
+  response_time_minutes: number | null
+  original_email_timestamp: string | null
+  reply_timestamp: string | null
 }
 
 export interface AuditSummary {
@@ -82,6 +85,9 @@ export interface AuditResult {
   audit_status: AuditStatus
   flags: string[]
   notes_for_zach: string | null
+  response_time_minutes: number | null
+  original_email_timestamp: string | null
+  reply_timestamp: string | null
 }
 
 // Dashboard filter state
