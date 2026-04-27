@@ -1,0 +1,164 @@
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { 
+  User, 
+  Briefcase, 
+  Users, 
+  FileText, 
+  MapPin, 
+  Calendar, 
+  MessageSquare,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Clock
+} from 'lucide-react'
+import type { EmailAudit } from '@/lib/types'
+
+interface AuditCardProps {
+  audit: EmailAudit
+}
+
+export function AuditCard({ audit }: AuditCardProps) {
+  const getStatusBadge = () => {
+    switch (audit.audit_status) {
+      case 'looks_good':
+        return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Looks Good</Badge>
+      case 'needs_follow_up':
+        return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Needs Follow-Up</Badge>
+      case 'no_reply':
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">No Reply</Badge>
+      case 'wrong_case_manager':
+        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Wrong CM</Badge>
+      case 'needs_clarification':
+        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Needs Clarification</Badge>
+    }
+  }
+
+  const getEmailTypeBadge = () => {
+    return audit.email_type === 'court_results' 
+      ? <Badge variant="secondary">Court Results</Badge>
+      : <Badge variant="secondary">Add to Calendar</Badge>
+  }
+
+  return (
+    <Card className="bg-muted/30">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold">{audit.client_name || 'Unknown Client'}</h4>
+              {getStatusBadge()}
+              {getEmailTypeBadge()}
+            </div>
+            <p className="text-sm text-muted-foreground line-clamp-1">{audit.subject}</p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Attorney:</span>
+            <span className="font-medium">{audit.attorney || 'N/A'}</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Expected CM:</span>
+            <span className="font-medium">{audit.expected_case_manager || 'N/A'}</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Replied by:</span>
+            <span className={`font-medium ${audit.actual_replier !== audit.expected_case_manager ? 'text-amber-600' : ''}`}>
+              {audit.actual_replier || 'No reply'}
+            </span>
+          </div>
+
+          {audit.county && (
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">County:</span>
+              <span className="font-medium">{audit.county}</span>
+            </div>
+          )}
+
+          {audit.case_number && (
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Case #:</span>
+              <span className="font-medium">{audit.case_number}</span>
+            </div>
+          )}
+
+          {audit.next_court_date && (
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Next Court:</span>
+              <span className="font-medium">
+                {new Date(audit.next_court_date).toLocaleDateString()}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {audit.case_manager_reply && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <MessageSquare className="h-4 w-4" />
+                Case Manager Reply
+              </div>
+              <p className="text-sm text-muted-foreground bg-background p-3 rounded-md border">
+                {audit.case_manager_reply}
+              </p>
+            </div>
+          </>
+        )}
+
+        {audit.missing_or_unclear && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-600">
+                <AlertCircle className="h-4 w-4" />
+                Missing / Unclear
+              </div>
+              <p className="text-sm text-amber-700 bg-amber-50 p-3 rounded-md border border-amber-200">
+                {audit.missing_or_unclear}
+              </p>
+            </div>
+          </>
+        )}
+
+        {audit.flags && audit.flags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {audit.flags.map((flag, index) => (
+              <Badge key={index} variant="outline" className="text-xs">
+                {flag}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {audit.notes_for_zach && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                Notes for Zach
+              </div>
+              <p className="text-sm text-muted-foreground italic">
+                {audit.notes_for_zach}
+              </p>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
