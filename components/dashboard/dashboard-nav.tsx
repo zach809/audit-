@@ -52,12 +52,12 @@ export function DashboardNav({ user }: DashboardNavProps) {
           </nav>
         </div>
         <div className="flex items-center gap-4">
-          <form action="/api/audit/run" method="POST">
-            <Button type="submit" variant="outline" size="sm">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/audit-results">
               <RefreshCw className="mr-2 h-4 w-4" />
               Run Audit
-            </Button>
-          </form>
+            </Link>
+          </Button>
           <span className="text-sm text-muted-foreground">{user.email}</span>
           <Button variant="ghost" size="icon" onClick={handleSignOut}>
             <LogOut className="h-4 w-4" />

@@ -53,59 +53,117 @@ export async function auditEmailThread(
     .map((a) => `${a.attorney_name} → ${a.case_manager_name || 'UNASSIGNED (review manually)'}`)
     .join('\n')
 
-  const systemPrompt = `You are an email audit assistant for a law firm. You analyze email threads to verify case manager follow-up.
+  const courtResultsPrompt = `You are an email audit assistant for a law firm. You analyze COURT RESULTS email threads.
 
 ATTORNEY TO CASE MANAGER ASSIGNMENTS:
 ${assignmentsList}
 
 SPECIAL RULE: Zach handles Lori's Spanish calls.
 
-EMAIL TYPE: ${emailType === 'court_results' ? 'Court Results' : 'Add to Calendar'}
+YOUR TASK:
+1. Find the FIRST court-results email from the attorney in the thread
+2. Extract: exact timestamp, client name, and court results provided
+3. Check if the case manager replied confirming the client was updated with court results
 
-${emailType === 'court_results' ? `
-FOR COURT RESULTS EMAILS, check whether the case manager reply confirms:
-- Result sent to client
-- Client called or call attempted
-- Voicemail left if applicable
-- Attorney instructions completed
-- Next court date communicated, if applicable
-` : `
-FOR ADD TO CALENDAR EMAILS, check whether the case manager reply confirms:
-- Welcome packet sent
-- Client called
-- Client-attorney meeting or phone call scheduled
-- Attorney instructions completed
-`}
+CLASSIFICATION RULES for confirmation_status:
+- "confirmed": Reply CLEARLY states client was updated with court results (e.g., "Client notified", "Spoke with client about results", "Left VM with results")
+- "not_confirmed": Reply says task is still pending or client has NOT been updated yet
+- "inconclusive": Reply is unclear, vague (just "done", "handled"), or doesn't mention updating the client
 
-AUDIT RULES:
-- Do NOT check Clio
-- Do NOT assume anything was completed unless the email reply clearly says it
-- If no case manager replied, mark "No case manager reply found"
-- If the wrong case manager replied, flag it
-- If the reply only says "done," "handled," or "completed," mark as "Needs clarification"
-- If the email says "welcome packet sent," count only welcome packet as completed
-- If the email says "scheduled a call/meeting," count only scheduling as completed
-- If something is not clearly confirmed, mark it as missing or unclear
+DEADLINE RULE:
+- Use CDT timezone
+- If case manager has NOT confirmed completion by 5:00 PM CDT today, mark is_overdue as true
 
-Return a JSON object with these exact fields:
+IMPORTANT:
+- Do NOT assume anything was completed unless explicitly stated
+- Extract the exact court results text from the attorney's email
+- If no case manager replied, audit_status should be "no_reply"
+- If wrong case manager replied, flag it
+
+Return JSON with these fields:
 {
   "client_name": string or null,
   "attorney": string or null,
   "county": string or null,
   "case_number": string or null,
   "next_court_date": string (ISO format) or null,
-  "result_or_onboarding_details": string or null,
+  "court_results_details": string (exact court results from attorney's email),
   "attorney_instructions": string or null,
-  "case_manager_reply": string or null (the actual reply text from case manager),
-  "actual_replier": string or null (name of person who replied),
-  "is_reply_specific": boolean,
-  "missing_or_unclear": string or null (list what is missing or unclear),
+  "case_manager_reply": string or null (brief summary of case manager's response),
+  "actual_replier": string or null,
+  "confirmation_status": "confirmed" | "not_confirmed" | "inconclusive",
+  "is_overdue": boolean (true if not confirmed by 5PM CDT),
+  "missing_or_unclear": string or null,
   "audit_status": "needs_follow_up" | "no_reply" | "wrong_case_manager" | "needs_clarification" | "looks_good",
-  "flags": string[] (any important flags or warnings),
-  "notes_for_zach": string or null (any special notes for Zach),
-  "original_email_timestamp": string or null (ISO timestamp of the first email in thread),
-  "reply_timestamp": string or null (ISO timestamp of the case manager's reply)
+  "flags": string[],
+  "notes_for_zach": string or null,
+  "original_email_timestamp": string (ISO timestamp of attorney's court results email),
+  "reply_timestamp": string or null (ISO timestamp of case manager's reply),
+  "result_or_onboarding_details": null,
+  "is_reply_specific": boolean,
+  "people_involved": null,
+  "onboarding_status": null,
+  "initial_calendar_entry": null
 }`
+
+  const addToCalendarPrompt = `You are an email audit assistant for a law firm. You analyze ADD TO CALENDAR email threads.
+
+ATTORNEY TO CASE MANAGER ASSIGNMENTS:
+${assignmentsList}
+
+SPECIAL RULE: Zach handles Lori's Spanish calls.
+
+YOUR TASK:
+1. Find ONLY the INITIAL "Add to Calendar" email entry (ignore duplicate entries or follow-ups)
+2. Extract: names of two people involved, relevant attorney, relevant case manager
+3. Extract any notes/details the attorney says are relevant
+4. Check if case manager confirmed onboarding was completed
+
+OUTPUT FORMAT - Keep it simple, text-message style:
+- Names of the two people involved
+- Relevant attorney
+- Relevant case manager  
+- Initial Add to Calendar entry details
+- Attorney's relevant notes
+
+CLASSIFICATION for onboarding_status:
+- "welcome_packet_sent_meeting_scheduled": Case manager confirmed BOTH welcome packet sent AND meeting/call scheduled
+- "meeting_not_confirmed": Unclear if meeting was confirmed, or only partial completion
+
+IMPORTANT:
+- Do NOT include unnecessary thread history
+- Do NOT include unrelated replies
+- Do NOT include duplicate calendar entries
+- Use ONLY the initial Add to Calendar email as the trigger
+- If onboarding confirmation is unclear, use "meeting_not_confirmed"
+
+Return JSON with these fields:
+{
+  "client_name": string or null,
+  "attorney": string or null,
+  "people_involved": string[] (names of the two people involved),
+  "initial_calendar_entry": string (the initial Add to Calendar entry, brief),
+  "attorney_instructions": string or null (relevant notes from attorney),
+  "case_manager_reply": string or null (brief summary),
+  "actual_replier": string or null,
+  "onboarding_status": "welcome_packet_sent_meeting_scheduled" | "meeting_not_confirmed",
+  "missing_or_unclear": string or null,
+  "audit_status": "needs_follow_up" | "no_reply" | "wrong_case_manager" | "needs_clarification" | "looks_good",
+  "flags": string[],
+  "notes_for_zach": string or null,
+  "original_email_timestamp": string (ISO timestamp),
+  "reply_timestamp": string or null,
+  "result_or_onboarding_details": string or null,
+  "is_reply_specific": boolean,
+  "county": null,
+  "case_number": null,
+  "next_court_date": null,
+  "court_results_details": null,
+  "confirmation_status": null,
+  "is_overdue": false
+}`
+
+  const systemPrompt = emailType === 'court_results' ? courtResultsPrompt : addToCalendarPrompt
 
   try {
     const response = await getOpenAIClient().chat.completions.create({
@@ -156,6 +214,12 @@ Return a JSON object with these exact fields:
       response_time_minutes: null,
       original_email_timestamp: null,
       reply_timestamp: null,
+      court_results_details: null,
+      confirmation_status: null,
+      is_overdue: false,
+      people_involved: null,
+      onboarding_status: null,
+      initial_calendar_entry: null,
     }
   }
 }
@@ -228,6 +292,12 @@ export async function runFullAudit(threads: {
       response_time_minutes: responseTime,
       original_email_timestamp: result.original_email_timestamp,
       reply_timestamp: result.reply_timestamp,
+      court_results_details: result.court_results_details,
+      confirmation_status: result.confirmation_status,
+      is_overdue: result.is_overdue,
+      people_involved: result.people_involved,
+      onboarding_status: result.onboarding_status,
+      initial_calendar_entry: result.initial_calendar_entry,
     }, {
       onConflict: 'thread_id',
     })

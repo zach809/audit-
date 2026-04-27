@@ -12,7 +12,9 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  AlertTriangle,
+  Gavel
 } from 'lucide-react'
 import type { EmailAudit } from '@/lib/types'
 
@@ -68,15 +70,42 @@ export function AuditCard({ audit }: AuditCardProps) {
       : <Badge variant="secondary">Add to Calendar</Badge>
   }
 
+  const getOverdueBadge = () => {
+    if (audit.is_overdue) {
+      return (
+        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+          <AlertTriangle className="mr-1 h-3 w-3" />
+          Overdue
+        </Badge>
+      )
+    }
+    return null
+  }
+
+  const getConfirmationBadge = () => {
+    if (audit.email_type !== 'court_results' || !audit.confirmation_status) return null
+    
+    switch (audit.confirmation_status) {
+      case 'confirmed':
+        return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Confirmed</Badge>
+      case 'not_confirmed':
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Not Confirmed</Badge>
+      case 'inconclusive':
+        return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Inconclusive</Badge>
+    }
+  }
+
   return (
     <Card className="bg-muted/30">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h4 className="font-semibold">{audit.client_name || 'Unknown Client'}</h4>
+              {getOverdueBadge()}
               {getStatusBadge()}
               {getEmailTypeBadge()}
+              {getConfirmationBadge()}
             </div>
             <p className="text-sm text-muted-foreground line-clamp-1">{audit.subject}</p>
           </div>
@@ -138,6 +167,21 @@ export function AuditCard({ audit }: AuditCardProps) {
             </span>
           </div>
         </div>
+
+        {audit.court_results_details && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Gavel className="h-4 w-4" />
+                Court Results
+              </div>
+              <p className="text-sm bg-background p-3 rounded-md border">
+                {audit.court_results_details}
+              </p>
+            </div>
+          </>
+        )}
 
         {audit.case_manager_reply && (
           <>

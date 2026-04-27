@@ -43,6 +43,14 @@ export interface EmailAudit {
   response_time_minutes: number | null
   original_email_timestamp: string | null
   reply_timestamp: string | null
+  // Court Results specific
+  court_results_details: string | null
+  confirmation_status: ConfirmationStatus | null
+  is_overdue: boolean | null
+  // Add to Calendar specific
+  people_involved: string[] | null
+  onboarding_status: OnboardingStatus | null
+  initial_calendar_entry: string | null
 }
 
 export interface AuditSummary {
@@ -69,6 +77,12 @@ export interface GmailToken {
   updated_at: string
 }
 
+// Case manager confirmation status for court results
+export type ConfirmationStatus = 'confirmed' | 'not_confirmed' | 'inconclusive'
+
+// Case manager onboarding status for add to calendar
+export type OnboardingStatus = 'welcome_packet_sent_meeting_scheduled' | 'meeting_not_confirmed'
+
 // OpenAI audit response structure
 export interface AuditResult {
   client_name: string | null
@@ -88,6 +102,14 @@ export interface AuditResult {
   response_time_minutes: number | null
   original_email_timestamp: string | null
   reply_timestamp: string | null
+  // Court Results specific
+  court_results_details: string | null
+  confirmation_status: ConfirmationStatus | null
+  is_overdue: boolean
+  // Add to Calendar specific
+  people_involved: string[] | null
+  onboarding_status: OnboardingStatus | null
+  initial_calendar_entry: string | null
 }
 
 // Dashboard filter state

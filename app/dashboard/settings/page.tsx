@@ -96,12 +96,12 @@ export default async function SettingsPage() {
                 <li>Subject contains &quot;Add to Calendar&quot;</li>
               </ul>
             </div>
-            <form action="/api/audit/run" method="POST">
-              <Button type="submit" variant="outline" size="sm">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard/audit-results">
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Run Audit Now
-              </Button>
-            </form>
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
