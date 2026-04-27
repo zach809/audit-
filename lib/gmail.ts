@@ -1,5 +1,17 @@
 import { google, gmail_v1 } from 'googleapis'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+
+// Use service role client to bypass RLS
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey)
+}
 
 interface EmailThread {
   id: string
@@ -17,7 +29,9 @@ interface EmailMessage {
 }
 
 export async function getGmailClient() {
-  const supabase = await createClient()
+  const supabase = getSupabaseAdmin()
+  
+  console.log('[v0] Getting Gmail client, checking for tokens...')
   
   const { data: tokenData, error } = await supabase
     .from('gmail_tokens')
@@ -25,9 +39,17 @@ export async function getGmailClient() {
     .limit(1)
     .single()
 
-  if (error || !tokenData) {
+  if (error) {
+    console.error('[v0] Error fetching Gmail tokens:', error)
     throw new Error('Gmail not connected')
   }
+  
+  if (!tokenData) {
+    console.error('[v0] No Gmail tokens found in database')
+    throw new Error('Gmail not connected')
+  }
+  
+  console.log('[v0] Found Gmail tokens for:', tokenData.email)
 
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,

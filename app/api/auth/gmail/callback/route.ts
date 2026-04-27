@@ -1,6 +1,18 @@
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+
+// Use service role client to bypass RLS for storing tokens
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables')
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey)
+}
 
 function getRedirectUri(request: NextRequest): string {
   // First try explicit redirect URI env var
@@ -53,7 +65,11 @@ export async function GET(request: NextRequest) {
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
     const { data: userInfo } = await oauth2.userinfo.get()
 
-    const supabase = await createClient()
+    const supabase = getSupabaseAdmin()
+
+    console.log('[v0] Storing Gmail tokens for:', userInfo.email)
+    console.log('[v0] Has access_token:', !!tokens.access_token)
+    console.log('[v0] Has refresh_token:', !!tokens.refresh_token)
 
     // Store tokens in database
     const { error: dbError } = await supabase
@@ -69,11 +85,13 @@ export async function GET(request: NextRequest) {
       })
 
     if (dbError) {
-      console.error('Failed to store Gmail tokens:', dbError)
+      console.error('[v0] Failed to store Gmail tokens:', dbError)
+      console.error('[v0] DB Error details:', JSON.stringify(dbError))
       return NextResponse.redirect(`${origin}/dashboard/settings?error=db_error`)
     }
 
-    return NextResponse.redirect(`${origin}/dashboard?gmail=connected`)
+    console.log('[v0] Gmail tokens stored successfully!')
+    return NextResponse.redirect(`${origin}/dashboard/settings?gmail=connected`)
   } catch (err) {
     console.error('Gmail OAuth error:', err)
     return NextResponse.redirect(`${origin}/dashboard/settings?error=oauth_failed`)
