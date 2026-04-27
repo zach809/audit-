@@ -19,22 +19,40 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSignUp, setIsSignUp] = useState(false)
   const router = useRouter()
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
+    setSuccess(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) throw error
-      router.push('/dashboard')
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo:
+              process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+              `${window.location.origin}/auth/callback`,
+          },
+        })
+        if (error) throw error
+        setSuccess('Account created! Check your email to confirm, then sign in.')
+        setIsSignUp(false)
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (error) throw error
+        router.push('/dashboard')
+      }
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
@@ -55,13 +73,15 @@ export default function LoginPage() {
           </div>
           <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">Login</CardTitle>
+              <CardTitle className="text-2xl">{isSignUp ? 'Create Account' : 'Login'}</CardTitle>
               <CardDescription>
-                Enter your credentials to access the audit dashboard
+                {isSignUp 
+                  ? 'Create your account to access the audit dashboard' 
+                  : 'Enter your credentials to access the audit dashboard'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleLogin}>
+              <form onSubmit={handleSubmit}>
                 <div className="flex flex-col gap-6">
                   <div className="grid gap-2">
                     <Label htmlFor="email">Email</Label>
@@ -85,8 +105,23 @@ export default function LoginPage() {
                     />
                   </div>
                   {error && <p className="text-sm text-destructive">{error}</p>}
+                  {success && <p className="text-sm text-emerald-600">{success}</p>}
                   <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? 'Signing in...' : 'Sign In'}
+                    {isLoading 
+                      ? (isSignUp ? 'Creating account...' : 'Signing in...') 
+                      : (isSignUp ? 'Create Account' : 'Sign In')}
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    className="w-full" 
+                    onClick={() => {
+                      setIsSignUp(!isSignUp)
+                      setError(null)
+                      setSuccess(null)
+                    }}
+                  >
+                    {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
                   </Button>
                 </div>
               </form>
