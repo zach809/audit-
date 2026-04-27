@@ -1,18 +1,6 @@
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// Use service role client to bypass RLS for storing tokens
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing Supabase environment variables')
-  }
-  
-  return createClient(supabaseUrl, supabaseServiceKey)
-}
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function getRedirectUri(request: NextRequest): string {
   // First try explicit redirect URI env var
@@ -65,7 +53,7 @@ export async function GET(request: NextRequest) {
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
     const { data: userInfo } = await oauth2.userinfo.get()
 
-    const supabase = getSupabaseAdmin()
+    const supabase = createAdminClient()
 
     console.log('[v0] Storing Gmail tokens for:', userInfo.email)
     console.log('[v0] Has access_token:', !!tokens.access_token)
