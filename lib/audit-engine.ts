@@ -2,9 +2,17 @@ import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
 import type { AuditResult, EmailType, AuditStatus, AttorneyAssignment } from '@/lib/types'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization to avoid build-time errors when OPENAI_API_KEY is not set
+let openaiClient: OpenAI | null = null
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return openaiClient
+}
 
 interface EmailThread {
   id: string
@@ -100,7 +108,7 @@ Return a JSON object with these exact fields:
 }`
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
