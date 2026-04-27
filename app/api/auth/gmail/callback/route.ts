@@ -2,11 +2,25 @@ import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
-)
+function getRedirectUri(request: NextRequest): string {
+  // First try explicit redirect URI env var
+  if (process.env.GOOGLE_REDIRECT_URI) {
+    console.log('[v0] Callback using GOOGLE_REDIRECT_URI:', process.env.GOOGLE_REDIRECT_URI)
+    return process.env.GOOGLE_REDIRECT_URI
+  }
+  
+  // Then try app URL env var
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    const uri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/gmail/callback`
+    console.log('[v0] Callback using NEXT_PUBLIC_APP_URL redirect:', uri)
+    return uri
+  }
+  
+  // Use request origin as fallback
+  const uri = `${request.nextUrl.origin}/api/auth/gmail/callback`
+  console.log('[v0] Callback using request origin redirect:', uri)
+  return uri
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
@@ -23,6 +37,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const redirectUri = getRedirectUri(request)
+    console.log('[v0] Callback OAuth redirect URI:', redirectUri)
+    
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    )
+    
     const { tokens } = await oauth2Client.getToken(code)
     oauth2Client.setCredentials(tokens)
 
