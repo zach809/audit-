@@ -5,11 +5,9 @@ function getRedirectUri(request: NextRequest): string {
   if (process.env.CLIO_REDIRECT_URI) {
     return process.env.CLIO_REDIRECT_URI
   }
-  
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/clio/callback`
   }
-  
   return `${request.nextUrl.origin}/api/auth/clio/callback`
 }
 
@@ -23,7 +21,6 @@ export async function GET(request: NextRequest) {
     console.error('[Clio OAuth] Auth error:', error)
     return NextResponse.redirect(`${origin}/dashboard/settings?error=clio_auth_failed`)
   }
-
   if (!code) {
     console.error('[Clio OAuth] No authorization code')
     return NextResponse.redirect(`${origin}/dashboard/settings?error=no_code`)
@@ -42,9 +39,7 @@ export async function GET(request: NextRequest) {
   try {
     const tokenResponse = await fetch('https://app.clio.com/oauth/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
@@ -61,15 +56,14 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
-    const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000)).toISOString()
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
-    const pool = new Pool({ 
+    const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      ssl: { rejectUnauthorized: false },
     })
 
     const client = await pool.connect()
-
     try {
       await client.query('DELETE FROM clio_tokens')
       await client.query(
