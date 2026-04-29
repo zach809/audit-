@@ -1,64 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { isClioConnected } from '@/lib/clio/client'
-import { startAuditRun, getCurrentAuditRun } from '@/lib/clio/audit-engine'
-import type { StartAuditRequest, StartAuditResponse } from '@/lib/clio/types'
+import { NextResponse } from "next/server"
+import { isClioConnected } from "@/lib/clio/client"
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    // Check if Clio is connected
     const connected = await isClioConnected()
+
     if (!connected) {
       return NextResponse.json(
-        { success: false, error: 'Clio not connected' },
+        {
+          success: false,
+          connected: false,
+          mode: "local-only",
+          error: "Clio is not connected. Missing CLIO_ACCESS_TOKEN in .env.local.",
+        },
         { status: 400 }
       )
     }
 
-    // Check if there's an in-progress audit
-    const currentRun = await getCurrentAuditRun()
-    if (currentRun && (currentRun.status === 'pending' || currentRun.status === 'in_progress')) {
-      return NextResponse.json({
-        success: true,
-        audit_run_id: currentRun.id,
-        message: 'Resuming existing audit run',
-      } as StartAuditResponse)
-    }
-
-    // Parse request body
-    let body: StartAuditRequest = {}
-    try {
-      body = await request.json()
-    } catch {
-      // Empty body is fine
-    }
-
-    const batchSize = body.batch_size || 20
-    const timeWindowDays = body.time_window_days || 14
-
-    // Start new audit run
-    const auditRun = await startAuditRun(batchSize, timeWindowDays)
-
     return NextResponse.json({
       success: true,
-      audit_run_id: auditRun.id,
-      message: `Started new audit with ${auditRun.total_matters} matters`,
-    } as StartAuditResponse)
+      connected: true,
+      mode: "local-only",
+      message:
+        "Local-only audit is ready. Run /api/clio/audit/batch to generate fresh audit results. Results are not stored.",
+    })
   } catch (error) {
-    console.error('[Clio Audit Start] Error:', error)
+    console.error("[Clio Audit Start] Error:", error)
+
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        success: false,
+        connected: false,
+        mode: "local-only",
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     )
   }

@@ -1,587 +1,548 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Play, 
-  Pause, 
-  RefreshCw, 
-  CheckCircle, 
-  AlertTriangle, 
-  XCircle,
-  Clock,
-  FileText,
-  User,
-  Briefcase,
-  Calendar,
-  Mail,
-  ArrowLeft,
-  Loader2
-} from 'lucide-react'
-import type { ClioAuditRun, ClioMatterAudit, AuditResultsResponse } from '@/lib/clio/types'
+i"use client"
+
+import { useMemo, useState } from "react"
+
+type YesNoNA = "Yes" | "No" | "N/A"
+type AuditStatus = "Pass" | "Flag"
+
+type AuditRow = {
+  id: string
+  clientName: string
+  matterNumber: string
+  responsibleAttorney: string
+  matterCreatedAt: string
+
+  attorneyCallScheduledWithin15Minutes: YesNoNA
+  courtDateWithin15Minutes: YesNoNA
+  welcomePacketSentWithin15Minutes: YesNoNA
+
+  clientContactWithin24Hours: YesNoNA
+  appearanceFilingEmailWithin24Hours: YesNoNA
+
+  courtDate: string
+  courtResultsEmailSent: YesNoNA
+  courtResultsSentWithin24Hours: YesNoNA
+  courtResultsDocumentedInNotes: YesNoNA
+  resultSentTimestamp: string
+  nextCourtDateAdded: YesNoNA
+
+  status: AuditStatus
+  missingItemTypes: string[]
+  notes: string
+}
+
+type AuditSummary = {
+  totalRows: number
+  passRows: number
+  flagRows: number
+  missingItemCounts: Record<string, number>
+}
+
+function todayMinusDays(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date.toISOString().slice(0, 10)
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 export default function ClioAuditPage() {
-  const [isConnected, setIsConnected] = useState<boolean | null>(null)
-  const [auditRun, setAuditRun] = useState<ClioAuditRun | null>(null)
-  const [results, setResults] = useState<ClioMatterAudit[]>([])
-  const [summary, setSummary] = useState<{ total: number; pass: number; needs_review: number; missing_evidence: number } | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [rows, setRows] = useState<AuditRow[]>([])
+  const [summary, setSummary] = useState<AuditSummary | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Check Clio connection status
-  const checkConnection = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clio/status')
-      const data = await res.json()
-      setIsConnected(data.connected)
-    } catch {
-      setIsConnected(false)
-    }
-  }, [])
+  const [fromDate, setFromDate] = useState(todayMinusDays(30))
+  const [toDate, setToDate] = useState(today())
+  const [attorneyFilter, setAttorneyFilter] = useState("All")
+  const [statusFilter, setStatusFilter] = useState("All")
+  const [missingFilter, setMissingFilter] = useState("All")
+  const [welcomeFilter, setWelcomeFilter] = useState("All")
+  const [appearanceFilter, setAppearanceFilter] = useState("All")
+  const [courtResultsFilter, setCourtResultsFilter] = useState("All")
 
-  // Fetch current audit status
-  const fetchAuditStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clio/audit/status')
-      const data = await res.json()
-      if (data.audit_run) {
-        setAuditRun(data.audit_run)
-        // Fetch results if we have an audit run
-        await fetchResults(data.audit_run.id)
-      }
-    } catch (err) {
-      console.error('Failed to fetch audit status:', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  // Fetch audit results
-  const fetchResults = async (auditRunId: string) => {
-    try {
-      const res = await fetch(`/api/clio/audit/results?audit_run_id=${auditRunId}`)
-      const data: AuditResultsResponse = await res.json()
-      if (data.results) setResults(data.results)
-      if (data.summary) setSummary(data.summary)
-    } catch (err) {
-      console.error('Failed to fetch results:', err)
-    }
-  }
-
-  // Start new audit
-  const startAudit = async () => {
-    setIsProcessing(true)
+  async function runAudit() {
+    setLoading(true)
     setError(null)
-    
+
     try {
-      const res = await fetch('/api/clio/audit/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_size: 20, time_window_days: 14 }),
+      const response = await fetch("/api/clio/audit/batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fromDate,
+          toDate,
+        }),
       })
-      
-      const data = await res.json()
-      
-      if (!data.success) {
-        setError(data.error || 'Failed to start audit')
-        return
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to run audit")
       }
 
-      // Start processing batches
-      await processBatches(data.audit_run_id)
+      setRows(data.rows || [])
+      setSummary(data.summary || null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
-      setIsProcessing(false)
+      setLoading(false)
     }
   }
 
-  // Process batches until complete or rate limited
-  const processBatches = async (auditRunId: string) => {
-    let continueProcessing = true
-    
-    while (continueProcessing) {
-      try {
-        const res = await fetch('/api/clio/audit/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audit_run_id: auditRunId }),
-        })
-        
-        const data = await res.json()
-        
-        if (!data.success) {
-          setError(data.error || 'Batch processing failed')
-          continueProcessing = false
-          break
-        }
+  const attorneys = useMemo(() => {
+    return Array.from(new Set(rows.map((row) => row.responsibleAttorney))).sort()
+  }, [rows])
 
-        // Update local state
-        await fetchAuditStatus()
+  const missingTypes = useMemo(() => {
+    return Array.from(new Set(rows.flatMap((row) => row.missingItemTypes || []))).sort()
+  }, [rows])
 
-        // Check if complete or rate limited
-        if (data.status === 'completed' || data.status === 'rate_limited' || data.status === 'failed') {
-          continueProcessing = false
-          
-          if (data.rate_limited) {
-            setError('Clio API rate limit reached. Please continue later.')
-          }
-        }
-
-        // Small delay between batches
-        if (continueProcessing) {
-          await new Promise(resolve => setTimeout(resolve, 500))
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Processing error')
-        continueProcessing = false
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (attorneyFilter !== "All" && row.responsibleAttorney !== attorneyFilter) {
+        return false
       }
-    }
-  }
 
-  // Resume audit
-  const resumeAudit = async () => {
-    if (!auditRun) return
-    setIsProcessing(true)
-    setError(null)
-    
-    // Update status to in_progress if rate limited
-    await processBatches(auditRun.id)
-    setIsProcessing(false)
-  }
+      if (statusFilter !== "All" && row.status !== statusFilter) {
+        return false
+      }
 
-  // Initial load
-  useEffect(() => {
-    checkConnection()
-    fetchAuditStatus()
-  }, [checkConnection, fetchAuditStatus])
+      if (
+        missingFilter !== "All" &&
+        !(row.missingItemTypes || []).includes(missingFilter)
+      ) {
+        return false
+      }
 
-  // Auto-refresh while processing
-  useEffect(() => {
-    if (!isProcessing || !auditRun) return
-    
-    const interval = setInterval(fetchAuditStatus, 2000)
-    return () => clearInterval(interval)
-  }, [isProcessing, auditRun, fetchAuditStatus])
+      if (
+        welcomeFilter !== "All" &&
+        row.welcomePacketSentWithin15Minutes !== welcomeFilter
+      ) {
+        return false
+      }
 
-  const getStatusBadge = (status: ClioMatterAudit['overall_status']) => {
-    switch (status) {
-      case 'pass':
-        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Pass</Badge>
-      case 'needs_review':
-        return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Needs Review</Badge>
-      case 'missing_evidence':
-        return <Badge className="bg-red-100 text-red-700 border-red-200">Missing Evidence</Badge>
-    }
-  }
+      if (
+        appearanceFilter !== "All" &&
+        row.appearanceFilingEmailWithin24Hours !== appearanceFilter
+      ) {
+        return false
+      }
 
-  const getRunStatusBadge = (status: ClioAuditRun['status']) => {
-    switch (status) {
-      case 'pending':
-        return <Badge variant="secondary">Pending</Badge>
-      case 'in_progress':
-        return <Badge className="bg-blue-100 text-blue-700 border-blue-200">In Progress</Badge>
-      case 'completed':
-        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Completed</Badge>
-      case 'failed':
-        return <Badge className="bg-red-100 text-red-700 border-red-200">Failed</Badge>
-      case 'rate_limited':
-        return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Rate Limited</Badge>
-    }
-  }
+      if (
+        courtResultsFilter !== "All" &&
+        row.courtResultsEmailSent !== courtResultsFilter
+      ) {
+        return false
+      }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard/settings">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold">Clio Audit</h1>
-            <p className="text-muted-foreground">
-              Operational compliance audit for Clio matters
-            </p>
-          </div>
-        </div>
-        
-        {isConnected === false && (
-          <Button asChild>
-            <Link href="/api/auth/clio">Connect Clio</Link>
-          </Button>
-        )}
-      </div>
-
-      {/* Connection Warning */}
-      {isConnected === false && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              <p className="text-amber-800">
-                Clio is not connected. Please connect your Clio account to run audits.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <XCircle className="h-5 w-5 text-red-600" />
-              <p className="text-red-800">{error}</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Audit Controls */}
-      {isConnected && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Audit Control
-            </CardTitle>
-            <CardDescription>
-              Start a new audit or continue a paused one
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Progress */}
-            {auditRun && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span>Status:</span>
-                    {getRunStatusBadge(auditRun.status)}
-                  </div>
-                  <span className="text-muted-foreground">
-                    {auditRun.processed_matters} / {auditRun.total_matters} matters
-                  </span>
-                </div>
-                <Progress 
-                  value={(auditRun.processed_matters / auditRun.total_matters) * 100} 
-                  className="h-2"
-                />
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex gap-2">
-              {!auditRun || auditRun.status === 'completed' || auditRun.status === 'failed' ? (
-                <Button onClick={startAudit} disabled={isProcessing}>
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Start New Audit
-                    </>
-                  )}
-                </Button>
-              ) : auditRun.status === 'rate_limited' ? (
-                <Button onClick={resumeAudit} disabled={isProcessing}>
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Resuming...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Resume Audit
-                    </>
-                  )}
-                </Button>
-              ) : (
-                <Button disabled>
-                  <Pause className="mr-2 h-4 w-4" />
-                  Processing...
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Summary Stats */}
-      {summary && summary.total > 0 && (
-        <div className="grid grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">{summary.total}</div>
-              <p className="text-sm text-muted-foreground">Total Matters</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-emerald-600">{summary.pass}</div>
-              <p className="text-sm text-muted-foreground">Passing</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-amber-600">{summary.needs_review}</div>
-              <p className="text-sm text-muted-foreground">Needs Review</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-red-600">{summary.missing_evidence}</div>
-              <p className="text-sm text-muted-foreground">Missing Evidence</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Results */}
-      {results.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Audit Results</CardTitle>
-            <CardDescription>
-              Matter-by-matter compliance audit findings
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="all">
-              <TabsList>
-                <TabsTrigger value="all">All ({results.length})</TabsTrigger>
-                <TabsTrigger value="needs_review">
-                  Needs Review ({results.filter(r => r.overall_status === 'needs_review').length})
-                </TabsTrigger>
-                <TabsTrigger value="missing">
-                  Missing Evidence ({results.filter(r => r.overall_status === 'missing_evidence').length})
-                </TabsTrigger>
-                <TabsTrigger value="pass">
-                  Passing ({results.filter(r => r.overall_status === 'pass').length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="all" className="mt-4">
-                <MatterAuditList audits={results} getStatusBadge={getStatusBadge} />
-              </TabsContent>
-
-              <TabsContent value="needs_review" className="mt-4">
-                <MatterAuditList 
-                  audits={results.filter(r => r.overall_status === 'needs_review')} 
-                  getStatusBadge={getStatusBadge}
-                />
-              </TabsContent>
-
-              <TabsContent value="missing" className="mt-4">
-                <MatterAuditList 
-                  audits={results.filter(r => r.overall_status === 'missing_evidence')} 
-                  getStatusBadge={getStatusBadge}
-                />
-              </TabsContent>
-
-              <TabsContent value="pass" className="mt-4">
-                <MatterAuditList 
-                  audits={results.filter(r => r.overall_status === 'pass')} 
-                  getStatusBadge={getStatusBadge}
-                />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-// Matter audit list component
-function MatterAuditList({ 
-  audits, 
-  getStatusBadge 
-}: { 
-  audits: ClioMatterAudit[]
-  getStatusBadge: (status: ClioMatterAudit['overall_status']) => React.ReactNode
-}) {
-  if (audits.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        No results in this category
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4">
-      {audits.map((audit) => (
-        <Card key={audit.id} className="overflow-hidden">
-          <CardHeader className="pb-2">
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  {audit.client_name || 'Unknown Client'}
-                </CardTitle>
-                <CardDescription className="flex items-center gap-4 mt-1">
-                  <span className="flex items-center gap-1">
-                    <Briefcase className="h-3 w-3" />
-                    {audit.matter_display_number}
-                  </span>
-                  {audit.attorney_name && (
-                    <span className="flex items-center gap-1">
-                      <User className="h-3 w-3" />
-                      {audit.attorney_name}
-                    </span>
-                  )}
-                </CardDescription>
-              </div>
-              {getStatusBadge(audit.overall_status)}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Intake Checks */}
-            <div>
-              <h4 className="font-medium text-sm mb-2">Intake & Initial Follow-Up</h4>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <CheckItem 
-                  label="Intake calendar entry" 
-                  checked={audit.intake_calendar_exists}
-                  date={audit.intake_calendar_date}
-                />
-                <CheckItem 
-                  label="Matter created in Clio" 
-                  checked={audit.matter_created_in_clio}
-                  date={audit.matter_created_at}
-                />
-                <CheckItem 
-                  label="Meeting within 48h" 
-                  checked={audit.meeting_scheduled_within_48h}
-                  date={audit.meeting_date}
-                />
-                <CheckItem 
-                  label="Welcome packet sent" 
-                  checked={audit.welcome_packet_sent}
-                  date={audit.welcome_packet_date}
-                />
-              </div>
-            </div>
-
-            {/* Appearance Checks */}
-            <div>
-              <h4 className="font-medium text-sm mb-2">Appearance & File Setup</h4>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <CheckItem 
-                  label="Appearance filed within 48h" 
-                  checked={audit.appearance_filed_within_48h}
-                  date={audit.appearance_date}
-                />
-                <CheckItem 
-                  label="Appearance email sent" 
-                  checked={audit.appearance_email_sent}
-                  date={audit.appearance_email_date}
-                />
-                <CheckItem 
-                  label="Attorney assigned" 
-                  checked={audit.attorney_correctly_assigned}
-                />
-                <CheckItem 
-                  label="Signed retainer exists" 
-                  checked={audit.signed_retainer_exists}
-                  date={audit.signed_retainer_date}
-                />
-              </div>
-            </div>
-
-            {/* Flags */}
-            {audit.flags && audit.flags.length > 0 && (
-              <div>
-                <h4 className="font-medium text-sm mb-2 flex items-center gap-1">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  Flags
-                </h4>
-                <ul className="list-disc list-inside text-sm text-amber-700">
-                  {audit.flags.map((flag, idx) => (
-                    <li key={idx}>{flag}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Missing Items */}
-            {audit.missing_items && audit.missing_items.length > 0 && (
-              <div>
-                <h4 className="font-medium text-sm mb-2 flex items-center gap-1">
-                  <XCircle className="h-4 w-4 text-red-500" />
-                  Missing Items
-                </h4>
-                <ul className="list-disc list-inside text-sm text-red-700">
-                  {audit.missing_items.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  )
-}
-
-// Check item component
-function CheckItem({ 
-  label, 
-  checked, 
-  date 
-}: { 
-  label: string
-  checked: boolean | null | undefined
-  date?: string | null
-}) {
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+      return true
     })
+  }, [
+    rows,
+    attorneyFilter,
+    statusFilter,
+    missingFilter,
+    welcomeFilter,
+    appearanceFilter,
+    courtResultsFilter,
+  ])
+
+  function exportCsv() {
+    const headers = [
+      "Client Name",
+      "Matter Number",
+      "Responsible Attorney",
+      "Matter Created Date/Time",
+      "Attorney Call Scheduled Within 15 Minutes?",
+      "Court Reminder/Court Date Within 15 Minutes?",
+      "Welcome Packet Sent Within 15 Minutes?",
+      "Client Contact Within 24 Hours?",
+      "Appearance Filing Email Within 24 Hours?",
+      "Court Date",
+      "Court Results Template/Email Sent?",
+      "Court Results Sent Within 24 Hours?",
+      "Court Results Documented in Notes?",
+      "Result Sent Timestamp",
+      "Next Court Date Added?",
+      "Status",
+      "Notes / Missing Items",
+    ]
+
+    const csvRows = filteredRows.map((row) => [
+      row.clientName,
+      row.matterNumber,
+      row.responsibleAttorney,
+      row.matterCreatedAt,
+      row.attorneyCallScheduledWithin15Minutes,
+      row.courtDateWithin15Minutes,
+      row.welcomePacketSentWithin15Minutes,
+      row.clientContactWithin24Hours,
+      row.appearanceFilingEmailWithin24Hours,
+      row.courtDate,
+      row.courtResultsEmailSent,
+      row.courtResultsSentWithin24Hours,
+      row.courtResultsDocumentedInNotes,
+      row.resultSentTimestamp,
+      row.nextCourtDateAdded,
+      row.status,
+      row.notes,
+    ])
+
+    const csv = [headers, ...csvRows]
+      .map((line) =>
+        line
+          .map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`)
+          .join(",")
+      )
+      .join("\n")
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+
+    link.href = url
+    link.download = "clio-audit-results.csv"
+    link.click()
+
+    URL.revokeObjectURL(url)
   }
 
   return (
-    <div className="flex items-center gap-2">
-      {checked === true ? (
-        <CheckCircle className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-      ) : checked === false ? (
-        <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-      ) : (
-        <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+    <main style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
+        Clio Manage Audit
+      </h1>
+
+      <p style={{ marginBottom: 20, color: "#555" }}>
+        Local-only Reports v2 audit. Results are generated fresh and are not
+        stored in Supabase or any cloud database.
+      </p>
+
+      <section
+        style={{
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "end",
+          marginBottom: 20,
+          padding: 16,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          background: "#fafafa",
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <label>
+          <div>Created From</div>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+          />
+        </label>
+
+        <label>
+          <div>Created To</div>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(event) => setToDate(event.target.value)}
+          />
+        </label>
+
+        <label>
+          <div>Responsible Attorney</div>
+          <select
+            value={attorneyFilter}
+            onChange={(event) => setAttorneyFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            {attorneys.map((attorney) => (
+              <option key={attorney} value={attorney}>
+                {attorney}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <div>Status</div>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Pass">Pass</option>
+            <option value="Flag">Flag</option>
+          </select>
+        </label>
+
+        <label>
+          <div>Missing Item</div>
+          <select
+            value={missingFilter}
+            onChange={(event) => setMissingFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            {missingTypes.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <div>Welcome Packet</div>
+          <select
+            value={welcomeFilter}
+            onChange={(event) => setWelcomeFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="N/A">N/A</option>
+          </select>
+        </label>
+
+        <label>
+          <div>Appearance Email</div>
+          <select
+            value={appearanceFilter}
+            onChange={(event) => setAppearanceFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="N/A">N/A</option>
+          </select>
+        </label>
+
+        <label>
+          <div>Court Results Sent</div>
+          <select
+            value={courtResultsFilter}
+            onChange={(event) => setCourtResultsFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="N/A">N/A</option>
+          </select>
+        </label>
+
+        <button onClick={runAudit} disabled={loading}>
+          {loading ? "Running..." : "Run Audit"}
+        </button>
+
+        <button onClick={exportCsv} disabled={filteredRows.length === 0}>
+          Export CSV
+        </button>
+      </section>
+
+      {error && (
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid #f5b5b5",
+            background: "#fff1f1",
+            color: "#9b1c1c",
+            marginBottom: 16,
+            borderRadius: 8,
+          }}
+        >
+          {error}
+        </div>
       )}
-      <span className={checked === false ? 'text-red-700' : ''}>
-        {label}
-        {date && checked && (
-          <span className="text-muted-foreground ml-1">
-            ({formatDate(date)})
-          </span>
-        )}
-      </span>
-    </div>
+
+      {summary && (
+        <section
+          style={{
+            display: "flex",
+            gap: 16,
+            flexWrap: "wrap",
+            marginBottom: 16,
+          }}
+        >
+          <strong>Total Rows: {summary.totalRows}</strong>
+          <strong>Pass: {summary.passRows}</strong>
+          <strong>Flag: {summary.flagRows}</strong>
+          <strong>Showing: {filteredRows.length}</strong>
+        </section>
+      )}
+
+      <div
+        style={{
+          overflowX: "auto",
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          maxHeight: "70vh",
+        }}
+      >
+        <table
+          style={{
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            minWidth: 2200,
+            width: "100%",
+            fontSize: 13,
+          }}
+        >
+          <thead>
+            <tr>
+              <Th sticky left={0} width={180}>
+                Client Name
+              </Th>
+              <Th sticky left={180} width={140}>
+                Matter Number
+              </Th>
+              <Th sticky left={320} width={180}>
+                Responsible Attorney
+              </Th>
+              <Th sticky left={500} width={90}>
+                Status
+              </Th>
+              <Th>Matter Created Date/Time</Th>
+              <Th>Attorney Call Within 15 Min?</Th>
+              <Th>Court Date Within 15 Min?</Th>
+              <Th>Welcome Packet Within 15 Min?</Th>
+              <Th>Client Contact Within 24 Hr?</Th>
+              <Th>Appearance Filing Within 24 Hr?</Th>
+              <Th>Court Date</Th>
+              <Th>Court Results Email Sent?</Th>
+              <Th>Court Results Sent Within 24 Hr?</Th>
+              <Th>Court Results Documented in Notes?</Th>
+              <Th>Result Sent Timestamp</Th>
+              <Th>Next Court Date Added?</Th>
+              <Th>Notes / Missing Items</Th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {filteredRows.length === 0 ? (
+              <tr>
+                <td colSpan={17} style={{ padding: 20, textAlign: "center" }}>
+                  No audit rows yet. Click Run Audit.
+                </td>
+              </tr>
+            ) : (
+              filteredRows.map((row) => (
+                <tr key={row.id}>
+                  <Td sticky left={0} width={180}>
+                    {row.clientName}
+                  </Td>
+                  <Td sticky left={180} width={140}>
+                    {row.matterNumber}
+                  </Td>
+                  <Td sticky left={320} width={180}>
+                    {row.responsibleAttorney}
+                  </Td>
+                  <Td
+                    sticky
+                    left={500}
+                    width={90}
+                    style={{
+                      fontWeight: 700,
+                      color: row.status === "Pass" ? "#0f7a35" : "#b42318",
+                    }}
+                  >
+                    {row.status}
+                  </Td>
+                  <Td>{row.matterCreatedAt}</Td>
+                  <Td>{row.attorneyCallScheduledWithin15Minutes}</Td>
+                  <Td>{row.courtDateWithin15Minutes}</Td>
+                  <Td>{row.welcomePacketSentWithin15Minutes}</Td>
+                  <Td>{row.clientContactWithin24Hours}</Td>
+                  <Td>{row.appearanceFilingEmailWithin24Hours}</Td>
+                  <Td>{row.courtDate}</Td>
+                  <Td>{row.courtResultsEmailSent}</Td>
+                  <Td>{row.courtResultsSentWithin24Hours}</Td>
+                  <Td>{row.courtResultsDocumentedInNotes}</Td>
+                  <Td>{row.resultSentTimestamp}</Td>
+                  <Td>{row.nextCourtDateAdded}</Td>
+                  <Td>{row.notes}</Td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  )
+}
+
+function Th({
+  children,
+  sticky,
+  left,
+  width,
+}: {
+  children: React.ReactNode
+  sticky?: boolean
+  left?: number
+  width?: number
+}) {
+  return (
+    <th
+      style={{
+        position: sticky ? "sticky" : "static",
+        left,
+        width,
+        minWidth: width || 150,
+        top: 0,
+        zIndex: sticky ? 4 : 3,
+        background: "#f3f4f6",
+        borderBottom: "1px solid #ddd",
+        borderRight: "1px solid #ddd",
+        padding: "10px 8px",
+        textAlign: "left",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </th>
+  )
+}
+
+function Td({
+  children,
+  sticky,
+  left,
+  width,
+  style,
+}: {
+  children: React.ReactNode
+  sticky?: boolean
+  left?: number
+  width?: number
+  style?: React.CSSProperties
+}) {
+  return (
+    <td
+      style={{
+        position: sticky ? "sticky" : "static",
+        left,
+        width,
+        minWidth: width || 150,
+        zIndex: sticky ? 2 : 1,
+        background: sticky ? "#fff" : "inherit",
+        borderBottom: "1px solid #eee",
+        borderRight: "1px solid #eee",
+        padding: "8px",
+        verticalAlign: "top",
+        ...style,
+      }}
+    >
+      {children}
+    </td>
   )
 }

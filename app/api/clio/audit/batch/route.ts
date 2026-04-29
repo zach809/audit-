@@ -3,7 +3,7 @@ import { getRecentMatters, getMatterAuditBundle } from "@/lib/clio/client"
 import {
   auditMatterBundles,
   summarizeAuditRows,
-  MatterAuditBundle,
+  type MatterAuditBundle,
 } from "@/lib/clio/audit-engine"
 import { ClioRateLimitError } from "@/lib/clio/types"
 

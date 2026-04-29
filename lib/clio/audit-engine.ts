@@ -250,3 +250,31 @@ export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
     }
   })
 }
+
+export function auditMatterBundles(bundles: MatterAuditBundle[]): AuditRow[] {
+  return bundles.flatMap(bundle => auditMatterBundle(bundle))
+}
+
+export type AuditSummary = {
+  total: number
+  passed: number
+  flagged: number
+  missingByType: Record<MissingItemType, number>
+}
+
+export function summarizeAuditRows(rows: AuditRow[]): AuditSummary {
+  const missingByType: Record<string, number> = {}
+
+  for (const row of rows) {
+    for (const item of row.missingItemTypes) {
+      missingByType[item] = (missingByType[item] || 0) + 1
+    }
+  }
+
+  return {
+    total: rows.length,
+    passed: rows.filter(r => r.status === "Pass").length,
+    flagged: rows.filter(r => r.status === "Flag").length,
+    missingByType: missingByType as Record<MissingItemType, number>,
+  }
+}

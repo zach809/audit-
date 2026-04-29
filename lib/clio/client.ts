@@ -1,5 +1,3 @@
-// lib/clio/client.ts
-
 import {
   ClioMatter,
   ClioCalendarEntry,
@@ -37,31 +35,41 @@ function getToken(): string | null {
   return process.env.CLIO_ACCESS_TOKEN || null
 }
 
-function getResetDate(res: Response): Date | undefined {
-  const retry = res.headers.get("Retry-After")
-  if (retry) {
-    return new Date(Date.now() + parseInt(retry) * 1000)
+function getResetDate(response: Response): Date | undefined {
+  const retryAfter = response.headers.get("Retry-After")
+
+  if (retryAfter) {
+    const seconds = Number.parseInt(retryAfter, 10)
+
+    if (!Number.isNaN(seconds)) {
+      return new Date(Date.now() + seconds * 1000)
+    }
   }
 
-  const reset = res.headers.get("X-RateLimit-Reset")
+  const reset = response.headers.get("X-RateLimit-Reset")
+
   if (reset) {
-    return new Date(parseInt(reset) * 1000)
+    const unixSeconds = Number.parseInt(reset, 10)
+
+    if (!Number.isNaN(unixSeconds)) {
+      return new Date(unixSeconds * 1000)
+    }
   }
 
   return undefined
 }
 
-function checkRateLimit(res: Response) {
-  const remaining = res.headers.get("X-RateLimit-Remaining")
+function checkRateLimit(response: Response): void {
+  const remainingHeader = response.headers.get("X-RateLimit-Remaining")
 
-  if (!remaining) return
+  if (!remainingHeader) return
 
-  const num = parseInt(remaining)
+  const remaining = Number.parseInt(remainingHeader, 10)
 
-  if (!isNaN(num) && num <= MIN_REMAINING_REQUESTS) {
+  if (!Number.isNaN(remaining) && remaining <= MIN_REMAINING_REQUESTS) {
     throw new ClioRateLimitError(
       "Clio API rate limit reached. Please continue later.",
-      getResetDate(res)
+      getResetDate(response)
     )
   }
 }
@@ -73,41 +81,41 @@ async function fetchClio(url: string): Promise<Response> {
     throw new Error("Missing CLIO_ACCESS_TOKEN in .env.local")
   }
 
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
   })
 
-  if (res.status === 429) {
+  if (response.status === 429) {
     throw new ClioRateLimitError(
       "Clio API rate limit reached. Please continue later.",
-      getResetDate(res)
+      getResetDate(response)
     )
   }
 
-  checkRateLimit(res)
+  checkRateLimit(response)
 
-  return res
+  return response
 }
 
 async function request<T>(
   endpoint: string,
   params: Record<string, unknown> = {}
 ): Promise<T> {
-  const qs = buildQuery(params)
-  const url = `${CLIO_API_BASE}${endpoint}${qs ? `?${qs}` : ""}`
+  const queryString = buildQuery(params)
+  const url = `${CLIO_API_BASE}${endpoint}${queryString ? `?${queryString}` : ""}`
 
-  const res = await fetchClio(url)
+  const response = await fetchClio(url)
 
-  if (!res.ok) {
-    const text = await res.text()
-    console.error("Clio error:", res.status, text)
-    throw new Error(`Clio error ${res.status}`)
+  if (!response.ok) {
+    const text = await response.text()
+    console.error("[Clio] API error:", response.status, text)
+    throw new Error(`Clio API error: ${response.status}`)
   }
 
-  return res.json()
+  return response.json() as Promise<T>
 }
 
 async function paginate<T>(
@@ -116,104 +124,151 @@ async function paginate<T>(
   maxPages = MAX_PAGES
 ): Promise<T[]> {
   const results: T[] = []
-  let next: string | undefined
+  let nextUrl: string | undefined
   let page = 0
 
   while (page < maxPages) {
-    let res: ClioPaginatedResponse<T>
+    let response: ClioPaginatedResponse<T>
 
-    if (next) {
-      const r = await fetchClio(next)
-      res = await r.json()
+    if (nextUrl) {
+      const rawResponse = await fetchClio(nextUrl)
+
+      if (!rawResponse.ok) {
+        const text = await rawResponse.text()
+        console.error("[Clio] API error:", rawResponse.status, text)
+        throw new Error(`Clio API error: ${rawResponse.status}`)
+      }
+
+      response = await rawResponse.json()
     } else {
-      res = await request(endpoint, {
+      response = await request<ClioPaginatedResponse<T>>(endpoint, {
         ...params,
         limit: DEFAULT_LIMIT,
       })
     }
 
-    if (res.data) {
-      results.push(...res.data)
+    if (Array.isArray(response.data)) {
+      results.push(...response.data)
     }
 
-    next = res.meta?.paging?.next
+    nextUrl = response.meta?.paging?.next
 
-    if (!next || res.data.length < DEFAULT_LIMIT) break
+    if (!nextUrl || !response.data || response.data.length < DEFAULT_LIMIT) {
+      break
+    }
 
-    page++
+    page += 1
   }
 
   return results
 }
 
-// ==============================
-// PUBLIC FUNCTIONS
-// ==============================
-
 export async function getRecentMatters(
-  from: Date,
-  to: Date
+  fromDate: Date,
+  toDate: Date
 ): Promise<ClioMatter[]> {
-  return paginate("/matters.json", {
-    created_since: from.toISOString(),
+  return paginate<ClioMatter>("/matters.json", {
+    created_since: fromDate.toISOString(),
+    updated_until: toDate.toISOString(),
     order: "created_at(desc)",
     fields:
-      "id,display_number,description,status,created_at,client{id,name,first_name,last_name},responsible_attorney{id,name}",
+      "id,display_number,description,status,open_date,close_date,pending_date,created_at,updated_at,client{id,name,first_name,last_name,type},responsible_attorney{id,name}",
   })
+}
+
+export async function getMatter(
+  matterId: string | number
+): Promise<ClioMatter | null> {
+  try {
+    const response = await request<{ data: ClioMatter }>(
+      `/matters/${matterId}.json`,
+      {
+        fields:
+          "id,display_number,description,status,open_date,close_date,pending_date,created_at,updated_at,client{id,name,first_name,last_name,type},responsible_attorney{id,name}",
+      }
+    )
+
+    return response.data
+  } catch (error) {
+    console.error("[Clio] Failed to get matter:", matterId, error)
+    return null
+  }
 }
 
 export async function getMatterCalendarEntries(
   matterId: string | number,
-  from: Date,
-  to: Date
+  fromDate: Date,
+  toDate: Date
 ): Promise<ClioCalendarEntry[]> {
-  return paginate("/calendar_entries.json", {
-    matter_id: String(matterId),
-    from: from.toISOString(),
-    to: to.toISOString(),
-  })
+  return paginate<ClioCalendarEntry>(
+    "/calendar_entries.json",
+    {
+      matter_id: String(matterId),
+      from: fromDate.toISOString(),
+      to: toDate.toISOString(),
+      fields:
+        "id,summary,description,location,start_at,end_at,all_day,created_at,updated_at,matter{id,display_number},attendees{id,name,type}",
+    },
+    2
+  )
 }
 
 export async function getMatterCommunications(
   matterId: string | number,
-  from: Date,
-  to: Date
+  fromDate: Date,
+  toDate: Date
 ): Promise<ClioCommunication[]> {
-  return paginate("/communications.json", {
-    matter_id: String(matterId),
-    created_since: from.toISOString(),
-  })
+  return paginate<ClioCommunication>(
+    "/communications.json",
+    {
+      matter_id: String(matterId),
+      created_since: fromDate.toISOString(),
+      fields:
+        "id,subject,body,type,date,created_at,updated_at,matter{id,display_number},senders{id,name,type},receivers{id,name,type}",
+    },
+    2
+  )
 }
 
 export async function getMatterNotes(
   matterId: string | number,
-  from: Date,
-  to: Date
+  fromDate: Date,
+  toDate: Date
 ): Promise<ClioNote[]> {
-  return paginate("/notes.json", {
-    matter_id: String(matterId),
-    created_since: from.toISOString(),
-  })
+  return paginate<ClioNote>(
+    "/notes.json",
+    {
+      matter_id: String(matterId),
+      created_since: fromDate.toISOString(),
+      fields:
+        "id,detail,subject,type,created_at,updated_at,matter{id,display_number}",
+    },
+    2
+  )
 }
 
 export async function getMatterDocuments(
   matterId: string | number
 ): Promise<ClioDocument[]> {
-  return paginate("/documents.json", {
-    matter_id: String(matterId),
-  })
+  return paginate<ClioDocument>(
+    "/documents.json",
+    {
+      matter_id: String(matterId),
+      fields:
+        "id,name,content_type,created_at,updated_at,matter{id,display_number}",
+    },
+    2
+  )
 }
 
 export async function getMatterAuditBundle(
   matter: ClioMatter,
-  from: Date,
-  to: Date
+  fromDate: Date,
+  toDate: Date
 ) {
-  const [calendarEntries, communications, notes] = await Promise.all([
-    getMatterCalendarEntries(matter.id, from, to),
-    getMatterCommunications(matter.id, from, to),
-    getMatterNotes(matter.id, from, to),
-  ])
+  const calendarEntries = await getMatterCalendarEntries(matter.id, fromDate, toDate)
+  const communications = await getMatterCommunications(matter.id, fromDate, toDate)
+  const notes = await getMatterNotes(matter.id, fromDate, toDate)
 
   return {
     matter,
@@ -224,7 +279,7 @@ export async function getMatterAuditBundle(
 }
 
 export async function isClioConnected(): Promise<boolean> {
-  return !!process.env.CLIO_ACCESS_TOKEN
+  return Boolean(process.env.CLIO_ACCESS_TOKEN)
 }
 
 export async function clearExpiredCache(): Promise<void> {
