@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
   const redirectUri = getRedirectUri(request)
 
   try {
-    // Exchange code for tokens
     const tokenResponse = await fetch('https://app.clio.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -63,19 +62,16 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenResponse.json()
 
-    // Store tokens in database (server-only, no RLS policies)
     const supabase = createAdminClient()
 
-    // Delete any existing tokens
     await supabase.from('clio_tokens').delete().neq('id', '00000000-0000-0000-0000-000000000000')
 
-    // Insert new tokens
     const { error: dbError } = await supabase
       .from('clio_tokens')
       .insert({
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
-        expiry_date: Date.now() + (tokens.expires_in * 1000),
+        expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),
         token_type: tokens.token_type || 'Bearer',
       })
 
