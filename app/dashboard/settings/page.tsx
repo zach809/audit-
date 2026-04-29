@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin'
+import { Pool } from 'pg'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -8,13 +8,19 @@ import Link from 'next/link'
 export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
-  // Check Clio connection - use admin client to bypass RLS
-  const supabaseAdmin = createAdminClient()
-  const { data: clioToken } = await supabaseAdmin
-    .from('clio_tokens')
-    .select('id, updated_at')
-    .limit(1)
-    .single()
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  })
+  const client = await pool.connect()
+  let clioToken = null
+  try {
+    const result = await client.query('SELECT id, updated_at FROM clio_tokens LIMIT 1')
+    clioToken = result.rows[0] || null
+  } finally {
+    client.release()
+    await pool.end()
+  }
 
   return (
     <div className="space-y-6">
