@@ -86,17 +86,22 @@ export default function ClioAuditPage() {
 
   // Fetch audit status and results
   const fetchAuditStatus = useCallback(async () => {
+    console.log('[v0] fetchAuditStatus called')
     try {
       const res = await fetch('/api/clio/audit/status')
       const data = await res.json()
+      console.log('[v0] /api/clio/audit/status response:', data)
       if (data.audit_run) {
+        console.log('[v0] Setting auditStatus:', data.audit_run.status, 'totalMatters:', data.audit_run.total_matters, 'processedMatters:', data.audit_run.processed_matters)
         setAuditStatus(data.audit_run.status)
         setTotalMatters(data.audit_run.total_matters || 0)
         setProcessedMatters(data.audit_run.processed_matters || 0)
         await fetchResults(data.audit_run.id)
+      } else {
+        console.log('[v0] No audit_run found in response')
       }
     } catch (err) {
-      console.error('Failed to fetch audit status:', err)
+      console.error('[v0] Failed to fetch audit status:', err)
     } finally {
       setIsLoading(false)
     }
@@ -104,11 +109,14 @@ export default function ClioAuditPage() {
 
   // Fetch results and transform to AuditRow format
   const fetchResults = async (auditRunId: string) => {
+    console.log('[v0] fetchResults called for auditRunId:', auditRunId)
     try {
       const res = await fetch(`/api/clio/audit/results?audit_run_id=${auditRunId}`)
       const data = await res.json()
+      console.log('[v0] /api/clio/audit/results response:', data)
 
       if (data.results) {
+        console.log('[v0] Transforming', data.results.length, 'results into rows')
         const transformedRows: AuditRow[] = data.results.map((r: Record<string, unknown>) => ({
           id: r.id as string,
           clientName: (r.client_name as string) || 'Unknown',
@@ -156,10 +164,12 @@ export default function ClioAuditPage() {
 
   // Start audit
   const startAudit = async () => {
+    console.log('[v0] startAudit called, startDate:', startDate, 'endDate:', endDate)
     setIsProcessing(true)
     setError(null)
 
     try {
+      console.log('[v0] Calling /api/clio/audit/start...')
       const res = await fetch('/api/clio/audit/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -171,6 +181,7 @@ export default function ClioAuditPage() {
       })
 
       const data = await res.json()
+      console.log('[v0] /api/clio/audit/start response:', data)
 
       if (!data.success) {
         setError(data.error || 'Failed to start audit')
@@ -178,8 +189,10 @@ export default function ClioAuditPage() {
         return
       }
 
+      console.log('[v0] Starting processBatches with audit_run_id:', data.audit_run_id)
       await processBatches(data.audit_run_id)
     } catch (err) {
+      console.error('[v0] startAudit error:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
       setIsProcessing(false)
     }
@@ -187,10 +200,12 @@ export default function ClioAuditPage() {
 
   // Process batches
   const processBatches = async (auditRunId: string) => {
+    console.log('[v0] processBatches started for auditRunId:', auditRunId)
     let continueProcessing = true
 
     while (continueProcessing) {
       try {
+        console.log('[v0] Calling /api/clio/audit/batch...')
         const res = await fetch('/api/clio/audit/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -198,8 +213,10 @@ export default function ClioAuditPage() {
         })
 
         const data = await res.json()
+        console.log('[v0] /api/clio/audit/batch response:', data)
 
         if (!data.success) {
+          console.error('[v0] Batch processing failed:', data.error)
           setError(data.error || 'Batch processing failed')
           continueProcessing = false
           break
@@ -211,6 +228,7 @@ export default function ClioAuditPage() {
         const processedInBatch =
           typeof data.processed_in_batch === 'number' ? data.processed_in_batch : data.processed
 
+        console.log('[v0] Progress update - totalProcessed:', totalProcessed, 'processedInBatch:', processedInBatch, 'status:', data.status)
         setProcessedMatters((current) =>
           typeof totalProcessed === 'number'
             ? totalProcessed
@@ -219,6 +237,7 @@ export default function ClioAuditPage() {
         setAuditStatus(data.status)
 
         if (data.status === 'completed' || data.status === 'rate_limited' || data.status === 'failed') {
+          console.log('[v0] Processing finished with status:', data.status)
           continueProcessing = false
           if (data.rate_limited) {
             setError('Clio API rate limit reached. Please continue later.')
@@ -230,11 +249,13 @@ export default function ClioAuditPage() {
           await new Promise(resolve => setTimeout(resolve, 1000))
         }
       } catch (err) {
+        console.error('[v0] processBatches error:', err)
         setError(err instanceof Error ? err.message : 'Processing error')
         continueProcessing = false
       }
     }
     // Fetch final results at the end
+    console.log('[v0] Calling fetchAuditStatus after processing...')
     await fetchAuditStatus()
     setIsProcessing(false)
   }

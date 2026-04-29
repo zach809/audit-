@@ -45,6 +45,7 @@ export async function startAuditRun(
   startDateStr?: string | null,
   endDateStr?: string | null
 ): Promise<ClioAuditRun> {
+  console.log('[v0] [startAuditRun] Called with batchSize:', batchSize, 'timeWindowDays:', timeWindowDays, 'startDateStr:', startDateStr, 'endDateStr:', endDateStr)
   const supabase = createAdminClient()
   
   // Calculate date range from explicit dates or time window
@@ -61,9 +62,12 @@ export async function startAuditRun(
     fromDate = new Date()
     fromDate.setDate(fromDate.getDate() - timeWindowDays)
   }
+  console.log('[v0] [startAuditRun] Date range - from:', fromDate.toISOString(), 'to:', toDate.toISOString())
 
   // Get matters created in the time window
+  console.log('[v0] [startAuditRun] Fetching matters from Clio...')
   const matters = await getRecentMatters(fromDate, toDate)
+  console.log('[v0] [startAuditRun] Fetched', matters.length, 'matters from Clio')
   const matterIds = matters.map(m => String(m.id))
 
   // Create audit run
