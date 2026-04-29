@@ -34,7 +34,6 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
         </Badge>
       )
     }
-
     switch (confirmationStatus) {
       case 'confirmed':
         return (
@@ -110,26 +109,22 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Key Info Grid */}
         <div className="grid gap-3 text-sm md:grid-cols-2">
           <div className="flex items-center gap-2">
             <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Attorney:</span>
             <span className="font-medium">{result.attorney || 'N/A'}</span>
           </div>
-          
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Case Manager:</span>
             <span className="font-medium">{result.actual_replier || 'No reply'}</span>
           </div>
-          
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Received:</span>
             <span className="font-medium">{formatTimestamp(result.audited_at)}</span>
           </div>
-
           {result.next_court_date && (
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -141,7 +136,6 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
           )}
         </div>
 
-        {/* Court Results Details */}
         {result.court_results_details && (
           <>
             <Separator />
@@ -159,7 +153,6 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
           </>
         )}
 
-        {/* Case Manager Response */}
         {result.case_manager_reply && (
           <>
             <Separator />
@@ -169,8 +162,8 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
                 Case Manager Response
               </div>
               <div className={`text-sm p-3 rounded-md border ${
-                confirmationStatus === 'confirmed' 
-                  ? 'bg-emerald-50 border-emerald-200' 
+                confirmationStatus === 'confirmed'
+                  ? 'bg-emerald-50 border-emerald-200'
                   : confirmationStatus === 'not_confirmed'
                     ? 'bg-red-50 border-red-200'
                     : 'bg-amber-50 border-amber-200'
@@ -181,7 +174,6 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
           </>
         )}
 
-        {/* Missing/Unclear */}
         {result.missing_or_unclear && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
             <p className="text-sm text-amber-700">
@@ -190,10 +182,9 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
           </div>
         )}
 
-        {/* Flags */}
         {result.flags && result.flags.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {result.flags.map((flag, index) => (
+            {result.flags.map((flag: string, index: number) => (
               <Badge key={index} variant="outline" className="text-xs">
                 {flag}
               </Badge>
@@ -204,5 +195,6 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
     </Card>
   )
 }
+
 
 }
