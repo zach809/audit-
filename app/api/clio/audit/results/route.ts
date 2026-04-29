@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       audit_run: auditRun,
       results,
       summary,
-    } as AuditResultsResponse)
+    } satisfies AuditResultsResponse)
   } catch (error) {
     console.error('[Clio Audit Results] Error:', error)
     return NextResponse.json(
@@ -56,3 +56,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
