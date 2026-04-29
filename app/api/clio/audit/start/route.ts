@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if there's an in-progress audit
+    // Check if there's an in-progress audit (only resume truly in-progress ones)
     const currentRun = await getCurrentAuditRun()
     if (currentRun && (currentRun.status === 'pending' || currentRun.status === 'in_progress')) {
       return NextResponse.json({
@@ -72,3 +72,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
