@@ -1,380 +1,575 @@
-// lib/clio/audit-engine.ts
+/**
+ * Clio Audit Engine
+ * 
+ * Batched, resumable audit engine for Clio matters.
+ * - Processes matters in configurable batches
+ * - Persists progress for resumability
+ * - Handles rate limits gracefully
+ * - Stores audit results per-matter
+ */
 
+import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  getRecentMatters,
+  getMatter,
+  getMatterCalendarEntries,
+  getMatterCommunications,
+  getMatterDocuments,
+} from './client'
 import {
   ClioMatter,
   ClioCalendarEntry,
   ClioCommunication,
-  ClioNote,
-} from "./types"
+  ClioDocument,
+  ClioAuditRun,
+  ClioMatterAudit,
+  MatterAuditStatus,
+  ClioRateLimitError,
+} from './types'
 
-export type AuditStatus = "Pass" | "Flag"
-export type YesNoNA = "Yes" | "No" | "N/A"
+const DEFAULT_BATCH_SIZE = 20
+const DEFAULT_TIME_WINDOW_DAYS = 14
 
-export type MissingItemType =
-  | "Attorney Call"
-  | "Court Reminder/Court Date"
-  | "Welcome Packet"
-  | "Client Contact"
-  | "Appearance Filing Email"
-  | "Court Results Email"
-  | "Court Results Notes"
-  | "Next Court Date"
-  | "Late Court Results"
-  | "Matter Data"
-  | "Client-Attorney Meeting"
-  | "Scheduled Call"
+// ============================================
+// Audit Run Management
+// ============================================
 
-export type CalendarEventSummary = {
-  id: string
-  summary: string
-  date: string
-  attendees: string[]
-  type: "meeting" | "call" | "court" | "other"
+/**
+ * Start a new audit run
+ * Fetches matters to audit and initializes the run
+ */
+export async function startAuditRun(
+  batchSize = DEFAULT_BATCH_SIZE,
+  timeWindowDays = DEFAULT_TIME_WINDOW_DAYS
+): Promise<ClioAuditRun> {
+  const supabase = createAdminClient()
+  
+  // Calculate date range
+  const toDate = new Date()
+  const fromDate = new Date()
+  fromDate.setDate(fromDate.getDate() - timeWindowDays)
+
+  // Get matters created in the time window
+  const matters = await getRecentMatters(fromDate, toDate)
+  const matterIds = matters.map(m => String(m.id))
+
+  // Create audit run
+  const { data, error } = await supabase
+    .from('clio_audit_runs')
+    .insert({
+      status: 'pending',
+      total_matters: matterIds.length,
+      processed_matters: 0,
+      current_batch: 0,
+      batch_size: batchSize,
+      time_window_days: timeWindowDays,
+      matter_ids_to_process: matterIds,
+      started_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create audit run: ${error?.message}`)
+  }
+
+  return data as ClioAuditRun
 }
 
-export type MatterAuditBundle = {
+/**
+ * Get the current/latest audit run
+ */
+export async function getCurrentAuditRun(): Promise<ClioAuditRun | null> {
+  const supabase = createAdminClient()
+  
+  const { data, error } = await supabase
+    .from('clio_audit_runs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data as ClioAuditRun
+}
+
+/**
+ * Get a specific audit run by ID
+ */
+export async function getAuditRun(runId: string): Promise<ClioAuditRun | null> {
+  const supabase = createAdminClient()
+  
+  const { data, error } = await supabase
+    .from('clio_audit_runs')
+    .select('*')
+    .eq('id', runId)
+    .single()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data as ClioAuditRun
+}
+
+/**
+ * Update audit run status
+ */
+async function updateAuditRun(
+  runId: string,
+  updates: Partial<ClioAuditRun>
+): Promise<void> {
+  const supabase = createAdminClient()
+  
+  await supabase
+    .from('clio_audit_runs')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', runId)
+}
+
+// ============================================
+// Matter Audit Logic
+// ============================================
+
+interface MatterAuditData {
   matter: ClioMatter
   calendarEntries: ClioCalendarEntry[]
   communications: ClioCommunication[]
-  notes: ClioNote[]
+  documents: ClioDocument[]
 }
 
-export type AuditRow = {
-  id: string
-
-  clientName: string
-  matterNumber: string
-  responsibleAttorney: string
-  matterCreatedAt: string
-
-  attorneyCallScheduledWithin15Minutes: YesNoNA
-  courtDateWithin15Minutes: YesNoNA
-  welcomePacketSentWithin15Minutes: YesNoNA
-
-  clientContactWithin24Hours: YesNoNA
-  appearanceFilingEmailWithin24Hours: YesNoNA
-
-  courtDate: string
-  courtResultsEmailSent: YesNoNA
-  courtResultsSentWithin24Hours: YesNoNA
-  courtResultsDocumentedInNotes: YesNoNA
-  resultSentTimestamp: string
-  nextCourtDateAdded: YesNoNA
-
-  // Calendar meeting/call tracking
-  clientAttorneyMeetingScheduled: YesNoNA
-  meetingDate: string
-  meetingAttendees: string
-  scheduledCallExists: YesNoNA
-  scheduledCallDate: string
-  scheduledCallAttendees: string
-  allCalendarEvents: CalendarEventSummary[]
-
-  status: AuditStatus
-  missingItemTypes: MissingItemType[]
-  notes: string
-}
-
-const FIFTEEN_MIN = 15 * 60 * 1000
-const DAY_24 = 24 * 60 * 60 * 1000
-
-const lower = (v: any) => (v ? String(v).toLowerCase() : "")
-
-const toDate = (v?: string) => {
-  if (!v) return null
-  const d = new Date(v)
-  return isNaN(d.getTime()) ? null : d
-}
-
-const format = (v?: string) => {
-  const d = toDate(v)
-  return d ? d.toLocaleString() : ""
-}
-
-const getClient = (m: ClioMatter) =>
-  m.client?.name ||
-  [m.client?.first_name, m.client?.last_name].filter(Boolean).join(" ") ||
-  "Unknown Client"
-
-const getMatterNum = (m: ClioMatter) =>
-  m.display_number || String(m.id || "")
-
-const getAttorney = (m: ClioMatter) =>
-  m.responsible_attorney?.name || "Unassigned"
-
-const textCalendar = (e: ClioCalendarEntry) =>
-  [e.summary, e.description].map(lower).join(" ")
-
-const textComm = (c: ClioCommunication) =>
-  [c.subject, c.body].map(lower).join(" ")
-
-const textNote = (n: ClioNote) =>
-  [n.detail, (n as any).subject].map(lower).join(" ")
-
-const hasKeyword = (text: string, keys: string[]) =>
-  keys.some(k => text.includes(k))
-
-const within = (target?: string, base?: Date, ms?: number) => {
-  const d = toDate(target)
-  if (!d || !base || !ms) return false
-  const diff = d.getTime() - base.getTime()
-  return diff >= 0 && diff <= ms
-}
-
-const findComm = (comms: ClioCommunication[], keys: string[], base?: Date, ms?: number) => {
-  return comms.find(c => {
-    if (!hasKeyword(textComm(c), keys)) return false
-    if (base && ms) return within(c.created_at, base, ms)
-    return true
-  }) || null
-}
-
-const findCal = (cal: ClioCalendarEntry[], keys: string[], base?: Date, ms?: number) => {
-  return cal.find(e => {
-    if (!hasKeyword(textCalendar(e), keys)) return false
-    if (base && ms) return within(e.start_at, base, ms)
-    return true
-  }) || null
-}
-
-const findNote = (notes: ClioNote[], keys: string[]) => {
-  return notes.find(n => hasKeyword(textNote(n), keys)) || null
-}
-
-const getCourtEvents = (cal: ClioCalendarEntry[]) =>
-  cal.filter(e =>
-    hasKeyword(textCalendar(e), [
-      "court",
-      "hearing",
-      "trial",
-      "corte",
-    ])
-  )
-
-const getMeetingEvents = (cal: ClioCalendarEntry[]) =>
-  cal.filter(e =>
-    hasKeyword(textCalendar(e), [
-      "meeting",
-      "consultation",
-      "appointment",
-      "reunion",
-      "cita",
-      "zoom",
-      "teams",
-      "office visit",
-    ])
-  )
-
-const getCallEvents = (cal: ClioCalendarEntry[]) =>
-  cal.filter(e =>
-    hasKeyword(textCalendar(e), [
-      "call",
-      "phone",
-      "llamada",
-      "telefono",
-      "callback",
-      "follow up call",
-      "follow-up call",
-    ])
-  )
-
-const getEventType = (e: ClioCalendarEntry): "meeting" | "call" | "court" | "other" => {
-  const text = textCalendar(e)
-  if (hasKeyword(text, ["court", "hearing", "trial", "corte"])) return "court"
-  if (hasKeyword(text, ["call", "phone", "llamada", "telefono"])) return "call"
-  if (hasKeyword(text, ["meeting", "consultation", "appointment", "zoom", "teams"])) return "meeting"
-  return "other"
-}
-
-const getAttendeeNames = (e: ClioCalendarEntry): string[] => {
-  return e.attendees?.map(a => a.name || "Unknown").filter(Boolean) as string[] || []
-}
-
-const summarizeCalendarEvents = (cal: ClioCalendarEntry[]): CalendarEventSummary[] => {
-  return cal.map(e => ({
-    id: String(e.id),
-    summary: e.summary || "No title",
-    date: format(e.start_at),
-    attendees: getAttendeeNames(e),
-    type: getEventType(e),
-  }))
-}
-
-export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
-  const m = bundle.matter
-  const created = toDate(m.created_at)
-
-  if (!created) {
-    return [{
-      id: `${m?.id || "unknown"}-missing-created`,
-      clientName: getClient(m),
-      matterNumber: getMatterNum(m),
-      responsibleAttorney: getAttorney(m),
-      matterCreatedAt: "",
-      attorneyCallScheduledWithin15Minutes: "N/A",
-      courtDateWithin15Minutes: "N/A",
-      welcomePacketSentWithin15Minutes: "N/A",
-      clientContactWithin24Hours: "N/A",
-      appearanceFilingEmailWithin24Hours: "N/A",
-      courtDate: "",
-      courtResultsEmailSent: "N/A",
-      courtResultsSentWithin24Hours: "N/A",
-      courtResultsDocumentedInNotes: "N/A",
-      resultSentTimestamp: "",
-      nextCourtDateAdded: "N/A",
-      clientAttorneyMeetingScheduled: "N/A",
-      meetingDate: "",
-      meetingAttendees: "",
-      scheduledCallExists: "N/A",
-      scheduledCallDate: "",
-      scheduledCallAttendees: "",
-      allCalendarEvents: [],
-      status: "Flag",
-      missingItemTypes: ["Matter Data"],
-      notes: "Missing created_at",
-    }]
+/**
+ * Fetch all data needed for a matter audit
+ */
+async function fetchMatterData(
+  matterId: string,
+  fromDate: Date,
+  toDate: Date
+): Promise<MatterAuditData | null> {
+  const matter = await getMatter(matterId)
+  if (!matter) {
+    console.error(`[Clio Audit] Matter not found: ${matterId}`)
+    return null
   }
 
-  const cal = bundle.calendarEntries
-  const comm = bundle.communications
-  const notes = bundle.notes
-
-  const attorneyCall = findCal(cal, ["call", "phone"], created, FIFTEEN_MIN)
-  const courtEarly = findCal(cal, ["court", "hearing"], created, FIFTEEN_MIN)
-  const welcome = findComm(comm, ["welcome"], created, FIFTEEN_MIN)
-
-  const contact = findComm(comm, ["call", "voicemail"], created, DAY_24)
-  const appearance = findComm(comm, ["appearance"], created, DAY_24)
-
-  // Get meeting and call events
-  const meetingEvents = getMeetingEvents(cal)
-  const callEvents = getCallEvents(cal)
-  const allEvents = summarizeCalendarEvents(cal)
-
-  // Find first meeting and call for tracking
-  const firstMeeting = meetingEvents[0] || null
-  const firstCall = callEvents[0] || null
-
-  const baseMissing: MissingItemType[] = []
-
-  if (!attorneyCall) baseMissing.push("Attorney Call")
-  if (!courtEarly) baseMissing.push("Court Reminder/Court Date")
-  if (!welcome) baseMissing.push("Welcome Packet")
-  if (!contact) baseMissing.push("Client Contact")
-  if (!appearance) baseMissing.push("Appearance Filing Email")
-  if (!firstMeeting) baseMissing.push("Client-Attorney Meeting")
-  if (!firstCall) baseMissing.push("Scheduled Call")
-
-  const courtEvents = getCourtEvents(cal)
-
-  if (!courtEvents.length) {
-    return [{
-      id: `${m.id}-base`,
-      clientName: getClient(m),
-      matterNumber: getMatterNum(m),
-      responsibleAttorney: getAttorney(m),
-      matterCreatedAt: format(m.created_at),
-      attorneyCallScheduledWithin15Minutes: attorneyCall ? "Yes" : "No",
-      courtDateWithin15Minutes: courtEarly ? "Yes" : "No",
-      welcomePacketSentWithin15Minutes: welcome ? "Yes" : "No",
-      clientContactWithin24Hours: contact ? "Yes" : "No",
-      appearanceFilingEmailWithin24Hours: appearance ? "Yes" : "No",
-      courtDate: "",
-      courtResultsEmailSent: "N/A",
-      courtResultsSentWithin24Hours: "N/A",
-      courtResultsDocumentedInNotes: "N/A",
-      resultSentTimestamp: "",
-      nextCourtDateAdded: "N/A",
-      clientAttorneyMeetingScheduled: firstMeeting ? "Yes" : "No",
-      meetingDate: format(firstMeeting?.start_at),
-      meetingAttendees: getAttendeeNames(firstMeeting || {} as ClioCalendarEntry).join(", "),
-      scheduledCallExists: firstCall ? "Yes" : "No",
-      scheduledCallDate: format(firstCall?.start_at),
-      scheduledCallAttendees: getAttendeeNames(firstCall || {} as ClioCalendarEntry).join(", "),
-      allCalendarEvents: allEvents,
-      status: baseMissing.length ? "Flag" : "Pass",
-      missingItemTypes: baseMissing,
-      notes: baseMissing.join(", ") || "OK",
-    }]
-  }
-
-  return courtEvents.map((e, i) => {
-    const courtDate = toDate(e.start_at)
-
-    const resultEmail = findComm(comm, ["result", "resultado"])
-    const resultNote = findNote(notes, ["result", "resultado"])
-
-    const late =
-      resultEmail && courtDate
-        ? !within(resultEmail.created_at, courtDate, DAY_24)
-        : true
-
-    const missing = [...baseMissing]
-
-    if (!resultEmail) missing.push("Court Results Email")
-    if (!resultNote) missing.push("Court Results Notes")
-    if (late) missing.push("Late Court Results")
-
-    return {
-      id: `${m.id}-court-${i}`,
-      clientName: getClient(m),
-      matterNumber: getMatterNum(m),
-      responsibleAttorney: getAttorney(m),
-      matterCreatedAt: format(m.created_at),
-
-      attorneyCallScheduledWithin15Minutes: attorneyCall ? "Yes" : "No",
-      courtDateWithin15Minutes: courtEarly ? "Yes" : "No",
-      welcomePacketSentWithin15Minutes: welcome ? "Yes" : "No",
-
-      clientContactWithin24Hours: contact ? "Yes" : "No",
-      appearanceFilingEmailWithin24Hours: appearance ? "Yes" : "No",
-
-      courtDate: format(e.start_at),
-      courtResultsEmailSent: resultEmail ? "Yes" : "No",
-      courtResultsSentWithin24Hours: late ? "No" : "Yes",
-      courtResultsDocumentedInNotes: resultNote ? "Yes" : "No",
-      resultSentTimestamp: format(resultEmail?.created_at),
-      nextCourtDateAdded: "N/A",
-
-      clientAttorneyMeetingScheduled: firstMeeting ? "Yes" : "No",
-      meetingDate: format(firstMeeting?.start_at),
-      meetingAttendees: getAttendeeNames(firstMeeting || {} as ClioCalendarEntry).join(", "),
-      scheduledCallExists: firstCall ? "Yes" : "No",
-      scheduledCallDate: format(firstCall?.start_at),
-      scheduledCallAttendees: getAttendeeNames(firstCall || {} as ClioCalendarEntry).join(", "),
-      allCalendarEvents: allEvents,
-
-      status: missing.length ? "Flag" : "Pass",
-      missingItemTypes: missing,
-      notes: missing.join(", ") || "OK",
-    }
-  })
-}
-
-export function auditMatterBundles(bundles: MatterAuditBundle[]): AuditRow[] {
-  return bundles.flatMap(bundle => auditMatterBundle(bundle))
-}
-
-export type AuditSummary = {
-  total: number
-  passed: number
-  flagged: number
-  missingByType: Record<MissingItemType, number>
-}
-
-export function summarizeAuditRows(rows: AuditRow[]): AuditSummary {
-  const missingByType: Record<string, number> = {}
-
-  for (const row of rows) {
-    for (const item of row.missingItemTypes) {
-      missingByType[item] = (missingByType[item] || 0) + 1
-    }
-  }
+  const [calendarEntries, communications, documents] = await Promise.all([
+    getMatterCalendarEntries(matterId, fromDate, toDate),
+    getMatterCommunications(matterId, fromDate, toDate),
+    getMatterDocuments(matterId),
+  ])
 
   return {
-    total: rows.length,
-    passed: rows.filter(r => r.status === "Pass").length,
-    flagged: rows.filter(r => r.status === "Flag").length,
-    missingByType: missingByType as Record<MissingItemType, number>,
+    matter,
+    calendarEntries,
+    communications,
+    documents,
+  }
+}
+
+/**
+ * Check if an intake/add-to-calendar entry exists
+ */
+function checkIntakeCalendar(
+  calendarEntries: ClioCalendarEntry[]
+): { exists: boolean; date: string | null } {
+  const intakeKeywords = ['intake', 'add to calendar', 'new client', 'initial consultation', 'onboarding']
+  
+  const intakeEntry = calendarEntries.find(entry => {
+    const summary = entry.summary?.toLowerCase() || ''
+    const description = entry.description?.toLowerCase() || ''
+    return intakeKeywords.some(kw => summary.includes(kw) || description.includes(kw))
+  })
+
+  return {
+    exists: !!intakeEntry,
+    date: intakeEntry?.start_at || null,
+  }
+}
+
+/**
+ * Check if a client-attorney meeting is scheduled within 48 hours of intake
+ */
+function checkMeetingScheduled(
+  calendarEntries: ClioCalendarEntry[],
+  matterCreatedAt: string
+): { scheduled: boolean; withinDeadline: boolean; date: string | null } {
+  const meetingKeywords = ['meeting', 'consultation', 'call', 'phone', 'appointment', 'conference']
+  
+  const meetings = calendarEntries.filter(entry => {
+    const summary = entry.summary?.toLowerCase() || ''
+    return meetingKeywords.some(kw => summary.includes(kw))
+  })
+
+  if (meetings.length === 0) {
+    return { scheduled: false, withinDeadline: false, date: null }
+  }
+
+  const matterDate = new Date(matterCreatedAt)
+  const deadlineDate = new Date(matterDate.getTime() + 48 * 60 * 60 * 1000)
+
+  const firstMeeting = meetings.sort(
+    (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
+  )[0]
+
+  const meetingDate = new Date(firstMeeting.start_at)
+  const withinDeadline = meetingDate <= deadlineDate
+
+  return {
+    scheduled: true,
+    withinDeadline,
+    date: firstMeeting.start_at,
+  }
+}
+
+/**
+ * Check if welcome packet email was sent
+ */
+function checkWelcomePacket(
+  communications: ClioCommunication[]
+): { sent: boolean; date: string | null } {
+  const welcomeKeywords = ['welcome packet', 'welcome email', 'new client packet', 'intake packet']
+  
+  const welcomeEmail = communications.find(comm => {
+    const subject = comm.subject?.toLowerCase() || ''
+    const body = comm.body?.toLowerCase() || ''
+    return welcomeKeywords.some(kw => subject.includes(kw) || body.includes(kw))
+  })
+
+  return {
+    sent: !!welcomeEmail,
+    date: welcomeEmail?.date || welcomeEmail?.created_at || null,
+  }
+}
+
+/**
+ * Check if appearance filed email was sent
+ */
+function checkAppearanceEmail(
+  communications: ClioCommunication[],
+  matterCreatedAt: string
+): { sent: boolean; withinDeadline: boolean; date: string | null } {
+  const appearanceKeywords = ['appearance', 'filed', 'your appearance has been filed']
+  
+  const appearanceEmail = communications.find(comm => {
+    const subject = comm.subject?.toLowerCase() || ''
+    const body = comm.body?.toLowerCase() || ''
+    return appearanceKeywords.some(kw => subject.includes(kw) || body.includes(kw))
+  })
+
+  if (!appearanceEmail) {
+    return { sent: false, withinDeadline: false, date: null }
+  }
+
+  const matterDate = new Date(matterCreatedAt)
+  const deadlineDate = new Date(matterDate.getTime() + 48 * 60 * 60 * 1000)
+  const emailDate = new Date(appearanceEmail.date || appearanceEmail.created_at)
+  const withinDeadline = emailDate <= deadlineDate
+
+  return {
+    sent: true,
+    withinDeadline,
+    date: appearanceEmail.date || appearanceEmail.created_at,
+  }
+}
+
+/**
+ * Check if signed retainer exists
+ */
+function checkSignedRetainer(
+  documents: ClioDocument[]
+): { exists: boolean; date: string | null } {
+  const retainerKeywords = ['retainer', 'signed retainer', 'fee agreement', 'engagement letter']
+  
+  const retainerDoc = documents.find(doc => {
+    const name = doc.name?.toLowerCase() || ''
+    return retainerKeywords.some(kw => name.includes(kw))
+  })
+
+  return {
+    exists: !!retainerDoc,
+    date: retainerDoc?.created_at || null,
+  }
+}
+
+/**
+ * Determine overall status based on checks
+ */
+function determineOverallStatus(audit: Partial<ClioMatterAudit>): MatterAuditStatus {
+  const criticalMissing = [
+    !audit.intake_calendar_exists,
+    !audit.matter_created_in_clio,
+    !audit.welcome_packet_sent,
+    !audit.signed_retainer_exists,
+  ].filter(Boolean).length
+
+  const needsReview = [
+    audit.meeting_scheduled_within_48h === false,
+    audit.appearance_filed_within_48h === false,
+    audit.attorney_correctly_assigned === false,
+    audit.client_name_consistent === false,
+  ].filter(Boolean).length
+
+  if (criticalMissing >= 2) {
+    return 'missing_evidence'
+  }
+  
+  if (criticalMissing > 0 || needsReview > 0) {
+    return 'needs_review'
+  }
+
+  return 'pass'
+}
+
+/**
+ * Audit a single matter
+ */
+async function auditMatter(
+  auditRunId: string,
+  matterId: string,
+  fromDate: Date,
+  toDate: Date
+): Promise<ClioMatterAudit | null> {
+  const supabase = createAdminClient()
+  
+  // Fetch all matter data
+  const matterData = await fetchMatterData(matterId, fromDate, toDate)
+  if (!matterData) {
+    return null
+  }
+
+  const { matter, calendarEntries, communications, documents } = matterData
+  const matterCreatedAt = matter.created_at
+
+  // Run all checks
+  const intakeCheck = checkIntakeCalendar(calendarEntries)
+  const meetingCheck = checkMeetingScheduled(calendarEntries, matterCreatedAt)
+  const welcomeCheck = checkWelcomePacket(communications)
+  const appearanceCheck = checkAppearanceEmail(communications, matterCreatedAt)
+  const retainerCheck = checkSignedRetainer(documents)
+
+  // Build missing items and flags
+  const missingItems: string[] = []
+  const flags: string[] = []
+
+  if (!intakeCheck.exists) missingItems.push('Intake calendar entry')
+  if (!meetingCheck.scheduled) missingItems.push('Client-attorney meeting')
+  if (meetingCheck.scheduled && !meetingCheck.withinDeadline) flags.push('Meeting not scheduled within 48 hours')
+  if (!welcomeCheck.sent) missingItems.push('Welcome packet email')
+  if (!appearanceCheck.sent) missingItems.push('Appearance filed email')
+  if (appearanceCheck.sent && !appearanceCheck.withinDeadline) flags.push('Appearance email not sent within 48 hours')
+  if (!retainerCheck.exists) missingItems.push('Signed retainer document')
+
+  // Build audit record
+  const auditRecord: Partial<ClioMatterAudit> = {
+    audit_run_id: auditRunId,
+    matter_id: String(matter.id),
+    matter_display_number: matter.display_number,
+    client_name: matter.client?.name || null,
+    attorney_name: matter.responsible_attorney?.name || null,
+    matter_status: matter.status,
+    matter_created_at: matterCreatedAt,
+
+    intake_calendar_exists: intakeCheck.exists,
+    intake_calendar_date: intakeCheck.date,
+    matter_created_in_clio: true,
+    meeting_scheduled_within_48h: meetingCheck.scheduled ? meetingCheck.withinDeadline : null,
+    meeting_date: meetingCheck.date,
+    welcome_packet_sent: welcomeCheck.sent,
+    welcome_packet_date: welcomeCheck.date,
+    
+    appearance_filed_within_48h: appearanceCheck.sent ? appearanceCheck.withinDeadline : null,
+    appearance_date: null, // Would need separate check
+    appearance_email_sent: appearanceCheck.sent,
+    appearance_email_date: appearanceCheck.date,
+    attorney_correctly_assigned: !!matter.responsible_attorney,
+    client_name_consistent: true, // Would need cross-reference check
+    signed_retainer_exists: retainerCheck.exists,
+    signed_retainer_date: retainerCheck.date,
+
+    evidence: {
+      calendar_entries_count: calendarEntries.length,
+      communications_count: communications.length,
+      documents_count: documents.length,
+      intake_entry: intakeCheck.exists ? calendarEntries.find(e => 
+        e.summary?.toLowerCase().includes('intake')
+      )?.summary : null,
+      meeting_entry: meetingCheck.scheduled ? meetingCheck.date : null,
+      welcome_email_subject: welcomeCheck.sent ? communications.find(c =>
+        c.subject?.toLowerCase().includes('welcome')
+      )?.subject : null,
+    },
+    flags,
+    missing_items: missingItems,
+    notes: null,
+    overall_status: 'pass', // Will be calculated
+  }
+
+  auditRecord.overall_status = determineOverallStatus(auditRecord)
+
+  // Save to database
+  const { data, error } = await supabase
+    .from('clio_matter_audits')
+    .insert(auditRecord)
+    .select()
+    .single()
+
+  if (error) {
+    console.error(`[Clio Audit] Failed to save audit for matter ${matterId}:`, error)
+    return null
+  }
+
+  return data as ClioMatterAudit
+}
+
+// ============================================
+// Batch Processing
+// ============================================
+
+/**
+ * Process a single batch of matters
+ * Returns the number of matters processed and whether rate-limited
+ */
+export async function processBatch(
+  auditRunId: string
+): Promise<{ processed: number; rateLimited: boolean; error?: string }> {
+  const auditRun = await getAuditRun(auditRunId)
+  
+  if (!auditRun) {
+    return { processed: 0, rateLimited: false, error: 'Audit run not found' }
+  }
+
+  if (auditRun.status === 'completed' || auditRun.status === 'failed') {
+    return { processed: 0, rateLimited: false, error: `Audit run is ${auditRun.status}` }
+  }
+
+  // Calculate date range
+  const toDate = new Date()
+  const fromDate = new Date()
+  fromDate.setDate(fromDate.getDate() - auditRun.time_window_days)
+
+  // Get matters to process in this batch
+  const matterIds = auditRun.matter_ids_to_process || []
+  const startIdx = auditRun.processed_matters
+  const endIdx = Math.min(startIdx + auditRun.batch_size, matterIds.length)
+  const batchMatterIds = matterIds.slice(startIdx, endIdx)
+
+  if (batchMatterIds.length === 0) {
+    // No more matters to process
+    await updateAuditRun(auditRunId, {
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+    })
+    return { processed: 0, rateLimited: false }
+  }
+
+  // Update status to in_progress
+  await updateAuditRun(auditRunId, { status: 'in_progress' })
+
+  let processedCount = 0
+
+  try {
+    for (const matterId of batchMatterIds) {
+      try {
+        await auditMatter(auditRunId, matterId, fromDate, toDate)
+        processedCount++
+
+        // Update progress after each matter
+        await updateAuditRun(auditRunId, {
+          processed_matters: startIdx + processedCount,
+          last_processed_matter_id: matterId,
+          current_batch: auditRun.current_batch + 1,
+        })
+      } catch (error) {
+        if (error instanceof ClioRateLimitError) {
+          // Rate limited - save progress and stop
+          await updateAuditRun(auditRunId, {
+            status: 'rate_limited',
+            rate_limit_reset_at: error.resetAt?.toISOString() || null,
+            error_message: 'Clio API rate limit exceeded',
+          })
+          return { processed: processedCount, rateLimited: true }
+        }
+        
+        // Log error but continue with next matter
+        console.error(`[Clio Audit] Error auditing matter ${matterId}:`, error)
+      }
+    }
+
+    // Check if all matters are processed
+    const newProcessedCount = startIdx + processedCount
+    if (newProcessedCount >= matterIds.length) {
+      await updateAuditRun(auditRunId, {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        processed_matters: newProcessedCount,
+      })
+    }
+
+    return { processed: processedCount, rateLimited: false }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    
+    if (error instanceof ClioRateLimitError) {
+      await updateAuditRun(auditRunId, {
+        status: 'rate_limited',
+        rate_limit_reset_at: error.resetAt?.toISOString() || null,
+        error_message: 'Clio API rate limit exceeded',
+      })
+      return { processed: processedCount, rateLimited: true }
+    }
+
+    await updateAuditRun(auditRunId, {
+      status: 'failed',
+      error_message: errorMessage,
+    })
+    
+    return { processed: processedCount, rateLimited: false, error: errorMessage }
+  }
+}
+
+// ============================================
+// Results Retrieval
+// ============================================
+
+/**
+ * Get all matter audits for a run
+ */
+export async function getAuditResults(
+  auditRunId: string
+): Promise<ClioMatterAudit[]> {
+  const supabase = createAdminClient()
+  
+  const { data, error } = await supabase
+    .from('clio_matter_audits')
+    .select('*')
+    .eq('audit_run_id', auditRunId)
+    .order('created_at', { ascending: true })
+
+  if (error || !data) {
+    return []
+  }
+
+  return data as ClioMatterAudit[]
+}
+
+/**
+ * Get audit summary stats
+ */
+export async function getAuditSummary(
+  auditRunId: string
+): Promise<{ total: number; pass: number; needs_review: number; missing_evidence: number }> {
+  const results = await getAuditResults(auditRunId)
+  
+  return {
+    total: results.length,
+    pass: results.filter(r => r.overall_status === 'pass').length,
+    needs_review: results.filter(r => r.overall_status === 'needs_review').length,
+    missing_evidence: results.filter(r => r.overall_status === 'missing_evidence').length,
   }
 }

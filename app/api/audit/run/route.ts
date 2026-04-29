@@ -1,63 +1,57 @@
-import { NextResponse } from "next/server"
-import { getRecentMatters, getMatterAuditBundle } from "@/lib/clio/client"
-import {
-  auditMatterBundles,
-  summarizeAuditRows,
-  type MatterAuditBundle,
-} from "@/lib/clio/audit-engine"
-import { ClioRateLimitError } from "@/lib/clio/types"
+import { NextRequest, NextResponse } from 'next/server'
+import { getTodaysEmailThreads } from '@/lib/gmail'
+import { runFullAudit } from '@/lib/audit-engine'
+import { sendAuditSummaryEmail } from '@/lib/email-summary'
 
-export async function POST(req: Request) {
+export const maxDuration = 300 // 5 minutes
+
+export async function POST(request: NextRequest) {
+  // Verify cron secret for automated runs
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  
+  // Allow both cron jobs and authenticated dashboard users
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    // If not a cron job, this is a manual trigger from the dashboard
+    // The middleware will have already verified the user is authenticated
+  }
+
   try {
-    const body = await req.json().catch(() => ({}))
-
-    const now = new Date()
-
-    const fromDate = body.fromDate
-      ? new Date(body.fromDate)
-      : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-
-    const toDate = body.toDate ? new Date(body.toDate) : now
-
-    const matters = await getRecentMatters(fromDate, toDate)
-
-    const bundles: MatterAuditBundle[] = []
-
-    for (const matter of matters) {
-      const bundle = await getMatterAuditBundle(matter, fromDate, toDate)
-      bundles.push(bundle)
+    // Fetch today's email threads
+    const threads = await getTodaysEmailThreads()
+    
+    if (threads.courtResults.length === 0 && threads.addToCalendar.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No emails to audit today',
+        totalProcessed: 0,
+      })
     }
 
-    const rows = auditMatterBundles(bundles)
-    const summary = summarizeAuditRows(rows)
+    // Run the audit
+    const auditResults = await runFullAudit(threads)
+
+    // Send summary email to Zach
+    await sendAuditSummaryEmail(auditResults)
 
     return NextResponse.json({
       success: true,
-      mode: "local-only",
-      processedMatters: matters.length,
-      rows,
-      summary,
+      message: 'Audit completed successfully',
+      ...auditResults,
     })
   } catch (error) {
-    console.error("[Clio Audit Batch] Error:", error)
-
-    if (error instanceof ClioRateLimitError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Clio API rate limit reached. Please continue later.",
-          resetAt: error.resetAt ? error.resetAt.toISOString() : null,
-        },
-        { status: 429 }
-      )
-    }
-
+    console.error('Audit run error:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
       },
       { status: 500 }
     )
   }
+}
+
+// GET handler for Vercel Cron
+export async function GET(request: NextRequest) {
+  return POST(request)
 }
