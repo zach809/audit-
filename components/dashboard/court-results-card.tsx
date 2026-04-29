@@ -13,16 +13,17 @@ import {
   Gavel,
   Calendar
 } from 'lucide-react'
+import type { EmailAudit } from '@/lib/types'
 
 interface CourtResultsCardProps {
-  result: Record<string, unknown>
+  result: EmailAudit
   subject: string
 }
 
 export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
-  const confirmationStatus = result.confirmation_status as string | null
-  const isOverdue = result.is_overdue as boolean
-  const auditStatus = result.audit_status as string
+  const confirmationStatus = result.confirmation_status
+  const isOverdue = result.is_overdue
+  const auditStatus = result.audit_status
 
   const getStatusBadge = () => {
     if (isOverdue) {
@@ -82,7 +83,7 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
     }
   }
 
-  const formatTimestamp = (timestamp: string | null) => {
+  const formatTimestamp = (timestamp: string | null | undefined) => {
     if (!timestamp) return 'N/A'
     return new Date(timestamp).toLocaleString('en-US', {
       month: 'short',
@@ -100,7 +101,7 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="font-semibold">{result.client_name as string || 'Unknown Client'}</h4>
+              <h4 className="font-semibold">{result.client_name || 'Unknown Client'}</h4>
               {getStatusBadge()}
               {getAuditStatusBadge()}
             </div>
@@ -114,19 +115,19 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
           <div className="flex items-center gap-2">
             <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Attorney:</span>
-            <span className="font-medium">{result.attorney as string || 'N/A'}</span>
+            <span className="font-medium">{result.attorney || 'N/A'}</span>
           </div>
           
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Case Manager:</span>
-            <span className="font-medium">{result.actual_replier as string || 'No reply'}</span>
+            <span className="font-medium">{result.actual_replier || 'No reply'}</span>
           </div>
           
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Received:</span>
-            <span className="font-medium">{formatTimestamp(result.original_email_timestamp as string)}</span>
+            <span className="font-medium">{formatTimestamp(result.audited_at)}</span>
           </div>
 
           {result.next_court_date && (
@@ -134,7 +135,7 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
               <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground">Next Court:</span>
               <span className="font-medium">
-                {new Date(result.next_court_date as string).toLocaleDateString()}
+                {new Date(result.next_court_date).toLocaleDateString()}
               </span>
             </div>
           )}
@@ -150,7 +151,9 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
                 Court Results
               </div>
               <p className="text-sm bg-background p-3 rounded-md border">
-                {result.court_results_details as string}
+                {typeof result.court_results_details === 'string'
+                  ? result.court_results_details
+                  : JSON.stringify(result.court_results_details)}
               </p>
             </div>
           </>
@@ -172,7 +175,7 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
                     ? 'bg-red-50 border-red-200'
                     : 'bg-amber-50 border-amber-200'
               }`}>
-                {result.case_manager_reply as string}
+                {result.case_manager_reply}
               </div>
             </div>
           </>
@@ -182,15 +185,15 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
         {result.missing_or_unclear && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
             <p className="text-sm text-amber-700">
-              <strong>Missing/Unclear:</strong> {result.missing_or_unclear as string}
+              <strong>Missing/Unclear:</strong> {result.missing_or_unclear}
             </p>
           </div>
         )}
 
         {/* Flags */}
-        {result.flags && (result.flags as string[]).length > 0 && (
+        {result.flags && result.flags.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {(result.flags as string[]).map((flag, index) => (
+            {result.flags.map((flag, index) => (
               <Badge key={index} variant="outline" className="text-xs">
                 {flag}
               </Badge>
@@ -200,4 +203,6 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
       </CardContent>
     </Card>
   )
+}
+
 }
