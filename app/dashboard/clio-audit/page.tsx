@@ -17,8 +17,10 @@ import {
   Phone,
   Mail,
   Download,
-  ChevronDown
+  ChevronDown,
+  Calendar
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 
 type YesNoNA = 'Yes' | 'No' | 'N/A'
 type AuditStatus = 'Pass' | 'Flag'
@@ -51,6 +53,16 @@ export default function ClioAuditPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Date range for audit
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 14)
+    return d.toISOString().split('T')[0]
+  })
+  const [endDate, setEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0]
+  })
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pass' | 'Flag'>('All')
@@ -151,7 +163,11 @@ export default function ClioAuditPage() {
       const res = await fetch('/api/clio/audit/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_size: 20, time_window_days: 14 }),
+        body: JSON.stringify({ 
+          batch_size: 20, 
+          start_date: startDate,
+          end_date: endDate,
+        }),
       })
       
       const data = await res.json()
@@ -375,33 +391,102 @@ export default function ClioAuditPage() {
       {isConnected && (
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                {auditStatus === 'rate_limited' ? (
-                  <Button onClick={resumeAudit} disabled={isProcessing}>
-                    {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    Resume Audit
+            <div className="flex flex-col gap-4">
+              {/* Date Range Picker */}
+              <div className="flex items-center gap-4 pb-4 border-b">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Date Range:</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-40"
+                    disabled={isProcessing}
+                  />
+                  <span className="text-muted-foreground">to</span>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-40"
+                    disabled={isProcessing}
+                  />
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const d = new Date()
+                      d.setDate(d.getDate() - 7)
+                      setStartDate(d.toISOString().split('T')[0])
+                      setEndDate(new Date().toISOString().split('T')[0])
+                    }}
+                    disabled={isProcessing}
+                  >
+                    Last 7 days
                   </Button>
-                ) : (
-                  <Button onClick={startAudit} disabled={isProcessing}>
-                    {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                    {isProcessing ? 'Processing...' : 'Run Audit'}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const d = new Date()
+                      d.setDate(d.getDate() - 14)
+                      setStartDate(d.toISOString().split('T')[0])
+                      setEndDate(new Date().toISOString().split('T')[0])
+                    }}
+                    disabled={isProcessing}
+                  >
+                    Last 14 days
                   </Button>
-                )}
-                {auditStatus && (
-                  <Badge variant={auditStatus === 'completed' ? 'default' : 'secondary'}>
-                    {auditStatus.replace('_', ' ')}
-                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const d = new Date()
+                      d.setDate(d.getDate() - 30)
+                      setStartDate(d.toISOString().split('T')[0])
+                      setEndDate(new Date().toISOString().split('T')[0])
+                    }}
+                    disabled={isProcessing}
+                  >
+                    Last 30 days
+                  </Button>
+                </div>
+              </div>
+
+              {/* Run Controls */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  {auditStatus === 'rate_limited' ? (
+                    <Button onClick={resumeAudit} disabled={isProcessing}>
+                      {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                      Resume Audit
+                    </Button>
+                  ) : (
+                    <Button onClick={startAudit} disabled={isProcessing}>
+                      {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                      {isProcessing ? 'Processing...' : 'Run Audit'}
+                    </Button>
+                  )}
+                  {auditStatus && (
+                    <Badge variant={auditStatus === 'completed' ? 'default' : 'secondary'}>
+                      {auditStatus.replace('_', ' ')}
+                    </Badge>
+                  )}
+                </div>
+                {totalMatters > 0 && (
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-muted-foreground">
+                      {processedMatters} / {totalMatters} matters
+                    </span>
+                    <Progress value={(processedMatters / totalMatters) * 100} className="w-32 h-2" />
+                  </div>
                 )}
               </div>
-              {totalMatters > 0 && (
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-muted-foreground">
-                    {processedMatters} / {totalMatters} matters
-                  </span>
-                  <Progress value={(processedMatters / totalMatters) * 100} className="w-32 h-2" />
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>

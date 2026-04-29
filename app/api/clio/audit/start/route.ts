@@ -45,10 +45,19 @@ export async function POST(request: NextRequest) {
     }
 
     const batchSize = body.batch_size || 20
-    const timeWindowDays = body.time_window_days || 14
+    const startDate = body.start_date || null
+    const endDate = body.end_date || null
+    
+    // Calculate time window days from dates, or default to 14
+    let timeWindowDays = 14
+    if (startDate && endDate) {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      timeWindowDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    }
 
     // Start new audit run
-    const auditRun = await startAuditRun(batchSize, timeWindowDays)
+    const auditRun = await startAuditRun(batchSize, timeWindowDays, startDate, endDate)
 
     return NextResponse.json({
       success: true,

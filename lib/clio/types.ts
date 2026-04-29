@@ -178,6 +178,8 @@ export interface ClioAuditCache {
 export interface StartAuditRequest {
   batch_size?: number
   time_window_days?: number
+  start_date?: string
+  end_date?: string
 }
 
 export interface StartAuditResponse {

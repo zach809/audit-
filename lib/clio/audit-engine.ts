@@ -40,14 +40,26 @@ const DEFAULT_TIME_WINDOW_DAYS = 14
  */
 export async function startAuditRun(
   batchSize = DEFAULT_BATCH_SIZE,
-  timeWindowDays = DEFAULT_TIME_WINDOW_DAYS
+  timeWindowDays = DEFAULT_TIME_WINDOW_DAYS,
+  startDateStr?: string | null,
+  endDateStr?: string | null
 ): Promise<ClioAuditRun> {
   const supabase = createAdminClient()
   
-  // Calculate date range
-  const toDate = new Date()
-  const fromDate = new Date()
-  fromDate.setDate(fromDate.getDate() - timeWindowDays)
+  // Calculate date range from explicit dates or time window
+  let toDate: Date
+  let fromDate: Date
+  
+  if (startDateStr && endDateStr) {
+    fromDate = new Date(startDateStr)
+    toDate = new Date(endDateStr)
+    // Set to end of day for toDate
+    toDate.setHours(23, 59, 59, 999)
+  } else {
+    toDate = new Date()
+    fromDate = new Date()
+    fromDate.setDate(fromDate.getDate() - timeWindowDays)
+  }
 
   // Get matters created in the time window
   const matters = await getRecentMatters(fromDate, toDate)
