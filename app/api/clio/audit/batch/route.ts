@@ -1,64 +1,62 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { processBatch, getAuditRun } from '@/lib/clio/audit-engine'
-import type { ProcessBatchRequest, ProcessBatchResponse } from '@/lib/clio/types'
+import { NextResponse } from "next/server"
+import { getRecentMatters, getMatterAuditBundle } from "@/lib/clio/client"
+import {
+  auditMatterBundles,
+  summarizeAuditRows,
+  MatterAuditBundle,
+} from "@/lib/clio/audit-engine"
+import { ClioRateLimitError } from "@/lib/clio/types"
 
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    // Verify user is authenticated
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const body = await req.json().catch(() => ({}))
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
+    const now = new Date()
+
+    const fromDate = body.fromDate
+      ? new Date(body.fromDate)
+      : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+    const toDate = body.toDate ? new Date(body.toDate) : now
+
+    const matters = await getRecentMatters(fromDate, toDate)
+
+    const bundles: MatterAuditBundle[] = []
+
+    for (const matter of matters) {
+      const bundle = await getMatterAuditBundle(matter, fromDate, toDate)
+      bundles.push(bundle)
     }
 
-    // Parse request body
-    const body: ProcessBatchRequest = await request.json()
-    
-    if (!body.audit_run_id) {
-      return NextResponse.json(
-        { success: false, error: 'audit_run_id is required' },
-        { status: 400 }
-      )
-    }
-
-    // Process batch
-    const result = await processBatch(body.audit_run_id)
-
-    if (result.error) {
-      return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 400 }
-      )
-    }
-
-    // Get updated run status
-    const auditRun = await getAuditRun(body.audit_run_id)
-
-    if (!auditRun) {
-      return NextResponse.json(
-        { success: false, error: 'Audit run not found' },
-        { status: 404 }
-      )
-    }
+    const rows = auditMatterBundles(bundles)
+    const summary = summarizeAuditRows(rows)
 
     return NextResponse.json({
       success: true,
-      audit_run_id: auditRun.id,
-      status: auditRun.status,
-      processed_in_batch: result.processed,
-      total_processed: auditRun.processed_matters,
-      total_matters: auditRun.total_matters,
-      rate_limited: result.rateLimited,
-    } as ProcessBatchResponse)
+      mode: "local-only",
+      processedMatters: matters.length,
+      rows,
+      summary,
+    })
   } catch (error) {
-    console.error('[Clio Audit Batch] Error:', error)
+    console.error("[Clio Audit Batch] Error:", error)
+
+    if (error instanceof ClioRateLimitError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Clio API rate limit reached. Please continue later.",
+          resetAt: error.resetAt?.toISOString(),
+        },
+        { status: 429 }
+      )
+    }
+
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     )
   }
