@@ -52,21 +52,44 @@ export function buildQuery(params: Record<string, unknown>): string {
  * Get Clio tokens from database
  */
 async function getTokens(): Promise<ClioTokens | null> {
-  const supabase = createAdminClient()
+  const { Pool } = await import('pg')
 
-  const { data, error } = await supabase
-    .from('clio_tokens')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  })
 
-  if (error || !data) {
-    console.error('[Clio] Failed to get tokens:', error)
+  try {
+    const client = await pool.connect()
+
+    try {
+      const result = await client.query(`
+        SELECT *
+        FROM clio_tokens
+        ORDER BY created_at DESC
+        LIMIT 1
+      `)
+
+      const row = result.rows[0]
+
+      if (!row) {
+        console.error('[Clio] No token row found in clio_tokens')
+        return null
+      }
+
+      return {
+        ...row,
+        expiry_date: Number(row.expiry_date ?? row.expires_at ?? 0),
+      } as ClioTokens
+    } finally {
+      client.release()
+    }
+  } catch (error) {
+    console.error('[Clio] Direct token lookup failed:', error)
     return null
+  } finally {
+    await pool.end()
   }
-
-  return data as ClioTokens
 }
 
 /**
