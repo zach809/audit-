@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         success: true,
         audit_run_id: currentRun.id,
         message: 'Resuming existing audit run',
-      } as StartAuditResponse)
+      } satisfies StartAuditResponse)
     }
 
     // Parse request body
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const batchSize = body.batch_size || 5  // Small batches to avoid rate limits
     const startDate = body.start_date || null
     const endDate = body.end_date || null
-    
+
     // Calculate time window days from dates, or default to 14
     let timeWindowDays = 14
     if (startDate && endDate) {
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       success: true,
       audit_run_id: auditRun.id,
       message: `Started new audit with ${auditRun.total_matters} matters`,
-    } as StartAuditResponse)
+    } satisfies StartAuditResponse)
   } catch (error) {
     console.error('[Clio Audit Start] Error:', error)
     return NextResponse.json(
