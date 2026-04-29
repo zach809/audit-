@@ -30,6 +30,7 @@ export type EmailAudit = {
   missing_or_unclear?: string
   case_manager_reply?: string
   attorney_instructions?: string
+  is_overdue?: boolean
   audited_at?: string
   created_at?: string
 }
