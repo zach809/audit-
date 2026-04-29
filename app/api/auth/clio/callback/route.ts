@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { Pool } from 'pg'
 
 function getRedirectUri(request: NextRequest): string {
   if (process.env.CLIO_REDIRECT_URI) {
@@ -61,19 +61,21 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
+    const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000)).toISOString()
 
-    const supabase = createAdminClient()
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+    const client = await pool.connect()
 
-    const { error: dbError } = await supabase.rpc('upsert_clio_tokens', {
-      p_access_token: tokens.access_token,
-      p_refresh_token: tokens.refresh_token,
-      p_expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),
-      p_token_type: tokens.token_type || 'Bearer',
-    })
-
-    if (dbError) {
-      console.error('[Clio OAuth] Failed to store tokens:', dbError)
-      return NextResponse.redirect(`${origin}/dashboard/settings?error=db_error`)
+    try {
+      await client.query('DELETE FROM clio_tokens')
+      await client.query(
+        `INSERT INTO clio_tokens (access_token, refresh_token, expires_at, token_type)
+         VALUES ($1, $2, $3, $4)`,
+        [tokens.access_token, tokens.refresh_token, expiresAt, tokens.token_type || 'Bearer']
+      )
+    } finally {
+      client.release()
+      await pool.end()
     }
 
     console.log('[Clio OAuth] Tokens stored successfully')
