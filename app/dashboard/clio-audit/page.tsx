@@ -686,7 +686,7 @@ function FilterSelect({
 }: {
   label: string
   value: string
-  onChange: (val: string) => void
+  onChange: React.Dispatch<React.SetStateAction<string>> | ((val: string) => void)
   options: string[]
 }) {
   return (
