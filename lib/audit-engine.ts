@@ -18,16 +18,10 @@ async function getAttorneyAssignments(): Promise<Map<string, AttorneyAssignment>
   const supabase = await createClient()
   const { data, error } = await supabase.from('attorney_assignments').select('*')
 
-  if (error) {
-    console.error('Failed to fetch attorney assignments:', error)
-  }
+  if (error) console.error('Failed to fetch attorney assignments:', error)
 
   const map = new Map<string, AttorneyAssignment>()
-
-  data?.forEach((assignment) => {
-    map.set(assignment.attorney_name.toLowerCase(), assignment)
-  })
-
+  data?.forEach((a) => map.set(a.attorney_name.toLowerCase(), a))
   return map
 }
 
@@ -44,73 +38,45 @@ function messageText(message: EmailThread['messages'][number]): string {
   return `${message.from ?? ''} ${message.to ?? ''} ${message.body ?? ''} ${message.snippet ?? ''}`
 }
 
-function calculateResponseTime(
-  originalTimestamp: string | null,
-  replyTimestamp: string | null
-): number | null {
+function calculateResponseTime(originalTimestamp: string | null, replyTimestamp: string | null): number | null {
   if (!originalTimestamp || !replyTimestamp) return null
-
   const originalDate = new Date(originalTimestamp)
   const replyDate = new Date(replyTimestamp)
-
   if (Number.isNaN(originalDate.getTime()) || Number.isNaN(replyDate.getTime())) return null
-
   return Math.round((replyDate.getTime() - originalDate.getTime()) / (1000 * 60))
 }
 
 function extractDate(text: string): string | null {
-  const match = text.match(
-    /\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})\b/i
-  )
-
+  const match = text.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})\b/i)
   if (!match) return null
-
   const date = new Date(match[0])
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
 function extractClientName(subject: string, body: string): string | null {
   const text = `${subject}\n${body}`
-
-  const clientMatch = text.match(
-    /client[:\s]+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'-]+(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'-]+){1,4})/i
-  )
-
+  const clientMatch = text.match(/client[:\s]+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'-]+(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'-]+){1,4})/i)
   if (clientMatch) return clientMatch[1].trim()
 
   const subjectMatch = subject.match(/(?:re:)?\s*([^|:-]{3,80})/i)
-  if (subjectMatch) return subjectMatch[1].trim()
-
-  return null
+  return subjectMatch ? subjectMatch[1].trim() : null
 }
 
-function detectAttorneyFromThread(
-  thread: EmailThread,
-  assignments: Map<string, AttorneyAssignment>
-): string | null {
-  const allText = `${thread.subject} ${thread.messages
-    .map((message) => `${message.from} ${messageText(message)}`)
-    .join(' ')}`.toLowerCase()
+function detectAttorneyFromThread(thread: EmailThread, assignments: Map<string, AttorneyAssignment>): string | null {
+  const allText = `${thread.subject} ${thread.messages.map((m) => `${m.from} ${messageText(m)}`).join(' ')}`.toLowerCase()
 
   for (const assignment of assignments.values()) {
-    if (allText.includes(assignment.attorney_name.toLowerCase())) {
-      return assignment.attorney_name
-    }
+    if (allText.includes(assignment.attorney_name.toLowerCase())) return assignment.attorney_name
   }
 
-  const firstFrom = thread.messages[0]?.from
-  return firstFrom?.split('@')[0]?.replace(/[._]/g, ' ') ?? null
+  return thread.messages[0]?.from?.split('@')[0]?.replace(/[._]/g, ' ') ?? null
 }
 
 function findCaseManagerReply(thread: EmailThread): EmailThread['messages'][number] | null {
-  const messages = [...thread.messages].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  )
-
+  const messages = [...thread.messages].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   const first = messages[0]
   if (!first) return null
-
-  return messages.slice(1).find((message) => message.from !== first.from) ?? null
+  return messages.slice(1).find((m) => m.from !== first.from) ?? null
 }
 
 function defaultResult(overrides: Partial<AuditResult>): AuditResult {
@@ -198,10 +164,28 @@ const MEETING_WORDS = [
   'confirmed',
   'phone',
   'zoom',
+  'mf-phone',
   'llamada',
   'reunión',
   'reunion',
   'consulta',
+]
+
+const COURT_RESULT_TEMPLATE_WORDS = [
+  'court result and next court date',
+  'final court result - your representation has ended',
+  'resultado del juicio y proxima fecha de audiencia',
+  'resultado del juicio y próxima fecha de audiencia',
+  'recordatorio final del caso: su representacion a terminado',
+  'recordatorio final del caso: su representación a terminado',
+]
+
+const COURT_REMINDER_TEMPLATE_WORDS = [
+  'inperson court reminder',
+  'zoom court reminder & instructions',
+  'recordatorio de ausencia presencial',
+  'recordatori e instrucciones para la audiencia por zoom manana',
+  'recordatorio e instrucciones para la audiencia por zoom mañana',
 ]
 
 function checkWrongCaseManager(
@@ -231,15 +215,9 @@ function checkWrongCaseManager(
   return null
 }
 
-export async function auditEmailThread(
-  thread: EmailThread,
-  emailType: EmailType
-): Promise<AuditResult> {
+export async function auditEmailThread(thread: EmailThread, emailType: EmailType): Promise<AuditResult> {
   const assignments = await getAttorneyAssignments()
-
-  const messages = [...thread.messages].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  )
+  const messages = [...thread.messages].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   const firstMsg = messages[0]
   const fullText = messages.map(messageText).join('\n')
@@ -252,21 +230,16 @@ export async function auditEmailThread(
   const flags: string[] = []
   let auditStatus: AuditStatus = 'needs_follow_up'
 
-  const wrongCaseManagerStatus = checkWrongCaseManager(
-    attorney,
-    actualReplier,
-    assignments,
-    flags
-  )
-
-  if (wrongCaseManagerStatus) {
-    auditStatus = wrongCaseManagerStatus
-  }
+  const wrongCaseManagerStatus = checkWrongCaseManager(attorney, actualReplier, assignments, flags)
+  if (wrongCaseManagerStatus) auditStatus = wrongCaseManagerStatus
 
   if (emailType === 'court_results') {
     const replyText = reply ? messageText(reply) : ''
+    const originalText = firstMsg ? messageText(firstMsg) : ''
     const confirmed = includesAny(replyText, CONFIRMED_CLIENT_UPDATE)
     const pending = includesAny(replyText, PENDING_WORDS)
+    const resultTemplateFound = includesAny(`${originalText} ${fullText}`, COURT_RESULT_TEMPLATE_WORDS)
+    const reminderTemplateFound = includesAny(fullText, COURT_REMINDER_TEMPLATE_WORDS)
 
     let confirmationStatus: AuditResult['confirmation_status'] = null
 
@@ -286,6 +259,9 @@ export async function auditEmailThread(
       if (auditStatus !== 'wrong_case_manager') auditStatus = 'needs_clarification'
       flags.push('Reply does not clearly confirm client was updated')
     }
+
+    if (!resultTemplateFound) flags.push('Court result template language not clearly found')
+    if (reminderTemplateFound) flags.push('Court reminder template detected in thread')
 
     const responseTime = calculateResponseTime(firstMsg?.date ?? null, reply?.date ?? null)
     const isLate = responseTime !== null && responseTime > 24 * 60
@@ -346,10 +322,7 @@ export async function auditEmailThread(
     initial_calendar_entry: firstMsg ? messageText(firstMsg).slice(0, 1000) : null,
     case_manager_reply: reply ? messageText(reply).slice(0, 300) : null,
     actual_replier: actualReplier,
-    onboarding_status:
-      sentWelcome && scheduledMeeting
-        ? 'welcome_packet_sent_meeting_scheduled'
-        : 'meeting_not_confirmed',
+    onboarding_status: sentWelcome && scheduledMeeting ? 'welcome_packet_sent_meeting_scheduled' : 'meeting_not_confirmed',
     missing_or_unclear: flags.length ? flags.join('; ') : null,
     audit_status: auditStatus,
     flags,
@@ -369,20 +342,14 @@ export async function runFullAudit(threads: {
   const supabase = await createClient()
   const assignments = await getAttorneyAssignments()
 
-  const results: Array<{
-    thread: EmailThread
-    emailType: EmailType
-    result: AuditResult
-  }> = []
+  const results: Array<{ thread: EmailThread; emailType: EmailType; result: AuditResult }> = []
 
   for (const thread of threads.courtResults) {
-    const result = await auditEmailThread(thread, 'court_results')
-    results.push({ thread, emailType: 'court_results', result })
+    results.push({ thread, emailType: 'court_results', result: await auditEmailThread(thread, 'court_results') })
   }
 
   for (const thread of threads.addToCalendar) {
-    const result = await auditEmailThread(thread, 'add_to_calendar')
-    results.push({ thread, emailType: 'add_to_calendar', result })
+    results.push({ thread, emailType: 'add_to_calendar', result: await auditEmailThread(thread, 'add_to_calendar') })
   }
 
   for (const { thread, emailType, result } of results) {
@@ -424,9 +391,7 @@ export async function runFullAudit(threads: {
       { onConflict: 'thread_id' }
     )
 
-    if (error) {
-      console.error(`Failed to save email audit for thread ${thread.id}:`, error)
-    }
+    if (error) console.error(`Failed to save email audit for thread ${thread.id}:`, error)
   }
 
   const today = new Date().toISOString().split('T')[0]
@@ -452,13 +417,7 @@ export async function runFullAudit(threads: {
     { onConflict: 'audit_date' }
   )
 
-  if (summaryError) {
-    console.error('Failed to save audit summary:', summaryError)
-  }
+  if (summaryError) console.error('Failed to save audit summary:', summaryError)
 
-  return {
-    totalProcessed: results.length,
-    statusCounts,
-    results,
-  }
+  return { totalProcessed: results.length, statusCounts, results }
 }

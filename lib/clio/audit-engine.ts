@@ -1,575 +1,423 @@
-/**
- * Clio Audit Engine
- * 
- * Batched, resumable audit engine for Clio matters.
- * - Processes matters in configurable batches
- * - Persists progress for resumability
- * - Handles rate limits gracefully
- * - Stores audit results per-matter
- */
+import { createClient } from '@/lib/supabase/server'
+import type { AuditResult, EmailType, AuditStatus, AttorneyAssignment } from '@/lib/types'
 
-import { createAdminClient } from '@/lib/supabase/admin'
-import {
-  getRecentMatters,
-  getMatter,
-  getMatterCalendarEntries,
-  getMatterCommunications,
-  getMatterDocuments,
-} from './client'
-import {
-  ClioMatter,
-  ClioCalendarEntry,
-  ClioCommunication,
-  ClioDocument,
-  ClioAuditRun,
-  ClioMatterAudit,
-  MatterAuditStatus,
-  ClioRateLimitError,
-} from './types'
+interface EmailThread {
+  id: string
+  subject: string
+  messages: {
+    id: string
+    from: string
+    to: string
+    date: string
+    body: string
+    snippet: string
+  }[]
+}
 
-const DEFAULT_BATCH_SIZE = 20
-const DEFAULT_TIME_WINDOW_DAYS = 14
+async function getAttorneyAssignments(): Promise<Map<string, AttorneyAssignment>> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.from('attorney_assignments').select('*')
 
-// ============================================
-// Audit Run Management
-// ============================================
+  if (error) console.error('Failed to fetch attorney assignments:', error)
 
-/**
- * Start a new audit run
- * Fetches matters to audit and initializes the run
- */
-export async function startAuditRun(
-  batchSize = DEFAULT_BATCH_SIZE,
-  timeWindowDays = DEFAULT_TIME_WINDOW_DAYS
-): Promise<ClioAuditRun> {
-  const supabase = createAdminClient()
-  
-  // Calculate date range
-  const toDate = new Date()
-  const fromDate = new Date()
-  fromDate.setDate(fromDate.getDate() - timeWindowDays)
+  const map = new Map<string, AttorneyAssignment>()
+  data?.forEach((a) => map.set(a.attorney_name.toLowerCase(), a))
+  return map
+}
 
-  // Get matters created in the time window
-  const matters = await getRecentMatters(fromDate, toDate)
-  const matterIds = matters.map(m => String(m.id))
+function lower(value?: string | null): string {
+  return value?.toLowerCase() ?? ''
+}
 
-  // Create audit run
-  const { data, error } = await supabase
-    .from('clio_audit_runs')
-    .insert({
-      status: 'pending',
-      total_matters: matterIds.length,
-      processed_matters: 0,
-      current_batch: 0,
-      batch_size: batchSize,
-      time_window_days: timeWindowDays,
-      matter_ids_to_process: matterIds,
-      started_at: new Date().toISOString(),
-    })
-    .select()
-    .single()
+function includesAny(text: string, keywords: string[]): boolean {
+  const value = lower(text)
+  return keywords.some((keyword) => value.includes(keyword))
+}
 
-  if (error || !data) {
-    throw new Error(`Failed to create audit run: ${error?.message}`)
+function messageText(message: EmailThread['messages'][number]): string {
+  return `${message.from ?? ''} ${message.to ?? ''} ${message.body ?? ''} ${message.snippet ?? ''}`
+}
+
+function calculateResponseTime(originalTimestamp: string | null, replyTimestamp: string | null): number | null {
+  if (!originalTimestamp || !replyTimestamp) return null
+  const originalDate = new Date(originalTimestamp)
+  const replyDate = new Date(replyTimestamp)
+  if (Number.isNaN(originalDate.getTime()) || Number.isNaN(replyDate.getTime())) return null
+  return Math.round((replyDate.getTime() - originalDate.getTime()) / (1000 * 60))
+}
+
+function extractDate(text: string): string | null {
+  const match = text.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})\b/i)
+  if (!match) return null
+  const date = new Date(match[0])
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function extractClientName(subject: string, body: string): string | null {
+  const text = `${subject}\n${body}`
+  const clientMatch = text.match(/client[:\s]+([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'-]+(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ'-]+){1,4})/i)
+  if (clientMatch) return clientMatch[1].trim()
+
+  const subjectMatch = subject.match(/(?:re:)?\s*([^|:-]{3,80})/i)
+  return subjectMatch ? subjectMatch[1].trim() : null
+}
+
+function detectAttorneyFromThread(thread: EmailThread, assignments: Map<string, AttorneyAssignment>): string | null {
+  const allText = `${thread.subject} ${thread.messages.map((m) => `${m.from} ${messageText(m)}`).join(' ')}`.toLowerCase()
+
+  for (const assignment of assignments.values()) {
+    if (allText.includes(assignment.attorney_name.toLowerCase())) return assignment.attorney_name
   }
 
-  return data as ClioAuditRun
+  return thread.messages[0]?.from?.split('@')[0]?.replace(/[._]/g, ' ') ?? null
 }
 
-/**
- * Get the current/latest audit run
- */
-export async function getCurrentAuditRun(): Promise<ClioAuditRun | null> {
-  const supabase = createAdminClient()
-  
-  const { data, error } = await supabase
-    .from('clio_audit_runs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
-
-  if (error || !data) {
-    return null
-  }
-
-  return data as ClioAuditRun
+function findCaseManagerReply(thread: EmailThread): EmailThread['messages'][number] | null {
+  const messages = [...thread.messages].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  const first = messages[0]
+  if (!first) return null
+  return messages.slice(1).find((m) => m.from !== first.from) ?? null
 }
 
-/**
- * Get a specific audit run by ID
- */
-export async function getAuditRun(runId: string): Promise<ClioAuditRun | null> {
-  const supabase = createAdminClient()
-  
-  const { data, error } = await supabase
-    .from('clio_audit_runs')
-    .select('*')
-    .eq('id', runId)
-    .single()
-
-  if (error || !data) {
-    return null
-  }
-
-  return data as ClioAuditRun
-}
-
-/**
- * Update audit run status
- */
-async function updateAuditRun(
-  runId: string,
-  updates: Partial<ClioAuditRun>
-): Promise<void> {
-  const supabase = createAdminClient()
-  
-  await supabase
-    .from('clio_audit_runs')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', runId)
-}
-
-// ============================================
-// Matter Audit Logic
-// ============================================
-
-interface MatterAuditData {
-  matter: ClioMatter
-  calendarEntries: ClioCalendarEntry[]
-  communications: ClioCommunication[]
-  documents: ClioDocument[]
-}
-
-/**
- * Fetch all data needed for a matter audit
- */
-async function fetchMatterData(
-  matterId: string,
-  fromDate: Date,
-  toDate: Date
-): Promise<MatterAuditData | null> {
-  const matter = await getMatter(matterId)
-  if (!matter) {
-    console.error(`[Clio Audit] Matter not found: ${matterId}`)
-    return null
-  }
-
-  const [calendarEntries, communications, documents] = await Promise.all([
-    getMatterCalendarEntries(matterId, fromDate, toDate),
-    getMatterCommunications(matterId, fromDate, toDate),
-    getMatterDocuments(matterId),
-  ])
-
+function defaultResult(overrides: Partial<AuditResult>): AuditResult {
   return {
-    matter,
-    calendarEntries,
-    communications,
-    documents,
+    client_name: null,
+    attorney: null,
+    county: null,
+    case_number: null,
+    next_court_date: null,
+    result_or_onboarding_details: null,
+    attorney_instructions: null,
+    case_manager_reply: null,
+    actual_replier: null,
+    is_reply_specific: false,
+    missing_or_unclear: null,
+    audit_status: 'needs_follow_up',
+    flags: [],
+    notes_for_zach: null,
+    response_time_minutes: null,
+    original_email_timestamp: null,
+    reply_timestamp: null,
+    court_results_details: null,
+    confirmation_status: null,
+    is_overdue: false,
+    people_involved: null,
+    onboarding_status: null,
+    initial_calendar_entry: null,
+    ...overrides,
   }
 }
 
-/**
- * Check if an intake/add-to-calendar entry exists
- */
-function checkIntakeCalendar(
-  calendarEntries: ClioCalendarEntry[]
-): { exists: boolean; date: string | null } {
-  const intakeKeywords = ['intake', 'add to calendar', 'new client', 'initial consultation', 'onboarding']
-  
-  const intakeEntry = calendarEntries.find(entry => {
-    const summary = entry.summary?.toLowerCase() || ''
-    const description = entry.description?.toLowerCase() || ''
-    return intakeKeywords.some(kw => summary.includes(kw) || description.includes(kw))
-  })
+const CONFIRMED_CLIENT_UPDATE = [
+  'client notified',
+  'notified client',
+  'client updated',
+  'updated client',
+  'spoke with client',
+  'called client',
+  'left vm',
+  'left voicemail',
+  'voicemail',
+  'left a message',
+  'client reached',
+  'cliente notificado',
+  'cliente actualizado',
+  'hable con el cliente',
+  'hablé con el cliente',
+  'llame al cliente',
+  'llamé al cliente',
+  'dejé mensaje',
+  'deje mensaje',
+]
 
-  return {
-    exists: !!intakeEntry,
-    date: intakeEntry?.start_at || null,
+const PENDING_WORDS = [
+  'will call',
+  'will update',
+  'not yet',
+  "haven't",
+  'pending',
+  'trying to reach',
+  'voy a llamar',
+  'pendiente',
+  'todavia no',
+  'todavía no',
+]
+
+const WELCOME_WORDS = [
+  'welcome packet',
+  'welcome email',
+  'welcome package',
+  'sent welcome',
+  'packet sent',
+  'bienvenido',
+  'bienvenida',
+  'paquete de bienvenida',
+  'correo de bienvenida',
+]
+
+const MEETING_WORDS = [
+  'meeting set',
+  'scheduled',
+  'call scheduled',
+  'appointment',
+  'booked',
+  'confirmed',
+  'phone',
+  'zoom',
+  'mf-phone',
+  'llamada',
+  'reunión',
+  'reunion',
+  'consulta',
+]
+
+const COURT_RESULT_TEMPLATE_WORDS = [
+  'court result and next court date',
+  'final court result - your representation has ended',
+  'resultado del juicio y proxima fecha de audiencia',
+  'resultado del juicio y próxima fecha de audiencia',
+  'recordatorio final del caso: su representacion a terminado',
+  'recordatorio final del caso: su representación a terminado',
+]
+
+const COURT_REMINDER_TEMPLATE_WORDS = [
+  'inperson court reminder',
+  'zoom court reminder & instructions',
+  'recordatorio de ausencia presencial',
+  'recordatori e instrucciones para la audiencia por zoom manana',
+  'recordatorio e instrucciones para la audiencia por zoom mañana',
+]
+
+function checkWrongCaseManager(
+  attorney: string | null,
+  actualReplier: string | null,
+  assignments: Map<string, AttorneyAssignment>,
+  flags: string[]
+): AuditStatus | null {
+  if (!attorney) return null
+
+  const assignment = assignments.get(attorney.toLowerCase())
+
+  if (assignment?.is_unassigned) {
+    flags.push('UNASSIGNED ATTORNEY - Review manually')
   }
+
+  if (!assignment?.case_manager_name || !actualReplier) return null
+
+  const expectedFirst = assignment.case_manager_name.toLowerCase().split(' ')[0]
+  const actualFirst = actualReplier.toLowerCase().split(' ')[0]
+
+  if (expectedFirst && actualFirst && expectedFirst !== actualFirst) {
+    flags.push(`Wrong case manager replied. Expected: ${assignment.case_manager_name}`)
+    return 'wrong_case_manager'
+  }
+
+  return null
 }
 
-/**
- * Check if a client-attorney meeting is scheduled within 48 hours of intake
- */
-function checkMeetingScheduled(
-  calendarEntries: ClioCalendarEntry[],
-  matterCreatedAt: string
-): { scheduled: boolean; withinDeadline: boolean; date: string | null } {
-  const meetingKeywords = ['meeting', 'consultation', 'call', 'phone', 'appointment', 'conference']
-  
-  const meetings = calendarEntries.filter(entry => {
-    const summary = entry.summary?.toLowerCase() || ''
-    return meetingKeywords.some(kw => summary.includes(kw))
-  })
+export async function auditEmailThread(thread: EmailThread, emailType: EmailType): Promise<AuditResult> {
+  const assignments = await getAttorneyAssignments()
+  const messages = [...thread.messages].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-  if (meetings.length === 0) {
-    return { scheduled: false, withinDeadline: false, date: null }
-  }
+  const firstMsg = messages[0]
+  const fullText = messages.map(messageText).join('\n')
+  const reply = findCaseManagerReply(thread)
 
-  const matterDate = new Date(matterCreatedAt)
-  const deadlineDate = new Date(matterDate.getTime() + 48 * 60 * 60 * 1000)
+  const attorney = detectAttorneyFromThread(thread, assignments)
+  const actualReplier = reply?.from?.split('@')[0]?.replace(/[._]/g, ' ') ?? null
+  const clientName = extractClientName(thread.subject, fullText)
 
-  const firstMeeting = meetings.sort(
-    (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
-  )[0]
-
-  const meetingDate = new Date(firstMeeting.start_at)
-  const withinDeadline = meetingDate <= deadlineDate
-
-  return {
-    scheduled: true,
-    withinDeadline,
-    date: firstMeeting.start_at,
-  }
-}
-
-/**
- * Check if welcome packet email was sent
- */
-function checkWelcomePacket(
-  communications: ClioCommunication[]
-): { sent: boolean; date: string | null } {
-  const welcomeKeywords = ['welcome packet', 'welcome email', 'new client packet', 'intake packet']
-  
-  const welcomeEmail = communications.find(comm => {
-    const subject = comm.subject?.toLowerCase() || ''
-    const body = comm.body?.toLowerCase() || ''
-    return welcomeKeywords.some(kw => subject.includes(kw) || body.includes(kw))
-  })
-
-  return {
-    sent: !!welcomeEmail,
-    date: welcomeEmail?.date || welcomeEmail?.created_at || null,
-  }
-}
-
-/**
- * Check if appearance filed email was sent
- */
-function checkAppearanceEmail(
-  communications: ClioCommunication[],
-  matterCreatedAt: string
-): { sent: boolean; withinDeadline: boolean; date: string | null } {
-  const appearanceKeywords = ['appearance', 'filed', 'your appearance has been filed']
-  
-  const appearanceEmail = communications.find(comm => {
-    const subject = comm.subject?.toLowerCase() || ''
-    const body = comm.body?.toLowerCase() || ''
-    return appearanceKeywords.some(kw => subject.includes(kw) || body.includes(kw))
-  })
-
-  if (!appearanceEmail) {
-    return { sent: false, withinDeadline: false, date: null }
-  }
-
-  const matterDate = new Date(matterCreatedAt)
-  const deadlineDate = new Date(matterDate.getTime() + 48 * 60 * 60 * 1000)
-  const emailDate = new Date(appearanceEmail.date || appearanceEmail.created_at)
-  const withinDeadline = emailDate <= deadlineDate
-
-  return {
-    sent: true,
-    withinDeadline,
-    date: appearanceEmail.date || appearanceEmail.created_at,
-  }
-}
-
-/**
- * Check if signed retainer exists
- */
-function checkSignedRetainer(
-  documents: ClioDocument[]
-): { exists: boolean; date: string | null } {
-  const retainerKeywords = ['retainer', 'signed retainer', 'fee agreement', 'engagement letter']
-  
-  const retainerDoc = documents.find(doc => {
-    const name = doc.name?.toLowerCase() || ''
-    return retainerKeywords.some(kw => name.includes(kw))
-  })
-
-  return {
-    exists: !!retainerDoc,
-    date: retainerDoc?.created_at || null,
-  }
-}
-
-/**
- * Determine overall status based on checks
- */
-function determineOverallStatus(audit: Partial<ClioMatterAudit>): MatterAuditStatus {
-  const criticalMissing = [
-    !audit.intake_calendar_exists,
-    !audit.matter_created_in_clio,
-    !audit.welcome_packet_sent,
-    !audit.signed_retainer_exists,
-  ].filter(Boolean).length
-
-  const needsReview = [
-    audit.meeting_scheduled_within_48h === false,
-    audit.appearance_filed_within_48h === false,
-    audit.attorney_correctly_assigned === false,
-    audit.client_name_consistent === false,
-  ].filter(Boolean).length
-
-  if (criticalMissing >= 2) {
-    return 'missing_evidence'
-  }
-  
-  if (criticalMissing > 0 || needsReview > 0) {
-    return 'needs_review'
-  }
-
-  return 'pass'
-}
-
-/**
- * Audit a single matter
- */
-async function auditMatter(
-  auditRunId: string,
-  matterId: string,
-  fromDate: Date,
-  toDate: Date
-): Promise<ClioMatterAudit | null> {
-  const supabase = createAdminClient()
-  
-  // Fetch all matter data
-  const matterData = await fetchMatterData(matterId, fromDate, toDate)
-  if (!matterData) {
-    return null
-  }
-
-  const { matter, calendarEntries, communications, documents } = matterData
-  const matterCreatedAt = matter.created_at
-
-  // Run all checks
-  const intakeCheck = checkIntakeCalendar(calendarEntries)
-  const meetingCheck = checkMeetingScheduled(calendarEntries, matterCreatedAt)
-  const welcomeCheck = checkWelcomePacket(communications)
-  const appearanceCheck = checkAppearanceEmail(communications, matterCreatedAt)
-  const retainerCheck = checkSignedRetainer(documents)
-
-  // Build missing items and flags
-  const missingItems: string[] = []
   const flags: string[] = []
+  let auditStatus: AuditStatus = 'needs_follow_up'
 
-  if (!intakeCheck.exists) missingItems.push('Intake calendar entry')
-  if (!meetingCheck.scheduled) missingItems.push('Client-attorney meeting')
-  if (meetingCheck.scheduled && !meetingCheck.withinDeadline) flags.push('Meeting not scheduled within 48 hours')
-  if (!welcomeCheck.sent) missingItems.push('Welcome packet email')
-  if (!appearanceCheck.sent) missingItems.push('Appearance filed email')
-  if (appearanceCheck.sent && !appearanceCheck.withinDeadline) flags.push('Appearance email not sent within 48 hours')
-  if (!retainerCheck.exists) missingItems.push('Signed retainer document')
+  const wrongCaseManagerStatus = checkWrongCaseManager(attorney, actualReplier, assignments, flags)
+  if (wrongCaseManagerStatus) auditStatus = wrongCaseManagerStatus
 
-  // Build audit record
-  const auditRecord: Partial<ClioMatterAudit> = {
-    audit_run_id: auditRunId,
-    matter_id: String(matter.id),
-    matter_display_number: matter.display_number,
-    client_name: matter.client?.name || null,
-    attorney_name: matter.responsible_attorney?.name || null,
-    matter_status: matter.status,
-    matter_created_at: matterCreatedAt,
+  if (emailType === 'court_results') {
+    const replyText = reply ? messageText(reply) : ''
+    const originalText = firstMsg ? messageText(firstMsg) : ''
+    const confirmed = includesAny(replyText, CONFIRMED_CLIENT_UPDATE)
+    const pending = includesAny(replyText, PENDING_WORDS)
+    const resultTemplateFound = includesAny(`${originalText} ${fullText}`, COURT_RESULT_TEMPLATE_WORDS)
+    const reminderTemplateFound = includesAny(fullText, COURT_REMINDER_TEMPLATE_WORDS)
 
-    intake_calendar_exists: intakeCheck.exists,
-    intake_calendar_date: intakeCheck.date,
-    matter_created_in_clio: true,
-    meeting_scheduled_within_48h: meetingCheck.scheduled ? meetingCheck.withinDeadline : null,
-    meeting_date: meetingCheck.date,
-    welcome_packet_sent: welcomeCheck.sent,
-    welcome_packet_date: welcomeCheck.date,
-    
-    appearance_filed_within_48h: appearanceCheck.sent ? appearanceCheck.withinDeadline : null,
-    appearance_date: null, // Would need separate check
-    appearance_email_sent: appearanceCheck.sent,
-    appearance_email_date: appearanceCheck.date,
-    attorney_correctly_assigned: !!matter.responsible_attorney,
-    client_name_consistent: true, // Would need cross-reference check
-    signed_retainer_exists: retainerCheck.exists,
-    signed_retainer_date: retainerCheck.date,
+    let confirmationStatus: AuditResult['confirmation_status'] = null
 
-    evidence: {
-      calendar_entries_count: calendarEntries.length,
-      communications_count: communications.length,
-      documents_count: documents.length,
-      intake_entry: intakeCheck.exists ? calendarEntries.find(e => 
-        e.summary?.toLowerCase().includes('intake')
-      )?.summary : null,
-      meeting_entry: meetingCheck.scheduled ? meetingCheck.date : null,
-      welcome_email_subject: welcomeCheck.sent ? communications.find(c =>
-        c.subject?.toLowerCase().includes('welcome')
-      )?.subject : null,
-    },
+    if (!reply) {
+      auditStatus = auditStatus === 'wrong_case_manager' ? auditStatus : 'no_reply'
+      flags.push('No case manager reply found')
+      confirmationStatus = 'not_confirmed'
+    } else if (confirmed) {
+      confirmationStatus = 'confirmed'
+      if (auditStatus !== 'wrong_case_manager') auditStatus = 'looks_good'
+    } else if (pending) {
+      confirmationStatus = 'not_confirmed'
+      if (auditStatus !== 'wrong_case_manager') auditStatus = 'needs_follow_up'
+      flags.push('Case manager reply says client update is still pending')
+    } else {
+      confirmationStatus = 'inconclusive'
+      if (auditStatus !== 'wrong_case_manager') auditStatus = 'needs_clarification'
+      flags.push('Reply does not clearly confirm client was updated')
+    }
+
+    if (!resultTemplateFound) flags.push('Court result template language not clearly found')
+    if (reminderTemplateFound) flags.push('Court reminder template detected in thread')
+
+    const responseTime = calculateResponseTime(firstMsg?.date ?? null, reply?.date ?? null)
+    const isLate = responseTime !== null && responseTime > 24 * 60
+
+    if (confirmed && isLate) {
+      flags.push('Client update was completed late')
+      if (auditStatus !== 'wrong_case_manager') auditStatus = 'needs_follow_up'
+    }
+
+    return defaultResult({
+      client_name: clientName,
+      attorney,
+      next_court_date: extractDate(fullText),
+      court_results_details: firstMsg ? messageText(firstMsg).slice(0, 1000) : null,
+      case_manager_reply: reply ? messageText(reply).slice(0, 300) : null,
+      actual_replier: actualReplier,
+      confirmation_status: confirmationStatus,
+      is_overdue: !confirmed,
+      missing_or_unclear: flags.length ? flags.join('; ') : null,
+      audit_status: auditStatus,
+      flags,
+      notes_for_zach: flags.length ? flags.join('; ') : null,
+      response_time_minutes: responseTime,
+      original_email_timestamp: firstMsg?.date ?? null,
+      reply_timestamp: reply?.date ?? null,
+      result_or_onboarding_details: firstMsg ? messageText(firstMsg).slice(0, 1000) : null,
+      is_reply_specific: confirmed,
+    })
+  }
+
+  const replyText = reply ? messageText(reply) : ''
+  const sentWelcome = includesAny(replyText, WELCOME_WORDS)
+  const scheduledMeeting = includesAny(replyText, MEETING_WORDS)
+
+  if (!reply) {
+    auditStatus = auditStatus === 'wrong_case_manager' ? auditStatus : 'no_reply'
+    flags.push('No case manager reply found')
+  } else if (sentWelcome && scheduledMeeting) {
+    if (auditStatus !== 'wrong_case_manager') auditStatus = 'looks_good'
+  } else {
+    if (auditStatus !== 'wrong_case_manager') auditStatus = 'needs_follow_up'
+    if (!sentWelcome) flags.push('Welcome packet not confirmed sent')
+    if (!scheduledMeeting) flags.push('Meeting/call not confirmed scheduled')
+  }
+
+  const responseTime = calculateResponseTime(firstMsg?.date ?? null, reply?.date ?? null)
+  const isLate = responseTime !== null && responseTime > 48 * 60
+
+  if (reply && isLate) {
+    flags.push('Case manager reply/completion was late')
+    if (auditStatus !== 'wrong_case_manager') auditStatus = 'needs_follow_up'
+  }
+
+  return defaultResult({
+    client_name: clientName,
+    attorney,
+    people_involved: clientName ? [clientName] : null,
+    initial_calendar_entry: firstMsg ? messageText(firstMsg).slice(0, 1000) : null,
+    case_manager_reply: reply ? messageText(reply).slice(0, 300) : null,
+    actual_replier: actualReplier,
+    onboarding_status: sentWelcome && scheduledMeeting ? 'welcome_packet_sent_meeting_scheduled' : 'meeting_not_confirmed',
+    missing_or_unclear: flags.length ? flags.join('; ') : null,
+    audit_status: auditStatus,
     flags,
-    missing_items: missingItems,
-    notes: null,
-    overall_status: 'pass', // Will be calculated
-  }
-
-  auditRecord.overall_status = determineOverallStatus(auditRecord)
-
-  // Save to database
-  const { data, error } = await supabase
-    .from('clio_matter_audits')
-    .insert(auditRecord)
-    .select()
-    .single()
-
-  if (error) {
-    console.error(`[Clio Audit] Failed to save audit for matter ${matterId}:`, error)
-    return null
-  }
-
-  return data as ClioMatterAudit
+    notes_for_zach: flags.length ? flags.join('; ') : null,
+    response_time_minutes: responseTime,
+    original_email_timestamp: firstMsg?.date ?? null,
+    reply_timestamp: reply?.date ?? null,
+    result_or_onboarding_details: firstMsg ? messageText(firstMsg).slice(0, 1000) : null,
+    is_reply_specific: Boolean(sentWelcome && scheduledMeeting),
+  })
 }
 
-// ============================================
-// Batch Processing
-// ============================================
+export async function runFullAudit(threads: {
+  courtResults: EmailThread[]
+  addToCalendar: EmailThread[]
+}) {
+  const supabase = await createClient()
+  const assignments = await getAttorneyAssignments()
 
-/**
- * Process a single batch of matters
- * Returns the number of matters processed and whether rate-limited
- */
-export async function processBatch(
-  auditRunId: string
-): Promise<{ processed: number; rateLimited: boolean; error?: string }> {
-  const auditRun = await getAuditRun(auditRunId)
-  
-  if (!auditRun) {
-    return { processed: 0, rateLimited: false, error: 'Audit run not found' }
+  const results: Array<{ thread: EmailThread; emailType: EmailType; result: AuditResult }> = []
+
+  for (const thread of threads.courtResults) {
+    results.push({ thread, emailType: 'court_results', result: await auditEmailThread(thread, 'court_results') })
   }
 
-  if (auditRun.status === 'completed' || auditRun.status === 'failed') {
-    return { processed: 0, rateLimited: false, error: `Audit run is ${auditRun.status}` }
+  for (const thread of threads.addToCalendar) {
+    results.push({ thread, emailType: 'add_to_calendar', result: await auditEmailThread(thread, 'add_to_calendar') })
   }
 
-  // Calculate date range
-  const toDate = new Date()
-  const fromDate = new Date()
-  fromDate.setDate(fromDate.getDate() - auditRun.time_window_days)
+  for (const { thread, emailType, result } of results) {
+    const attorneyKey = result.attorney?.toLowerCase()
+    const assignment = attorneyKey ? assignments.get(attorneyKey) : undefined
 
-  // Get matters to process in this batch
-  const matterIds = auditRun.matter_ids_to_process || []
-  const startIdx = auditRun.processed_matters
-  const endIdx = Math.min(startIdx + auditRun.batch_size, matterIds.length)
-  const batchMatterIds = matterIds.slice(startIdx, endIdx)
+    const { error } = await supabase.from('email_audits').upsert(
+      {
+        thread_id: thread.id,
+        email_type: emailType,
+        subject: thread.subject,
+        client_name: result.client_name,
+        attorney: result.attorney,
+        expected_case_manager: assignment?.case_manager_name || null,
+        actual_replier: result.actual_replier,
+        county: result.county,
+        case_number: result.case_number,
+        next_court_date: result.next_court_date,
+        result_or_onboarding_details: result.result_or_onboarding_details,
+        attorney_instructions: result.attorney_instructions,
+        case_manager_reply: result.case_manager_reply,
+        is_reply_specific: result.is_reply_specific,
+        missing_or_unclear: result.missing_or_unclear,
+        audit_status: result.audit_status,
+        flags: result.flags,
+        notes_for_zach: result.notes_for_zach,
+        raw_thread_json: thread,
+        audited_at: new Date().toISOString(),
+        response_time_minutes: result.response_time_minutes,
+        original_email_timestamp: result.original_email_timestamp,
+        reply_timestamp: result.reply_timestamp,
+        court_results_details: result.court_results_details,
+        confirmation_status: result.confirmation_status,
+        is_overdue: result.is_overdue,
+        people_involved: result.people_involved,
+        onboarding_status: result.onboarding_status,
+        initial_calendar_entry: result.initial_calendar_entry,
+      },
+      { onConflict: 'thread_id' }
+    )
 
-  if (batchMatterIds.length === 0) {
-    // No more matters to process
-    await updateAuditRun(auditRunId, {
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-    })
-    return { processed: 0, rateLimited: false }
+    if (error) console.error(`Failed to save email audit for thread ${thread.id}:`, error)
   }
 
-  // Update status to in_progress
-  await updateAuditRun(auditRunId, { status: 'in_progress' })
+  const today = new Date().toISOString().split('T')[0]
 
-  let processedCount = 0
+  const statusCounts = results.reduce(
+    (acc, { result }) => {
+      acc[result.audit_status] = (acc[result.audit_status] || 0) + 1
+      return acc
+    },
+    {} as Record<AuditStatus, number>
+  )
 
-  try {
-    for (const matterId of batchMatterIds) {
-      try {
-        await auditMatter(auditRunId, matterId, fromDate, toDate)
-        processedCount++
+  const { error: summaryError } = await supabase.from('audit_summaries').upsert(
+    {
+      audit_date: today,
+      total_emails_scanned: results.length,
+      needs_follow_up: statusCounts.needs_follow_up || 0,
+      no_reply: statusCounts.no_reply || 0,
+      wrong_case_manager: statusCounts.wrong_case_manager || 0,
+      needs_clarification: statusCounts.needs_clarification || 0,
+      looks_good: statusCounts.looks_good || 0,
+    },
+    { onConflict: 'audit_date' }
+  )
 
-        // Update progress after each matter
-        await updateAuditRun(auditRunId, {
-          processed_matters: startIdx + processedCount,
-          last_processed_matter_id: matterId,
-          current_batch: auditRun.current_batch + 1,
-        })
-      } catch (error) {
-        if (error instanceof ClioRateLimitError) {
-          // Rate limited - save progress and stop
-          await updateAuditRun(auditRunId, {
-            status: 'rate_limited',
-            rate_limit_reset_at: error.resetAt?.toISOString() || null,
-            error_message: 'Clio API rate limit exceeded',
-          })
-          return { processed: processedCount, rateLimited: true }
-        }
-        
-        // Log error but continue with next matter
-        console.error(`[Clio Audit] Error auditing matter ${matterId}:`, error)
-      }
-    }
+  if (summaryError) console.error('Failed to save audit summary:', summaryError)
 
-    // Check if all matters are processed
-    const newProcessedCount = startIdx + processedCount
-    if (newProcessedCount >= matterIds.length) {
-      await updateAuditRun(auditRunId, {
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        processed_matters: newProcessedCount,
-      })
-    }
-
-    return { processed: processedCount, rateLimited: false }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    
-    if (error instanceof ClioRateLimitError) {
-      await updateAuditRun(auditRunId, {
-        status: 'rate_limited',
-        rate_limit_reset_at: error.resetAt?.toISOString() || null,
-        error_message: 'Clio API rate limit exceeded',
-      })
-      return { processed: processedCount, rateLimited: true }
-    }
-
-    await updateAuditRun(auditRunId, {
-      status: 'failed',
-      error_message: errorMessage,
-    })
-    
-    return { processed: processedCount, rateLimited: false, error: errorMessage }
-  }
-}
-
-// ============================================
-// Results Retrieval
-// ============================================
-
-/**
- * Get all matter audits for a run
- */
-export async function getAuditResults(
-  auditRunId: string
-): Promise<ClioMatterAudit[]> {
-  const supabase = createAdminClient()
-  
-  const { data, error } = await supabase
-    .from('clio_matter_audits')
-    .select('*')
-    .eq('audit_run_id', auditRunId)
-    .order('created_at', { ascending: true })
-
-  if (error || !data) {
-    return []
-  }
-
-  return data as ClioMatterAudit[]
-}
-
-/**
- * Get audit summary stats
- */
-export async function getAuditSummary(
-  auditRunId: string
-): Promise<{ total: number; pass: number; needs_review: number; missing_evidence: number }> {
-  const results = await getAuditResults(auditRunId)
-  
-  return {
-    total: results.length,
-    pass: results.filter(r => r.overall_status === 'pass').length,
-    needs_review: results.filter(r => r.overall_status === 'needs_review').length,
-    missing_evidence: results.filter(r => r.overall_status === 'missing_evidence').length,
-  }
+  return { totalProcessed: results.length, statusCounts, results }
 }
