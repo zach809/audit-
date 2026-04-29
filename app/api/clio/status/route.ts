@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isClioConnected } from '@/lib/clio/client'
+import { getCurrentAuditRun } from '@/lib/clio/audit-engine'
 
 export async function GET() {
   try {
@@ -15,14 +15,14 @@ export async function GET() {
       )
     }
 
-    const connected = await isClioConnected()
+    const auditRun = await getCurrentAuditRun()
 
     return NextResponse.json({
       success: true,
-      connected,
+      audit_run: auditRun || null,
     })
   } catch (error) {
-    console.error('[Clio Status] Error:', error)
+    console.error('[Clio Audit Status] Error:', error)
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
