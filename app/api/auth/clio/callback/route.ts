@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
-    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+    const expiryDate = Date.now() + tokens.expires_in * 1000
 
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -66,12 +66,11 @@ export async function GET(request: NextRequest) {
 
     const client = await pool.connect()
     try {
-      await client.query('DELETE FROM clio_tokens')
       await client.query(
-        `INSERT INTO clio_tokens (access_token, refresh_token, expires_at, token_type)
-         VALUES ($1, $2, $3, $4)`,
-        [tokens.access_token, tokens.refresh_token, expiresAt, tokens.token_type || 'Bearer']
-      )
+  `INSERT INTO clio_tokens (access_token, refresh_token, expiry_date, token_type)
+   VALUES ($1, $2, $3, $4)`,
+  [tokens.access_token, tokens.refresh_token, expiryDate, tokens.token_type || 'Bearer']
+)
     } finally {
       client.release()
       await pool.end()
