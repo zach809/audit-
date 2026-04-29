@@ -5,6 +5,14 @@ import { useMemo, useState } from "react"
 type YesNoNA = "Yes" | "No" | "N/A"
 type AuditStatus = "Pass" | "Flag"
 
+type CalendarEventSummary = {
+  id: string
+  summary: string
+  date: string
+  attendees: string[]
+  type: "meeting" | "call" | "court" | "other"
+}
+
 type AuditRow = {
   id: string
   clientName: string
@@ -25,6 +33,15 @@ type AuditRow = {
   courtResultsDocumentedInNotes: YesNoNA
   resultSentTimestamp: string
   nextCourtDateAdded: YesNoNA
+
+  // Calendar meeting/call tracking
+  clientAttorneyMeetingScheduled: YesNoNA
+  meetingDate: string
+  meetingAttendees: string
+  scheduledCallExists: YesNoNA
+  scheduledCallDate: string
+  scheduledCallAttendees: string
+  allCalendarEvents: CalendarEventSummary[]
 
   status: AuditStatus
   missingItemTypes: string[]
@@ -62,6 +79,9 @@ export default function ClioAuditPage() {
   const [welcomeFilter, setWelcomeFilter] = useState("All")
   const [appearanceFilter, setAppearanceFilter] = useState("All")
   const [courtResultsFilter, setCourtResultsFilter] = useState("All")
+  const [meetingFilter, setMeetingFilter] = useState("All")
+  const [callFilter, setCallFilter] = useState("All")
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   async function runAudit() {
     setLoading(true)
@@ -140,6 +160,20 @@ export default function ClioAuditPage() {
         return false
       }
 
+      if (
+        meetingFilter !== "All" &&
+        row.clientAttorneyMeetingScheduled !== meetingFilter
+      ) {
+        return false
+      }
+
+      if (
+        callFilter !== "All" &&
+        row.scheduledCallExists !== callFilter
+      ) {
+        return false
+      }
+
       return true
     })
   }, [
@@ -150,6 +184,8 @@ export default function ClioAuditPage() {
     welcomeFilter,
     appearanceFilter,
     courtResultsFilter,
+    meetingFilter,
+    callFilter,
   ])
 
   function exportCsv() {
@@ -169,6 +205,12 @@ export default function ClioAuditPage() {
       "Court Results Documented in Notes?",
       "Result Sent Timestamp",
       "Next Court Date Added?",
+      "Client-Attorney Meeting Scheduled?",
+      "Meeting Date",
+      "Meeting Attendees",
+      "Scheduled Call Exists?",
+      "Call Date",
+      "Call Attendees",
       "Status",
       "Notes / Missing Items",
     ]
@@ -189,6 +231,12 @@ export default function ClioAuditPage() {
       row.courtResultsDocumentedInNotes,
       row.resultSentTimestamp,
       row.nextCourtDateAdded,
+      row.clientAttorneyMeetingScheduled,
+      row.meetingDate,
+      row.meetingAttendees,
+      row.scheduledCallExists,
+      row.scheduledCallDate,
+      row.scheduledCallAttendees,
       row.status,
       row.notes,
     ])
@@ -338,6 +386,32 @@ export default function ClioAuditPage() {
           </select>
         </label>
 
+        <label>
+          <div>Meeting Scheduled</div>
+          <select
+            value={meetingFilter}
+            onChange={(event) => setMeetingFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="N/A">N/A</option>
+          </select>
+        </label>
+
+        <label>
+          <div>Call Scheduled</div>
+          <select
+            value={callFilter}
+            onChange={(event) => setCallFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="N/A">N/A</option>
+          </select>
+        </label>
+
         <button onClick={runAudit} disabled={loading}>
           {loading ? "Running..." : "Run Audit"}
         </button>
@@ -390,7 +464,7 @@ export default function ClioAuditPage() {
           style={{
             borderCollapse: "separate",
             borderSpacing: 0,
-            minWidth: 2200,
+            minWidth: 3200,
             width: "100%",
             fontSize: 13,
           }}
@@ -421,6 +495,13 @@ export default function ClioAuditPage() {
               <Th>Court Results Documented in Notes?</Th>
               <Th>Result Sent Timestamp</Th>
               <Th>Next Court Date Added?</Th>
+              <Th>Meeting Scheduled?</Th>
+              <Th>Meeting Date</Th>
+              <Th>Meeting Attendees</Th>
+              <Th>Call Scheduled?</Th>
+              <Th>Call Date</Th>
+              <Th>Call Attendees</Th>
+              <Th>Calendar Events</Th>
               <Th>Notes / Missing Items</Th>
             </tr>
           </thead>
@@ -428,7 +509,7 @@ export default function ClioAuditPage() {
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={17} style={{ padding: 20, textAlign: "center" }}>
+                <td colSpan={24} style={{ padding: 20, textAlign: "center" }}>
                   No audit rows yet. Click Run Audit.
                 </td>
               </tr>
@@ -467,6 +548,54 @@ export default function ClioAuditPage() {
                   <Td>{row.courtResultsDocumentedInNotes}</Td>
                   <Td>{row.resultSentTimestamp}</Td>
                   <Td>{row.nextCourtDateAdded}</Td>
+                  <Td>{row.clientAttorneyMeetingScheduled}</Td>
+                  <Td>{row.meetingDate}</Td>
+                  <Td>{row.meetingAttendees}</Td>
+                  <Td>{row.scheduledCallExists}</Td>
+                  <Td>{row.scheduledCallDate}</Td>
+                  <Td>{row.scheduledCallAttendees}</Td>
+                  <Td>
+                    {row.allCalendarEvents?.length > 0 ? (
+                      <div>
+                        <button
+                          onClick={() => {
+                            const newSet = new Set(expandedRows)
+                            if (newSet.has(row.id)) {
+                              newSet.delete(row.id)
+                            } else {
+                              newSet.add(row.id)
+                            }
+                            setExpandedRows(newSet)
+                          }}
+                          style={{
+                            background: "none",
+                            border: "1px solid #ccc",
+                            borderRadius: 4,
+                            padding: "2px 8px",
+                            cursor: "pointer",
+                            fontSize: 12,
+                          }}
+                        >
+                          {expandedRows.has(row.id) ? "Hide" : "Show"} ({row.allCalendarEvents.length})
+                        </button>
+                        {expandedRows.has(row.id) && (
+                          <ul style={{ margin: "8px 0 0", paddingLeft: 16, fontSize: 11 }}>
+                            {row.allCalendarEvents.map((event) => (
+                              <li key={event.id} style={{ marginBottom: 4 }}>
+                                <strong>{event.type.toUpperCase()}</strong>: {event.summary}
+                                <br />
+                                <span style={{ color: "#666" }}>
+                                  {event.date} | {event.attendees.join(", ") || "No attendees"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ) : (
+                      "None"
+                    )}
+                  </Td>
                   <Td>{row.notes}</Td>
                 </tr>
               ))
