@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         {
           success: false,
           error: "Clio API rate limit reached. Please continue later.",
-          resetAt: error.resetAt?.toISOString(),
+          resetAt: error.resetAt ? error.resetAt.toISOString() : null,
         },
         { status: 429 }
       )
