@@ -35,6 +35,12 @@ export type EmailAudit = {
   created_at?: string
   confirmation_status?: 'confirmed' | 'not_confirmed' | 'inconclusive' | null
   response_time_minutes?: number | null
-  court_results_details?: Record<string, unknown> | null
+  court_results_details?: string | null
   notes_for_zach?: string | null
+}
+
+export type AddToCalendarAudit = EmailAudit & {
+  onboarding_status?: string | null
+  people_involved?: string[] | null
+  initial_calendar_entry?: string | null
 }
