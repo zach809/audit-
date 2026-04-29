@@ -4,12 +4,14 @@ import { processBatch, getAuditRun } from '@/lib/clio/audit-engine'
 import type { ProcessBatchRequest, ProcessBatchResponse } from '@/lib/clio/types'
 
 export async function POST(request: NextRequest) {
+  console.log('[v0] [Clio Audit Batch] POST called')
   try {
     // Verify user is authenticated
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
+      console.log('[v0] [Clio Audit Batch] Unauthorized')
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -18,6 +20,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body: ProcessBatchRequest = await request.json()
+    console.log('[v0] [Clio Audit Batch] audit_run_id:', body.audit_run_id)
 
     if (!body.audit_run_id) {
       return NextResponse.json(
@@ -27,7 +30,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Process batch
+    console.log('[v0] [Clio Audit Batch] Calling processBatch...')
     const result = await processBatch(body.audit_run_id)
+    console.log('[v0] [Clio Audit Batch] processBatch result:', result)
 
     if (result.error) {
       return NextResponse.json(

@@ -171,21 +171,26 @@ async function fetchMatterData(
   fromDate: Date,
   toDate: Date
 ): Promise<MatterAuditData | null> {
+  console.log('[v0] [fetchMatterData] Fetching data for matter:', matterId)
   // Sequential requests to avoid rate limiting
   const matter = await getMatter(matterId)
   if (!matter) {
-    console.error(`[Clio Audit] Matter not found: ${matterId}`)
+    console.error(`[v0] [fetchMatterData] Matter not found: ${matterId}`)
     return null
   }
+  console.log('[v0] [fetchMatterData] Got matter:', matter.display_number)
 
   // Fetch calendar first - most important for audit
   const calendarEntries = await getMatterCalendarEntries(matterId, fromDate, toDate)
+  console.log('[v0] [fetchMatterData] Got', calendarEntries.length, 'calendar entries')
   
   // Fetch communications - needed for email checks
   const communications = await getMatterCommunications(matterId, fromDate, toDate)
+  console.log('[v0] [fetchMatterData] Got', communications.length, 'communications')
   
   // Fetch documents - needed for retainer check
   const documents = await getMatterDocuments(matterId)
+  console.log('[v0] [fetchMatterData] Got', documents.length, 'documents')
 
   return {
     matter,
@@ -461,13 +466,17 @@ async function auditMatter(
 export async function processBatch(
   auditRunId: string
 ): Promise<{ processed: number; rateLimited: boolean; error?: string }> {
+  console.log('[v0] [processBatch] Called for auditRunId:', auditRunId)
   const auditRun = await getAuditRun(auditRunId)
   
   if (!auditRun) {
+    console.log('[v0] [processBatch] Audit run not found')
     return { processed: 0, rateLimited: false, error: 'Audit run not found' }
   }
+  console.log('[v0] [processBatch] Audit run found, status:', auditRun.status, 'processed_matters:', auditRun.processed_matters, 'total_matters:', auditRun.total_matters)
 
   if (auditRun.status === 'completed' || auditRun.status === 'failed') {
+    console.log('[v0] [processBatch] Audit run is already', auditRun.status)
     return { processed: 0, rateLimited: false, error: `Audit run is ${auditRun.status}` }
   }
 
@@ -481,9 +490,11 @@ export async function processBatch(
   const startIdx = auditRun.processed_matters
   const endIdx = Math.min(startIdx + auditRun.batch_size, matterIds.length)
   const batchMatterIds = matterIds.slice(startIdx, endIdx)
+  console.log('[v0] [processBatch] Processing batch - startIdx:', startIdx, 'endIdx:', endIdx, 'batchMatterIds:', batchMatterIds)
 
   if (batchMatterIds.length === 0) {
     // No more matters to process
+    console.log('[v0] [processBatch] No matters to process, marking as completed')
     await updateAuditRun(auditRunId, {
       status: 'completed',
       completed_at: new Date().toISOString(),
