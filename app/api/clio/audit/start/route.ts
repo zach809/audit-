@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isClioConnected } from '@/lib/clio/client'
+import { Pool } from 'pg'
 import { startAuditRun, getCurrentAuditRun } from '@/lib/clio/audit-engine'
 import type { StartAuditRequest, StartAuditResponse } from '@/lib/clio/types'
 
@@ -24,9 +24,23 @@ export async function POST(request: NextRequest) {
     }
 
     // -----------------------------
-    // Clio connection check
+    // Clio connection check — direct pg (bypasses PostgREST cache)
     // -----------------------------
-    const connected = await isClioConnected()
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    })
+    const pgClient = await pool.connect()
+    let connected = false
+    try {
+      const result = await pgClient.query(
+        'SELECT id FROM clio_tokens LIMIT 1'
+      )
+      connected = result.rows.length > 0
+    } finally {
+      pgClient.release()
+      await pool.end()
+    }
 
     if (!connected) {
       return NextResponse.json(
