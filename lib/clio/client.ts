@@ -83,10 +83,7 @@ async function getTokens(): Promise<ClioTokens | null> {
   ? Number(row.expiry_date)
   : row.expires_at
     ? new Date(row.expires_at).getTime()
-    : 0,,
-      } as ClioTokens
-    } finally {
-      client.release()
+    : 0,
     }
   } catch (error) {
     console.error('[Clio] Direct token lookup failed:', error)
