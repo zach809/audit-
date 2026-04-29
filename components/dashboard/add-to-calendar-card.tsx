@@ -94,7 +94,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <span className="font-medium">{String(result.actual_replier ?? '') || 'No reply'}</span>
             </div>
           </div>
-          {result.initial_calendar_entry && (
+          {!!result.initial_calendar_entry && (
             <div className="flex items-start gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
