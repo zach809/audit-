@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { 
-  Play, 
-  RefreshCw, 
+import {
+  Play,
+  RefreshCw,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -107,7 +107,7 @@ export default function ClioAuditPage() {
     try {
       const res = await fetch(`/api/clio/audit/results?audit_run_id=${auditRunId}`)
       const data = await res.json()
-      
+
       if (data.results) {
         const transformedRows: AuditRow[] = data.results.map((r: Record<string, unknown>) => ({
           id: r.id as string,
@@ -140,9 +140,9 @@ export default function ClioAuditPage() {
 
   const formatDateTime = (dateStr: string) => {
     const d = new Date(dateStr)
-    return d.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -158,20 +158,20 @@ export default function ClioAuditPage() {
   const startAudit = async () => {
     setIsProcessing(true)
     setError(null)
-    
+
     try {
       const res = await fetch('/api/clio/audit/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           batch_size: 5,  // 5 matters per batch (safe for rate limits)
           start_date: startDate,
           end_date: endDate,
         }),
       })
-      
+
       const data = await res.json()
-      
+
       if (!data.success) {
         setError(data.error || 'Failed to start audit')
         setIsProcessing(false)
@@ -188,7 +188,7 @@ export default function ClioAuditPage() {
   // Process batches
   const processBatches = async (auditRunId: string) => {
     let continueProcessing = true
-    
+
     while (continueProcessing) {
       try {
         const res = await fetch('/api/clio/audit/batch', {
@@ -196,9 +196,9 @@ export default function ClioAuditPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ audit_run_id: auditRunId }),
         })
-        
+
         const data = await res.json()
-        
+
         if (!data.success) {
           setError(data.error || 'Batch processing failed')
           continueProcessing = false
@@ -206,7 +206,16 @@ export default function ClioAuditPage() {
         }
 
         // Update progress from response (don't fetch full results each batch)
-        setProcessedMatters(data.processed_matters || processedMatters + (data.processed || 0))
+        const totalProcessed =
+          typeof data.total_processed === 'number' ? data.total_processed : data.processed_matters
+        const processedInBatch =
+          typeof data.processed_in_batch === 'number' ? data.processed_in_batch : data.processed
+
+        setProcessedMatters((current) =>
+          typeof totalProcessed === 'number'
+            ? totalProcessed
+            : current + (processedInBatch || 0)
+        )
         setAuditStatus(data.status)
 
         if (data.status === 'completed' || data.status === 'rate_limited' || data.status === 'failed') {
@@ -277,16 +286,16 @@ export default function ClioAuditPage() {
 
     // Top issues
     const issues: { label: string; count: number; type: 'missing' | 'coaching' }[] = []
-    
+
     const meetingMissing = rows.filter(r => r.attorneyCallScheduledWithin15Minutes === 'No').length
     if (meetingMissing > 0) issues.push({ label: 'Client-attorney meeting not found within 48 hours', count: meetingMissing, type: 'missing' })
-    
+
     const contactMissing = rows.filter(r => r.clientContactWithin24Hours === 'No').length
     if (contactMissing > 0) issues.push({ label: 'Client contact not documented within 24 hours', count: contactMissing, type: 'coaching' })
-    
+
     if (welcomePacketMissing > 0) issues.push({ label: 'Welcome packet email not found within 48 hours', count: welcomePacketMissing, type: 'missing' })
     if (appearanceEmailMissing > 0) issues.push({ label: 'Appearance filed email not found within 48 hours', count: appearanceEmailMissing, type: 'missing' })
-    
+
     const courtDateMissing = rows.filter(r => r.courtDateWithin15Minutes === 'No').length
     if (courtDateMissing > 0) issues.push({ label: 'Court date/reminder not found', count: courtDateMissing, type: 'missing' })
 
@@ -319,7 +328,7 @@ export default function ClioAuditPage() {
       row.courtDate,
       row.status,
     ])
-    
+
     const csv = [headers, ...csvRows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -352,7 +361,7 @@ export default function ClioAuditPage() {
             <p className="text-muted-foreground">Operational compliance audit for Clio matters</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {isConnected === false && (
             <Button asChild>
@@ -563,8 +572,8 @@ export default function ClioAuditPage() {
               {stats.topIssues.map((issue, idx) => (
                 <div key={idx} className="flex justify-between items-center text-sm gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className={issue.type === 'missing' ? 'bg-red-50 text-red-700 border-red-200 text-xs' : 'bg-amber-50 text-amber-700 border-amber-200 text-xs'}
                     >
                       {issue.type === 'missing' ? <XCircle className="h-3 w-3 mr-1" /> : <AlertTriangle className="h-3 w-3 mr-1" />}
@@ -669,16 +678,16 @@ function StatusIcon({ value }: { value: YesNoNA }) {
   return <span className="text-muted-foreground">—</span>
 }
 
-function FilterSelect({ 
-  label, 
-  value, 
-  onChange, 
-  options 
-}: { 
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options
+}: {
   label: string
   value: string
   onChange: (val: string) => void
-  options: string[] 
+  options: string[]
 }) {
   return (
     <div className="flex flex-col gap-1">
