@@ -65,7 +65,7 @@ export default function ClioAuditPage() {
   })
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Pass' | 'Flag'>('All')
+  const [statusFilter, setStatusFilter] = useState('All')
   const [attorneyFilter, setAttorneyFilter] = useState('All')
   const [callFilter, setCallFilter] = useState('All')
   const [courtFilter, setCourtFilter] = useState('All')
@@ -686,7 +686,7 @@ function FilterSelect({
 }: {
   label: string
   value: string
-  onChange: React.Dispatch<React.SetStateAction<string>> | ((val: string) => void)
+  onChange: (val: string) => void
   options: string[]
 }) {
   return (
