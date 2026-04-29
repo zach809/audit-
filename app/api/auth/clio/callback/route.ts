@@ -64,16 +64,12 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    await supabase.from('clio_tokens').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-    const { error: dbError } = await supabase
-      .from('clio_tokens')
-      .insert({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),
-        token_type: tokens.token_type || 'Bearer',
-      })
+    const { error: dbError } = await supabase.rpc('upsert_clio_tokens', {
+      p_access_token: tokens.access_token,
+      p_refresh_token: tokens.refresh_token,
+      p_expires_at: new Date(Date.now() + (tokens.expires_in * 1000)).toISOString(),
+      p_token_type: tokens.token_type || 'Bearer',
+    })
 
     if (dbError) {
       console.error('[Clio OAuth] Failed to store tokens:', dbError)
