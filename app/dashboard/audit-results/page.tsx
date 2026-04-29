@@ -1,198 +1,184 @@
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { 
-  User, 
-  Briefcase, 
-  Users, 
-  Clock,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
-  Gavel,
-  Calendar
-} from 'lucide-react'
-import type { EmailAudit } from '@/lib/types'
+'use client'
 
-interface CourtResultsCardProps {
-  result: EmailAudit
-  subject: string
+import { useState } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { RefreshCw, ChevronDown, Code2 } from 'lucide-react'
+import { CourtResultsCard } from '@/components/dashboard/court-results-card'
+import { AddToCalendarCard } from '@/components/dashboard/add-to-calendar-card'
+import type { EmailAudit, AddToCalendarAudit } from '@/lib/types'
+import { AuditSummaryStats } from '@/components/dashboard/audit-summary-stats'
+
+interface AuditResultsData {
+  success: boolean
+  message?: string
+  error?: string
+  totalProcessed?: number
+  statusCounts?: Record<string, number>
+  results?: Array<{
+    thread: { id: string; subject: string }
+    emailType: 'court_results' | 'add_to_calendar'
+    result: EmailAudit | AddToCalendarAudit
+  }>
 }
 
-export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
-  const confirmationStatus = result.confirmation_status
-  const isOverdue = result.is_overdue
-  const auditStatus = result.audit_status
+export default function AuditResultsPage() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [auditData, setAuditData] = useState<AuditResultsData | null>(null)
+  const [showRawJson, setShowRawJson] = useState(false)
 
-  const getStatusBadge = () => {
-    if (isOverdue) {
-      return (
-        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-          <AlertTriangle className="mr-1 h-3 w-3" />
-          Overdue
-        </Badge>
-      )
-    }
-    switch (confirmationStatus) {
-      case 'confirmed':
-        return (
-          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-            <CheckCircle2 className="mr-1 h-3 w-3" />
-            Confirmed
-          </Badge>
-        )
-      case 'not_confirmed':
-        return (
-          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-            <XCircle className="mr-1 h-3 w-3" />
-            Not Confirmed
-          </Badge>
-        )
-      case 'inconclusive':
-        return (
-          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-            <HelpCircle className="mr-1 h-3 w-3" />
-            Inconclusive
-          </Badge>
-        )
-      default:
-        return (
-          <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
-            No Reply
-          </Badge>
-        )
+  const runAudit = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/audit/run', { method: 'POST' })
+      const data = await response.json()
+      setAuditData(data)
+    } catch (error) {
+      setAuditData({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      })
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const getAuditStatusBadge = () => {
-    switch (auditStatus) {
-      case 'looks_good':
-        return <Badge variant="secondary" className="bg-emerald-100">Looks Good</Badge>
-      case 'needs_follow_up':
-        return <Badge variant="secondary" className="bg-amber-100">Needs Follow-Up</Badge>
-      case 'no_reply':
-        return <Badge variant="secondary" className="bg-red-100">No Reply</Badge>
-      case 'wrong_case_manager':
-        return <Badge variant="secondary" className="bg-orange-100">Wrong CM</Badge>
-      case 'needs_clarification':
-        return <Badge variant="secondary" className="bg-yellow-100">Needs Clarification</Badge>
-      default:
-        return null
-    }
-  }
-
-  const formatTimestamp = (timestamp: string | null | undefined) => {
-    if (!timestamp) return 'N/A'
-    return new Date(timestamp).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: 'America/Chicago'
-    }) + ' CDT'
-  }
+  const courtResults = auditData?.results?.filter(r => r.emailType === 'court_results') || []
+  const addToCalendar = auditData?.results?.filter(r => r.emailType === 'add_to_calendar') || []
 
   return (
-    <Card className={`${isOverdue ? 'border-red-300 bg-red-50/30' : ''}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="font-semibold">{result.client_name || 'Unknown Client'}</h4>
-              {getStatusBadge()}
-              {getAuditStatusBadge()}
-            </div>
-            <p className="text-sm text-muted-foreground line-clamp-1">{subject}</p>
-          </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Run Audit</h1>
+          <p className="text-muted-foreground">
+            Analyze today&apos;s email threads for case manager follow-up
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 text-sm md:grid-cols-2">
-          <div className="flex items-center gap-2">
-            <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground">Attorney:</span>
-            <span className="font-medium">{result.attorney || 'N/A'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground">Case Manager:</span>
-            <span className="font-medium">{result.actual_replier || 'No reply'}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground">Received:</span>
-            <span className="font-medium">{formatTimestamp(result.audited_at)}</span>
-          </div>
-          {result.next_court_date && (
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Next Court:</span>
-              <span className="font-medium">
-                {new Date(result.next_court_date).toLocaleDateString()}
-              </span>
+        <Button onClick={runAudit} disabled={isLoading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          {isLoading ? 'Running Audit...' : 'Run Audit Now'}
+        </Button>
+      </div>
+
+      {auditData && (
+        <>
+          {auditData.success ? (
+            <div className="space-y-6">
+              <AuditSummaryStats 
+                totalProcessed={auditData.totalProcessed || 0}
+                statusCounts={auditData.statusCounts || {}}
+              />
+
+              <Tabs defaultValue="court_results" className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="court_results" className="gap-2">
+                    Court Results
+                    <Badge variant="secondary" className="ml-1">
+                      {courtResults.length}
+                    </Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="add_to_calendar" className="gap-2">
+                    Add to Calendar
+                    <Badge variant="secondary" className="ml-1">
+                      {addToCalendar.length}
+                    </Badge>
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="court_results" className="space-y-4">
+                  {courtResults.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8 text-center text-muted-foreground">
+                        No Court Results emails found today
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="grid gap-4">
+                      {courtResults.map((item, index) => (
+                        <CourtResultsCard 
+                          key={item.thread.id || index} 
+                          result={item.result as EmailAudit}
+                          subject={item.thread.subject}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="add_to_calendar" className="space-y-4">
+                  {addToCalendar.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8 text-center text-muted-foreground">
+                        No Add to Calendar emails found today
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="grid gap-4">
+                      {addToCalendar.map((item, index) => (
+                        <AddToCalendarCard 
+                          key={item.thread.id || index} 
+                          result={item.result as AddToCalendarAudit}
+                          subject={item.thread.subject}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+
+              <Collapsible open={showRawJson} onOpenChange={setShowRawJson}>
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Code2 className="h-4 w-4" />
+                          <CardTitle className="text-sm">Raw JSON Response</CardTitle>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${showRawJson ? 'rotate-180' : ''}`} />
+                      </div>
+                      <CardDescription>For debugging purposes</CardDescription>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent>
+                      <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-96">
+                        {JSON.stringify(auditData, null, 2)}
+                      </pre>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             </div>
+          ) : (
+            <Card className="border-red-200 bg-red-50">
+              <CardHeader>
+                <CardTitle className="text-red-700">Audit Failed</CardTitle>
+                <CardDescription className="text-red-600">
+                  {auditData.error || auditData.message || 'An unknown error occurred'}
+                </CardDescription>
+              </CardHeader>
+            </Card>
           )}
-        </div>
+        </>
+      )}
 
-        {result.court_results_details && (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Gavel className="h-4 w-4" />
-                Court Results
-              </div>
-              <p className="text-sm bg-background p-3 rounded-md border">
-                {typeof result.court_results_details === 'string'
-                  ? result.court_results_details
-                  : JSON.stringify(result.court_results_details)}
-              </p>
-            </div>
-          </>
-        )}
-
-        {result.case_manager_reply && (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <User className="h-4 w-4" />
-                Case Manager Response
-              </div>
-              <div className={`text-sm p-3 rounded-md border ${
-                confirmationStatus === 'confirmed'
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : confirmationStatus === 'not_confirmed'
-                    ? 'bg-red-50 border-red-200'
-                    : 'bg-amber-50 border-amber-200'
-              }`}>
-                {result.case_manager_reply}
-              </div>
-            </div>
-          </>
-        )}
-
-        {result.missing_or_unclear && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
-            <p className="text-sm text-amber-700">
-              <strong>Missing/Unclear:</strong> {result.missing_or_unclear}
+      {!auditData && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              Click &quot;Run Audit Now&quot; to analyze today&apos;s email threads
             </p>
-          </div>
-        )}
-
-        {result.flags && result.flags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {result.flags.map((flag: string, index: number) => (
-              <Badge key={index} variant="outline" className="text-xs">
-                {flag}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            <p className="text-sm text-muted-foreground">
+              The audit will scan for emails with subjects containing &quot;Court Results&quot; or &quot;Add to Calendar&quot;
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }
-
