@@ -164,7 +164,7 @@ export default function ClioAuditPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          batch_size: 3,  // Small batch to avoid Clio rate limits
+          batch_size: 5,  // 5 matters per batch (safe for rate limits)
           start_date: startDate,
           end_date: endDate,
         }),
@@ -205,7 +205,9 @@ export default function ClioAuditPage() {
           break
         }
 
-        await fetchAuditStatus()
+        // Update progress from response (don't fetch full results each batch)
+        setProcessedMatters(data.processed_matters || processedMatters + (data.processed || 0))
+        setAuditStatus(data.status)
 
         if (data.status === 'completed' || data.status === 'rate_limited' || data.status === 'failed') {
           continueProcessing = false
@@ -215,14 +217,16 @@ export default function ClioAuditPage() {
         }
 
         if (continueProcessing) {
-          // Longer delay between batches to avoid rate limits
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          // 1 second delay between batches
+          await new Promise(resolve => setTimeout(resolve, 1000))
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Processing error')
         continueProcessing = false
       }
     }
+    // Fetch final results at the end
+    await fetchAuditStatus()
     setIsProcessing(false)
   }
 

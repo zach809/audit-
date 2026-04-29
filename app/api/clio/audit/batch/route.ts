@@ -50,8 +50,8 @@ export async function POST(request: NextRequest) {
       success: true,
       audit_run_id: auditRun.id,
       status: auditRun.status,
-      processed_in_batch: result.processed,
-      total_processed: auditRun.processed_matters,
+      processed: result.processed,
+      processed_matters: auditRun.processed_matters,
       total_matters: auditRun.total_matters,
       rate_limited: result.rateLimited,
     } as ProcessBatchResponse)

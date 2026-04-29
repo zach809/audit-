@@ -27,8 +27,8 @@ import {
   ClioRateLimitError,
 } from './types'
 
-// RATE LIMIT SAFE: Process only 3-5 matters per request
-const DEFAULT_BATCH_SIZE = 3
+// RATE LIMIT SAFE: Process 5 matters per request (3-5 is safe range)
+const DEFAULT_BATCH_SIZE = 5
 const DEFAULT_TIME_WINDOW_DAYS = 14
 
 // ============================================
