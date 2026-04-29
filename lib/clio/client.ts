@@ -20,9 +20,10 @@ import {
 } from './types'
 
 const CLIO_API_BASE = 'https://app.clio.com/api/v4'
-const DEFAULT_LIMIT = 200
-const MAX_PAGES = 5
-const CACHE_TTL_MINUTES = 30
+// RATE LIMIT SAFE: Use smaller limits and fewer pages
+const DEFAULT_LIMIT = 50  // Reduced from 200
+const MAX_PAGES = 2       // Reduced from 5
+const CACHE_TTL_MINUTES = 60  // Cache longer to reduce API calls
 
 /**
  * Safe query parameter builder
@@ -258,8 +259,16 @@ async function clioRequest<T>(
 }
 
 /**
+ * Small delay to help with rate limiting
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
  * Paginated request with controlled limits
  * Stops after MAX_PAGES or when no more data
+ * RATE LIMIT SAFE: Limited pages, delays between requests
  */
 async function clioRequestPaginated<T>(
   endpoint: string,
@@ -271,6 +280,10 @@ async function clioRequestPaginated<T>(
   let nextUrl: string | undefined = undefined
 
   while (page < maxPages) {
+    // Add small delay between paginated requests
+    if (page > 0) {
+      await delay(200)
+    }
     const requestParams = {
       ...params,
       limit: DEFAULT_LIMIT,
@@ -360,6 +373,7 @@ export async function getMatter(matterId: string | number): Promise<ClioMatter |
 /**
  * Get calendar entries for a specific matter
  * Uses correct `from` and `to` parameters (NOT start_at/end_at)
+ * RATE LIMIT SAFE: Single page only, minimal fields
  */
 export async function getMatterCalendarEntries(
   matterId: string | number,
@@ -370,15 +384,17 @@ export async function getMatterCalendarEntries(
     matter_id: String(matterId),
     from: fromDate.toISOString(),
     to: toDate.toISOString(),
-    fields: 'id,etag,summary,description,location,start_at,end_at,all_day,created_at,updated_at,matter{id,display_number},attendees{id,name,type}',
+    fields: 'id,summary,description,start_at,end_at,attendees{id,name}',
     limit: DEFAULT_LIMIT,
   }
 
-  return clioRequestPaginated<ClioCalendarEntry>('/calendar_entries.json', params, 2)
+  // Only 1 page for calendar - most matters won't have many entries
+  return clioRequestPaginated<ClioCalendarEntry>('/calendar_entries.json', params, 1)
 }
 
 /**
  * Get communications for a specific matter
+ * RATE LIMIT SAFE: Single page only, minimal fields
  */
 export async function getMatterCommunications(
   matterId: string | number,
@@ -388,26 +404,29 @@ export async function getMatterCommunications(
   const params = {
     matter_id: String(matterId),
     created_since: fromDate.toISOString(),
-    fields: 'id,subject,body,type,date,created_at,updated_at,matter{id,display_number},senders{id,name,type},receivers{id,name,type}',
+    fields: 'id,subject,body,type,date,created_at',
     limit: DEFAULT_LIMIT,
   }
 
-  return clioRequestPaginated<ClioCommunication>('/communications.json', params, 2)
+  // Only 1 page - we just need to check for specific emails
+  return clioRequestPaginated<ClioCommunication>('/communications.json', params, 1)
 }
 
 /**
  * Get documents for a specific matter
+ * RATE LIMIT SAFE: Single page only, minimal fields
  */
 export async function getMatterDocuments(
   matterId: string | number
 ): Promise<ClioDocument[]> {
   const params = {
     matter_id: String(matterId),
-    fields: 'id,name,content_type,created_at,updated_at,matter{id,display_number}',
+    fields: 'id,name,created_at',
     limit: DEFAULT_LIMIT,
   }
 
-  return clioRequestPaginated<ClioDocument>('/documents.json', params, 2)
+  // Only 1 page - we just need to check for retainer document
+  return clioRequestPaginated<ClioDocument>('/documents.json', params, 1)
 }
 
 /**

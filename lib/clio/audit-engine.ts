@@ -27,7 +27,8 @@ import {
   ClioRateLimitError,
 } from './types'
 
-const DEFAULT_BATCH_SIZE = 20
+// RATE LIMIT SAFE: Process only 3-5 matters per request
+const DEFAULT_BATCH_SIZE = 3
 const DEFAULT_TIME_WINDOW_DAYS = 14
 
 // ============================================
@@ -158,23 +159,29 @@ interface MatterAuditData {
 
 /**
  * Fetch all data needed for a matter audit
+ * RATE LIMIT SAFE: Sequential requests, not parallel
+ * Only fetches what's needed, minimal fields
  */
 async function fetchMatterData(
   matterId: string,
   fromDate: Date,
   toDate: Date
 ): Promise<MatterAuditData | null> {
+  // Sequential requests to avoid rate limiting
   const matter = await getMatter(matterId)
   if (!matter) {
     console.error(`[Clio Audit] Matter not found: ${matterId}`)
     return null
   }
 
-  const [calendarEntries, communications, documents] = await Promise.all([
-    getMatterCalendarEntries(matterId, fromDate, toDate),
-    getMatterCommunications(matterId, fromDate, toDate),
-    getMatterDocuments(matterId),
-  ])
+  // Fetch calendar first - most important for audit
+  const calendarEntries = await getMatterCalendarEntries(matterId, fromDate, toDate)
+  
+  // Fetch communications - needed for email checks
+  const communications = await getMatterCommunications(matterId, fromDate, toDate)
+  
+  // Fetch documents - needed for retainer check
+  const documents = await getMatterDocuments(matterId)
 
   return {
     matter,

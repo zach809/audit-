@@ -164,7 +164,7 @@ export default function ClioAuditPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          batch_size: 20, 
+          batch_size: 3,  // Small batch to avoid Clio rate limits
           start_date: startDate,
           end_date: endDate,
         }),
@@ -215,7 +215,8 @@ export default function ClioAuditPage() {
         }
 
         if (continueProcessing) {
-          await new Promise(resolve => setTimeout(resolve, 500))
+          // Longer delay between batches to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, 2000))
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Processing error')
