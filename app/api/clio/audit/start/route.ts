@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       // Empty body is fine
     }
 
-    const batchSize = body.batch_size || 20
+    const batchSize = body.batch_size || 5  // Small batches to avoid rate limits
     const startDate = body.start_date || null
     const endDate = body.end_date || null
     
