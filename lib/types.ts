@@ -33,5 +33,4 @@ export type EmailAudit = {
   is_overdue?: boolean
   audited_at?: string
   created_at?: string
-  confirmation_status?: 'confirmed' | 'pending' | 'rejected' | null
-}
+  confirmation_status?: 'confirmed' | 'not_confirmed' | 'inconclusive' | null
