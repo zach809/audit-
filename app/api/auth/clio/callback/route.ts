@@ -1,14 +1,15 @@
-// v2
 import { NextRequest, NextResponse } from 'next/server'
-import { Pool } from 'pg'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function getRedirectUri(request: NextRequest): string {
   if (process.env.CLIO_REDIRECT_URI) {
     return process.env.CLIO_REDIRECT_URI
   }
+  
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/clio/callback`
   }
+  
   return `${request.nextUrl.origin}/api/auth/clio/callback`
 }
 
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
     console.error('[Clio OAuth] Auth error:', error)
     return NextResponse.redirect(`${origin}/dashboard/settings?error=clio_auth_failed`)
   }
+
   if (!code) {
     console.error('[Clio OAuth] No authorization code')
     return NextResponse.redirect(`${origin}/dashboard/settings?error=no_code`)
@@ -38,9 +40,12 @@ export async function GET(request: NextRequest) {
   const redirectUri = getRedirectUri(request)
 
   try {
+    // Exchange code for tokens
     const tokenResponse = await fetch('https://app.clio.com/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
@@ -57,23 +62,26 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
-    const expiryDate = Date.now() + tokens.expires_in * 1000
 
-    const pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    })
+    // Store tokens in database (server-only, no RLS policies)
+    const supabase = createAdminClient()
 
-    const client = await pool.connect()
-    try {
-      await client.query(
-  `INSERT INTO clio_tokens (access_token, refresh_token, expiry_date, token_type)
-   VALUES ($1, $2, $3, $4)`,
-  [tokens.access_token, tokens.refresh_token, expiryDate, tokens.token_type || 'Bearer']
-)
-    } finally {
-      client.release()
-      await pool.end()
+    // Delete any existing tokens
+    await supabase.from('clio_tokens').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+    // Insert new tokens
+    const { error: dbError } = await supabase
+      .from('clio_tokens')
+      .insert({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expiry_date: Date.now() + (tokens.expires_in * 1000),
+        token_type: tokens.token_type || 'Bearer',
+      })
+
+    if (dbError) {
+      console.error('[Clio OAuth] Failed to store tokens:', dbError)
+      return NextResponse.redirect(`${origin}/dashboard/settings?error=db_error`)
     }
 
     console.log('[Clio OAuth] Tokens stored successfully')

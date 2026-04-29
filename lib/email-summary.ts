@@ -1,9 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import type { EmailAudit } from '@/lib/types'
-
-type AuditStatus = 'looks_good' | 'needs_follow_up' | 'no_reply' | 'wrong_case_manager' | 'needs_clarification'
-type EmailType = 'court_results' | 'add_to_calendar'
-type AuditResult = EmailAudit
+import type { AuditResult, AuditStatus, EmailType } from '@/lib/types'
 
 interface AuditResults {
   totalProcessed: number
@@ -124,7 +120,7 @@ function generateEmailHtml(
       <div class="item">
         <strong>${item.result.client_name || 'Unknown Client'}</strong>
         <span class="badge ${item.result.audit_status === 'no_reply' ? 'badge-error' : 'badge-warning'}">
-          ${formatStatus(item.result.audit_status as AuditStatus)}
+          ${formatStatus(item.result.audit_status)}
         </span>
         <p><strong>Attorney:</strong> ${item.result.attorney || 'N/A'}</p>
         <p><strong>Subject:</strong> ${item.thread.subject}</p>
@@ -165,7 +161,7 @@ function generateEmailText(
     
     for (const item of needsAttention) {
       text += `Client: ${item.result.client_name || 'Unknown'}\n`
-      text += `Status: ${formatStatus(item.result.audit_status as AuditStatus)}\n`
+      text += `Status: ${formatStatus(item.result.audit_status)}\n`
       text += `Attorney: ${item.result.attorney || 'N/A'}\n`
       text += `Subject: ${item.thread.subject}\n`
       if (item.result.missing_or_unclear) {

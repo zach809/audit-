@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { Pool } from 'pg'
+import { isClioConnected } from '@/lib/clio/client'
 import { startAuditRun, getCurrentAuditRun } from '@/lib/clio/audit-engine'
 import type { StartAuditRequest, StartAuditResponse } from '@/lib/clio/types'
 
 export async function POST(request: NextRequest) {
   try {
-    // -----------------------------
-    // Auth check
-    // -----------------------------
+    // Verify user is authenticated
     const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json(
@@ -23,25 +17,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // -----------------------------
-    // Clio connection check — direct pg (bypasses PostgREST cache)
-    // -----------------------------
-    const pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    })
-    const pgClient = await pool.connect()
-    let connected = false
-    try {
-      const result = await pgClient.query(
-        'SELECT id FROM clio_tokens LIMIT 1'
-      )
-      connected = result.rows.length > 0
-    } finally {
-      pgClient.release()
-      await pool.end()
-    }
-
+    // Check if Clio is connected
+    const connected = await isClioConnected()
     if (!connected) {
       return NextResponse.json(
         { success: false, error: 'Clio not connected' },
@@ -49,15 +26,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // -----------------------------
-    // Resume existing audit if active
-    // -----------------------------
+    // Check if there's an in-progress audit (only resume truly in-progress ones)
     const currentRun = await getCurrentAuditRun()
-
-    if (
-      currentRun &&
-      (currentRun.status === 'pending' || currentRun.status === 'in_progress')
-    ) {
+    if (currentRun && (currentRun.status === 'pending' || currentRun.status === 'in_progress')) {
       return NextResponse.json({
         success: true,
         audit_run_id: currentRun.id,
@@ -65,50 +36,28 @@ export async function POST(request: NextRequest) {
       } satisfies StartAuditResponse)
     }
 
-    // -----------------------------
-    // Parse request body safely
-    // -----------------------------
+    // Parse request body
     let body: StartAuditRequest = {}
-
     try {
-      const parsed = await request.json()
-      if (parsed && typeof parsed === 'object') {
-        body = parsed
-      }
+      body = await request.json()
     } catch {
-      // ignore empty/invalid body
+      // Empty body is fine
     }
 
-    const batchSize = body.batch_size ?? 5
-    const startDate = body.start_date ?? null
-    const endDate = body.end_date ?? null
+    const batchSize = body.batch_size || 5  // Small batches to avoid rate limits
+    const startDate = body.start_date || null
+    const endDate = body.end_date || null
 
-    // -----------------------------
-    // Calculate time window
-    // -----------------------------
+    // Calculate time window days from dates, or default to 14
     let timeWindowDays = 14
-
     if (startDate && endDate) {
       const start = new Date(startDate)
       const end = new Date(endDate)
-
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-        const diffMs = end.getTime() - start.getTime()
-
-        timeWindowDays =
-          Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1
-      }
+      timeWindowDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
     }
 
-    // -----------------------------
-    // Start audit run
-    // -----------------------------
-    const auditRun = await startAuditRun(
-      batchSize,
-      timeWindowDays,
-      startDate,
-      endDate
-    )
+    // Start new audit run
+    const auditRun = await startAuditRun(batchSize, timeWindowDays, startDate, endDate)
 
     return NextResponse.json({
       success: true,
@@ -117,16 +66,10 @@ export async function POST(request: NextRequest) {
     } satisfies StartAuditResponse)
   } catch (error) {
     console.error('[Clio Audit Start] Error:', error)
-
     return NextResponse.json(
-      {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
 }
+

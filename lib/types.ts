@@ -1,3 +1,9 @@
+/**
+ * Shared types for the Clio Audit application
+ * Gmail/OpenAI types removed - this is now Clio-only
+ */
+
+// Re-export Clio types for convenience
 export * from './clio/types'
 
 export type AuditSummary = {
@@ -10,37 +16,4 @@ export type AuditSummary = {
   needs_clarification: number
   summary_sent: boolean
   summary_sent_at: string | null
-}
-
-export type EmailAudit = {
-  id: string
-  thread_id: string
-  message_id?: string
-  email_type: 'court_results' | 'add_to_calendar'
-  subject: string
-  client_name?: string
-  attorney?: string
-  expected_case_manager?: string
-  actual_replier?: string
-  county?: string
-  case_number?: string
-  next_court_date?: string
-  audit_status: string
-  flags?: string[]
-  missing_or_unclear?: string
-  case_manager_reply?: string
-  attorney_instructions?: string
-  is_overdue?: boolean
-  audited_at?: string
-  created_at?: string
-  confirmation_status?: 'confirmed' | 'not_confirmed' | 'inconclusive' | null
-  response_time_minutes?: number | null
-  court_results_details?: string | null
-  notes_for_zach?: string | null
-}
-
-export type AddToCalendarAudit = EmailAudit & {
-  onboarding_status?: string | null
-  people_involved?: string[] | null
-  initial_calendar_entry?: string | null
 }

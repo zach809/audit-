@@ -1,10 +1,10 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { 
-  User, 
-  Briefcase, 
-  Users, 
+import {
+  User,
+  Briefcase,
+  Users,
   Calendar,
   CheckCircle2,
   Clock,
@@ -21,11 +21,6 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
   const onboardingStatus = result.onboarding_status as string | null
   const auditStatus = result.audit_status as string
   const peopleInvolved = result.people_involved as string[] | null
-  const initialCalendarEntry = result.initial_calendar_entry as string | null
-  const attorneyInstructions = result.attorney_instructions as string | null
-  const caseManagerReply = result.case_manager_reply as string | null
-  const missingOrUnclear = result.missing_or_unclear as string | null
-  const flags = result.flags as string[] | null
 
   const getOnboardingBadge = () => {
     if (onboardingStatus === 'welcome_packet_sent_meeting_scheduled') {
@@ -75,7 +70,9 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Simple Text-Message Style Summary */}
         <div className="bg-muted/50 p-4 rounded-lg space-y-3 text-sm">
+          {/* People Involved */}
           {peopleInvolved && peopleInvolved.length > 0 && (
             <div className="flex items-start gap-2">
               <Users className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -85,6 +82,8 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               </div>
             </div>
           )}
+
+          {/* Attorney */}
           <div className="flex items-start gap-2">
             <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
@@ -92,6 +91,8 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <span className="font-medium">{String(result.attorney ?? '') || 'N/A'}</span>
             </div>
           </div>
+
+          {/* Case Manager */}
           <div className="flex items-start gap-2">
             <User className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
@@ -99,30 +100,38 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <span className="font-medium">{String(result.actual_replier ?? '') || 'No reply'}</span>
             </div>
           </div>
-          {initialCalendarEntry && (
+
+          {/* Initial Calendar Entry */}
+          {result.initial_calendar_entry && (
             <div className="flex items-start gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <span className="text-muted-foreground">Calendar Entry: </span>
-                <span className="font-medium">{initialCalendarEntry}</span>
+                <span className="font-medium">{String(result.initial_calendar_entry ?? '')}</span>
               </div>
             </div>
           )}
-          {attorneyInstructions && (
+
+          {/* Attorney Notes */}
+          {result.attorney_instructions && (
             <div className="flex items-start gap-2">
               <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <span className="text-muted-foreground">Attorney Notes: </span>
-                <span className="font-medium">{attorneyInstructions}</span>
+                <span className="font-medium">{String(result.attorney_instructions ?? '')}</span>
               </div>
             </div>
           )}
         </div>
+
+        {/* Onboarding Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Onboarding Status:</span>
           {getOnboardingBadge()}
         </div>
-        {caseManagerReply && (
+
+        {/* Case Manager Response */}
+        {result.case_manager_reply && (
           <>
             <Separator />
             <div className="space-y-2">
@@ -130,26 +139,29 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
                 <MessageSquare className="h-4 w-4" />
                 Case Manager Response
               </div>
-              <div className={`text-sm p-3 rounded-md border ${
-                onboardingStatus === 'welcome_packet_sent_meeting_scheduled'
+              <div className={`text-sm p-3 rounded-md border ${onboardingStatus === 'welcome_packet_sent_meeting_scheduled'
                   ? 'bg-emerald-50 border-emerald-200'
                   : 'bg-amber-50 border-amber-200'
-              }`}>
-                {caseManagerReply}
+                }`}>
+                {String(result.case_manager_reply ?? '')}
               </div>
             </div>
           </>
         )}
-        {missingOrUnclear && (
+
+        {/* Missing/Unclear */}
+        {result.missing_or_unclear && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
             <p className="text-sm text-amber-700">
-              <strong>Missing/Unclear:</strong> {missingOrUnclear}
+              <strong>Missing/Unclear:</strong> {String(result.missing_or_unclear ?? '')}
             </p>
           </div>
         )}
-        {flags && flags.length > 0 && (
+
+        {/* Flags */}
+        {result.flags && (result.flags as string[]).length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {flags.map((flag, index) => (
+            {(result.flags as string[]).map((flag, index) => (
               <Badge key={index} variant="outline" className="text-xs">
                 {flag}
               </Badge>

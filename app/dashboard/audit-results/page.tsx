@@ -9,7 +9,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { RefreshCw, ChevronDown, Code2 } from 'lucide-react'
 import { CourtResultsCard } from '@/components/dashboard/court-results-card'
 import { AddToCalendarCard } from '@/components/dashboard/add-to-calendar-card'
-import type { EmailAudit, AddToCalendarAudit } from '@/lib/types'
 import { AuditSummaryStats } from '@/components/dashboard/audit-summary-stats'
 
 interface AuditResultsData {
@@ -21,7 +20,7 @@ interface AuditResultsData {
   results?: Array<{
     thread: { id: string; subject: string }
     emailType: 'court_results' | 'add_to_calendar'
-    result: EmailAudit | AddToCalendarAudit
+    result: Record<string, unknown>
   }>
 }
 
@@ -101,7 +100,7 @@ export default function AuditResultsPage() {
                       {courtResults.map((item, index) => (
                         <CourtResultsCard 
                           key={item.thread.id || index} 
-                          result={item.result as EmailAudit}
+                          result={item.result}
                           subject={item.thread.subject}
                         />
                       ))}
@@ -121,7 +120,7 @@ export default function AuditResultsPage() {
                       {addToCalendar.map((item, index) => (
                         <AddToCalendarCard 
                           key={item.thread.id || index} 
-                          result={item.result as AddToCalendarAudit}
+                          result={item.result}
                           subject={item.thread.subject}
                         />
                       ))}
