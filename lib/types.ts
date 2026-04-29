@@ -1,3 +1,4 @@
+```typescript
 export * from './clio/types'
 
 export type AuditSummary = {
@@ -33,4 +34,6 @@ export type EmailAudit = {
   is_overdue?: boolean
   audited_at?: string
   created_at?: string
+  confirmation_status?: 'confirmed' | 'pending' | 'rejected' | null
 }
+```
