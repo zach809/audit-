@@ -34,3 +34,5 @@ export type EmailAudit = {
   audited_at?: string
   created_at?: string
   confirmation_status?: 'confirmed' | 'not_confirmed' | 'inconclusive' | null
+  response_time_minutes?: number | null
+}
