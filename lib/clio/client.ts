@@ -79,7 +79,11 @@ async function getTokens(): Promise<ClioTokens | null> {
 
       return {
         ...row,
-        expiry_date: Number(row.expiry_date ?? row.expires_at ?? 0),
+        expiry_date: row.expiry_date
+  ? Number(row.expiry_date)
+  : row.expires_at
+    ? new Date(row.expires_at).getTime()
+    : 0,,
       } as ClioTokens
     } finally {
       client.release()
