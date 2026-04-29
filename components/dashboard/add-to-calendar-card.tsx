@@ -103,7 +103,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               </div>
             </div>
           )}
-          {result.attorney_instructions && (
+          {!!result.attorney_instructions && (
             <div className="flex items-start gap-2">
               <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
