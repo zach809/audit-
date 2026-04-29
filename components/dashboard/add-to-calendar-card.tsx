@@ -1,10 +1,10 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import {
-  User,
-  Briefcase,
-  Users,
+import { 
+  User, 
+  Briefcase, 
+  Users, 
   Calendar,
   CheckCircle2,
   Clock,
@@ -70,9 +70,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Simple Text-Message Style Summary */}
         <div className="bg-muted/50 p-4 rounded-lg space-y-3 text-sm">
-          {/* People Involved */}
           {peopleInvolved && peopleInvolved.length > 0 && (
             <div className="flex items-start gap-2">
               <Users className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -82,8 +80,6 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               </div>
             </div>
           )}
-
-          {/* Attorney */}
           <div className="flex items-start gap-2">
             <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
@@ -91,8 +87,6 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <span className="font-medium">{String(result.attorney ?? '') || 'N/A'}</span>
             </div>
           </div>
-
-          {/* Case Manager */}
           <div className="flex items-start gap-2">
             <User className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
@@ -100,8 +94,6 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <span className="font-medium">{String(result.actual_replier ?? '') || 'No reply'}</span>
             </div>
           </div>
-
-          {/* Initial Calendar Entry */}
           {result.initial_calendar_entry && (
             <div className="flex items-start gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -111,8 +103,6 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               </div>
             </div>
           )}
-
-          {/* Attorney Notes */}
           {result.attorney_instructions && (
             <div className="flex items-start gap-2">
               <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -123,14 +113,10 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
             </div>
           )}
         </div>
-
-        {/* Onboarding Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Onboarding Status:</span>
           {getOnboardingBadge()}
         </div>
-
-        {/* Case Manager Response */}
         {result.case_manager_reply && (
           <>
             <Separator />
@@ -139,17 +125,16 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
                 <MessageSquare className="h-4 w-4" />
                 Case Manager Response
               </div>
-              <div className={`text-sm p-3 rounded-md border ${onboardingStatus === 'welcome_packet_sent_meeting_scheduled'
-                ? 'bg-emerald-50 border-emerald-200'
-                : 'bg-amber-50 border-amber-200'
-                }`}>
+              <div className={`text-sm p-3 rounded-md border ${
+                onboardingStatus === 'welcome_packet_sent_meeting_scheduled'
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-amber-50 border-amber-200'
+              }`}>
                 {String(result.case_manager_reply ?? '')}
               </div>
             </div>
           </>
         )}
-
-        {/* Missing/Unclear */}
         {result.missing_or_unclear && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
             <p className="text-sm text-amber-700">
@@ -157,8 +142,6 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
             </p>
           </div>
         )}
-
-        {/* Flags */}
         {result.flags && (result.flags as string[]).length > 0 && (
           <div className="flex flex-wrap gap-2">
             {(result.flags as string[]).map((flag, index) => (
