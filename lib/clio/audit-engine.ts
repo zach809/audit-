@@ -3,8 +3,7 @@ const DEFAULT_BATCH_SIZE = 1
 export async function processBatch(
   auditRunId: string
 ): Promise<{ processed: number; rateLimited: boolean; error?: string }> {
-  auditRunId: string
-): Promise<{ processed: number; rateLimited: boolean; error?: string }> {
+
   const auditRun = await getAuditRun(auditRunId)
 
   if (!auditRun) {
@@ -18,7 +17,6 @@ export async function processBatch(
       error: `Audit run is ${auditRun.status}`,
     }
   }
-
   const toDate = new Date()
   const fromDate = new Date()
   fromDate.setDate(fromDate.getDate() - auditRun.time_window_days)
