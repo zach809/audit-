@@ -1,225 +1,469 @@
-'use client'
+/**
+ * Clio API Client
+ *
+ * Rate-limit safe, batched API client for Clio.
+ */
 
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { Loader2 } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  ClioTokens,
+  ClioMatter,
+  ClioCalendarEntry,
+  ClioCommunication,
+  ClioDocument,
+  ClioPaginatedResponse,
+  ClioRateLimitError,
+} from './types'
 
-type AuditRunStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'rate_limited'
+const CLIO_API_BASE = 'https://app.clio.com/api/v4'
+const DEFAULT_LIMIT = 25
+const MAX_PAGES = 1
+const CACHE_TTL_MINUTES = 60
 
-export default function ClioAuditPage() {
-  const [auditStatus, setAuditStatus] = useState<AuditRunStatus | null>(null)
-  const [totalMatters, setTotalMatters] = useState(0)
-  const [processedMatters, setProcessedMatters] = useState(0)
-  const [rows, setRows] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+class ClioForbiddenError extends Error {
+  constructor(message = 'Clio API forbidden') {
+    super(message)
+    this.name = 'ClioForbiddenError'
+  }
+}
 
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 14)
-    return d.toISOString().split('T')[0]
+export function buildQuery(params: Record<string, unknown>): string {
+  const search = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        search.append(key, String(item))
+      }
+    } else {
+      search.set(key, String(value))
+    }
+  }
+
+  return search.toString()
+}
+
+async function getTokens(): Promise<ClioTokens | null> {
+  const { Pool } = await import('pg')
+
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
   })
 
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
+  try {
+    const client = await pool.connect()
 
-  const fetchResults = async (auditRunId: string) => {
     try {
-      const res = await fetch(`/api/clio/audit/results?audit_run_id=${auditRunId}`)
-      const data = await res.json()
+      const result = await client.query(`
+        SELECT *
+        FROM clio_tokens
+        ORDER BY created_at DESC
+        LIMIT 1
+      `)
 
-      if (data.results) {
-        setRows(data.results)
+      const row = result.rows[0]
+
+      if (!row) {
+        console.error('[Clio] No token row found in clio_tokens')
+        return null
       }
-    } catch (err) {
-      console.error('Failed to fetch results:', err)
-    }
-  }
 
-  const fetchAuditStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clio/audit/status')
-      const data = await res.json()
-
-      if (data.audit_run) {
-        setAuditStatus(data.audit_run.status)
-        setTotalMatters(data.audit_run.total_matters || 0)
-        setProcessedMatters(data.audit_run.processed_matters || 0)
-
-        if (data.audit_run.id) {
-          await fetchResults(data.audit_run.id)
-        }
-      }
-    } catch (err) {
-      console.error(err)
+      return {
+        ...row,
+        expiry_date: row.expiry_date
+          ? Number(row.expiry_date)
+          : row.expires_at
+            ? new Date(row.expires_at).getTime()
+            : 0,
+      } as ClioTokens
     } finally {
-      setIsLoading(false)
+      client.release()
     }
-  }, [])
+  } catch (error) {
+    console.error('[Clio] Direct token lookup failed:', error)
+    return null
+  } finally {
+    await pool.end()
+  }
+}
 
-  const processBatches = async (auditRunId: string) => {
-    let keepGoing = true
+async function refreshTokens(tokens: ClioTokens): Promise<ClioTokens | null> {
+  const clientId = process.env.CLIO_CLIENT_ID
+  const clientSecret = process.env.CLIO_CLIENT_SECRET
 
-    while (keepGoing) {
-      try {
-        const res = await fetch('/api/clio/audit/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audit_run_id: auditRunId }),
-        })
-
-        const data = await res.json()
-
-        if (!data.success) {
-          setError(data.error || 'Batch processing failed')
-          keepGoing = false
-          break
-        }
-
-        setAuditStatus(data.status)
-        setProcessedMatters(data.total_processed || 0)
-        setTotalMatters(data.total_matters || 0)
-
-        if (
-          data.status === 'completed' ||
-          data.status === 'failed' ||
-          data.status === 'rate_limited'
-        ) {
-          keepGoing = false
-        }
-
-        if (keepGoing) {
-          await new Promise(resolve => setTimeout(resolve, 1000))
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Batch processing error')
-        keepGoing = false
-      }
-    }
-
-    await fetchAuditStatus()
-    setIsProcessing(false)
+  if (!clientId || !clientSecret) {
+    console.error('[Clio] Missing client credentials')
+    return null
   }
 
-  const startAudit = async () => {
-    setIsProcessing(true)
-    setError(null)
+  try {
+    const response = await fetch('https://app.clio.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    })
 
-    try {
-      const res = await fetch('/api/clio/audit/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batch_size: 5,
-          start_date: startDate,
-          end_date: endDate,
-        }),
+    if (!response.ok) {
+      const text = await response.text()
+      console.error('[Clio] Token refresh failed:', response.status, text)
+      return null
+    }
+
+    const data = await response.json()
+
+    const supabase = createAdminClient()
+    const newTokens: Partial<ClioTokens> = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || tokens.refresh_token,
+      expiry_date: Date.now() + data.expires_in * 1000,
+      updated_at: new Date().toISOString(),
+    }
+
+    await supabase
+      .from('clio_tokens')
+      .update(newTokens)
+      .eq('id', tokens.id)
+
+    return { ...tokens, ...newTokens } as ClioTokens
+  } catch (error) {
+    console.error('[Clio] Token refresh error:', error)
+    return null
+  }
+}
+
+async function getValidAccessToken(): Promise<string | null> {
+  let tokens = await getTokens()
+
+  if (!tokens) {
+    console.error('[Clio] No tokens found')
+    return null
+  }
+
+  const expiresIn = tokens.expiry_date - Date.now()
+
+  if (Number.isFinite(expiresIn) && expiresIn < 5 * 60 * 1000) {
+    console.log('[Clio] Token expired or expiring soon, refreshing...')
+    tokens = await refreshTokens(tokens)
+
+    if (!tokens) return null
+  }
+
+  return tokens.access_token
+}
+
+async function getCachedResponse<T>(cacheKey: string): Promise<T | null> {
+  const supabase = createAdminClient()
+
+  const { data, error } = await supabase
+    .from('clio_audit_cache')
+    .select('response, expires_at')
+    .eq('cache_key', cacheKey)
+    .single()
+
+  if (error || !data) return null
+
+  if (new Date(data.expires_at) < new Date()) {
+    await supabase.from('clio_audit_cache').delete().eq('cache_key', cacheKey)
+    return null
+  }
+
+  return data.response as T
+}
+
+async function cacheResponse(
+  cacheKey: string,
+  endpoint: string,
+  params: Record<string, unknown>,
+  response: unknown
+): Promise<void> {
+  const supabase = createAdminClient()
+  const expiresAt = new Date(Date.now() + CACHE_TTL_MINUTES * 60 * 1000)
+
+  await supabase
+    .from('clio_audit_cache')
+    .upsert(
+      {
+        cache_key: cacheKey,
+        endpoint,
+        params,
+        response,
+        expires_at: expiresAt.toISOString(),
+      },
+      { onConflict: 'cache_key' }
+    )
+}
+
+async function clioRequest<T>(
+  endpoint: string,
+  params: Record<string, unknown> = {},
+  useCache = true
+): Promise<T> {
+  const queryString = buildQuery(params)
+  const url = `${CLIO_API_BASE}${endpoint}${queryString ? `?${queryString}` : ''}`
+  const cacheKey = `${endpoint}:${queryString}`
+
+  if (useCache) {
+    const cached = await getCachedResponse<T>(cacheKey)
+    if (cached) {
+      console.log('[Clio] Cache hit:', endpoint)
+      return cached
+    }
+  }
+
+  const accessToken = await getValidAccessToken()
+
+  if (!accessToken) {
+    throw new Error('Clio not connected')
+  }
+
+  console.log('[Clio] API request:', endpoint, params)
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (response.status === 429) {
+    const retryAfter = response.headers.get('Retry-After')
+    const resetAt = retryAfter
+      ? new Date(Date.now() + parseInt(retryAfter) * 1000)
+      : undefined
+
+    console.error('[Clio] Rate limited!', { endpoint, params, retryAfter, resetAt })
+    throw new ClioRateLimitError('Clio API rate limit exceeded', resetAt)
+  }
+
+  if (response.status === 403) {
+    const errorText = await response.text()
+    console.error('[Clio] API forbidden:', endpoint, params, errorText)
+    throw new ClioForbiddenError(`Clio API forbidden: ${endpoint}`)
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('[Clio] API error:', response.status, endpoint, params, errorText)
+    throw new Error(`Clio API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+
+  if (useCache) {
+    await cacheResponse(cacheKey, endpoint, params, data)
+  }
+
+  return data as T
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function clioRequestPaginated<T>(
+  endpoint: string,
+  params: Record<string, unknown> = {},
+  maxPages = MAX_PAGES
+): Promise<T[]> {
+  const allData: T[] = []
+  let page = 0
+  let nextUrl: string | undefined = undefined
+
+  while (page < maxPages) {
+    if (page > 0) await delay(1000)
+
+    const requestParams = {
+      ...params,
+      limit: DEFAULT_LIMIT,
+    }
+
+    let response: ClioPaginatedResponse<T>
+
+    if (nextUrl) {
+      const accessToken = await getValidAccessToken()
+      if (!accessToken) throw new Error('Clio not connected')
+
+      const res = await fetch(nextUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
       })
 
-      const data = await res.json()
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After')
+        const resetAt = retryAfter
+          ? new Date(Date.now() + parseInt(retryAfter) * 1000)
+          : undefined
 
-      if (!data.success) {
-        setError(data.error || 'Failed to start audit')
-        setIsProcessing(false)
-        return
+        throw new ClioRateLimitError('Clio API rate limit exceeded', resetAt)
       }
 
-      setAuditStatus('in_progress')
-      await processBatches(data.audit_run_id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start audit')
-      setIsProcessing(false)
+      if (res.status === 403) {
+        const errorText = await res.text()
+        console.error('[Clio] API forbidden on pagination:', endpoint, errorText)
+        throw new ClioForbiddenError(`Clio API forbidden: ${endpoint}`)
+      }
+
+      if (!res.ok) throw new Error(`Clio API error: ${res.status}`)
+
+      response = await res.json()
+    } else {
+      response = await clioRequest<ClioPaginatedResponse<T>>(
+        endpoint,
+        requestParams,
+        false
+      )
     }
+
+    if (response.data && response.data.length > 0) {
+      allData.push(...response.data)
+    }
+
+    nextUrl = response.meta?.paging?.next
+
+    if (!nextUrl || response.data.length < DEFAULT_LIMIT) break
+
+    page++
   }
 
-  useEffect(() => {
-    fetchAuditStatus()
-  }, [fetchAuditStatus])
+  return allData
+}
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
+export async function getRecentMatters(
+  fromDate: Date,
+  toDate: Date,
+  limit = DEFAULT_LIMIT
+): Promise<ClioMatter[]> {
+  const params = {
+    fields:
+      'id,display_number,description,status,open_date,close_date,pending_date,created_at,updated_at,client{id,name,type},responsible_attorney{id,name}',
+    created_since: fromDate.toISOString(),
+    created_before: toDate.toISOString(),
+    limit,
+    order: 'created_at(desc)',
+  }
+
+  return clioRequestPaginated<ClioMatter>('/matters.json', params)
+}
+
+export async function getMatter(
+  matterId: string | number
+): Promise<ClioMatter | null> {
+  try {
+    const response = await clioRequest<{ data: ClioMatter }>(
+      `/matters/${matterId}.json`,
+      {
+        fields:
+          'id,display_number,description,status,open_date,close_date,pending_date,created_at,updated_at,client{id,name,type},responsible_attorney{id,name}',
+      }
     )
+
+    return response.data
+  } catch (error) {
+    console.error('[Clio] Could not fetch matter:', matterId, error)
+    return null
   }
+}
 
-  return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-bold">Clio Audit</h1>
+export async function getMatterCalendarEntries(
+  matterId: string | number,
+  fromDate: Date,
+  toDate: Date
+): Promise<ClioCalendarEntry[]> {
+  try {
+    const params = {
+      matter_id: String(matterId),
+      from: fromDate.toISOString(),
+      to: toDate.toISOString(),
+      fields: 'id,summary,description,start_at,end_at,attendees{id,name}',
+      limit: DEFAULT_LIMIT,
+    }
 
-      {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <p className="text-red-700">{error}</p>
-          </CardContent>
-        </Card>
-      )}
+    return await clioRequestPaginated<ClioCalendarEntry>(
+      '/calendar_entries.json',
+      params,
+      1
+    )
+  } catch (error) {
+    if (error instanceof ClioForbiddenError) {
+      console.warn('[Clio] Calendar entries forbidden; continuing:', matterId)
+      return []
+    }
 
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          <div className="flex gap-2">
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
+    throw error
+  }
+}
 
-          <Button onClick={startAudit} disabled={isProcessing}>
-            {isProcessing ? 'Processing...' : 'Run Audit'}
-          </Button>
+export async function getMatterCommunications(
+  matterId: string | number,
+  fromDate: Date,
+  toDate: Date
+): Promise<ClioCommunication[]> {
+  try {
+    const params = {
+      matter_id: String(matterId),
+      created_since: fromDate.toISOString(),
+      fields: 'id,subject,body,type,date,created_at',
+      limit: DEFAULT_LIMIT,
+    }
 
-          {auditStatus && <Badge>{auditStatus}</Badge>}
+    return await clioRequestPaginated<ClioCommunication>(
+      '/communications.json',
+      params,
+      1
+    )
+  } catch (error) {
+    if (error instanceof ClioForbiddenError) {
+      console.warn('[Clio] Communications forbidden; continuing:', matterId)
+      return []
+    }
 
-          {totalMatters > 0 && (
-            <div className="space-y-2">
-              <p>{processedMatters} / {totalMatters}</p>
-              <Progress value={(processedMatters / totalMatters) * 100} />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+    throw error
+  }
+}
 
-      {rows.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p>No audit data yet. Click "Run Audit".</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="pt-6 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-2">Client</th>
-                  <th className="text-left p-2">Matter</th>
-                  <th className="text-left p-2">Attorney</th>
-                  <th className="text-left p-2">Status</th>
-                  <th className="text-left p-2">Missing Items</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row: any) => (
-                  <tr key={row.id} className="border-b">
-                    <td className="p-2">{row.client_name || 'Unknown'}</td>
-                    <td className="p-2">{row.matter_display_number || row.matter_id}</td>
-                    <td className="p-2">{row.attorney_name || '—'}</td>
-                    <td className="p-2">{row.overall_status}</td>
-                    <td className="p-2">
-                      {Array.isArray(row.missing_items)
-                        ? row.missing_items.join(', ')
-                        : row.missing_items || 'OK'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
+export async function getMatterDocuments(
+  matterId: string | number
+): Promise<ClioDocument[]> {
+  try {
+    const params = {
+      matter_id: String(matterId),
+      fields: 'id,name,created_at',
+      limit: DEFAULT_LIMIT,
+    }
+
+    return await clioRequestPaginated<ClioDocument>('/documents.json', params, 1)
+  } catch (error) {
+    if (error instanceof ClioForbiddenError) {
+      console.warn('[Clio] Documents forbidden; continuing:', matterId)
+      return []
+    }
+
+    throw error
+  }
+}
+
+export async function isClioConnected(): Promise<boolean> {
+  const tokens = await getTokens()
+  return tokens !== null
+}
+
+export async function clearExpiredCache(): Promise<void> {
+  const supabase = createAdminClient()
+
+  await supabase
+    .from('clio_audit_cache')
+    .delete()
+    .lt('expires_at', new Date().toISOString())
 }
