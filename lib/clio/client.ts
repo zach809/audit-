@@ -53,7 +53,7 @@ export function buildQuery(params: Record<string, unknown>): string {
  */
 async function getTokens(): Promise<ClioTokens | null> {
   const supabase = createAdminClient()
-  
+
   const { data, error } = await supabase
     .from('clio_tokens')
     .select('*')
@@ -101,7 +101,7 @@ async function refreshTokens(tokens: ClioTokens): Promise<ClioTokens | null> {
     }
 
     const data = await response.json()
-    
+
     const supabase = createAdminClient()
     const newTokens: Partial<ClioTokens> = {
       access_token: data.access_token,
@@ -127,7 +127,7 @@ async function refreshTokens(tokens: ClioTokens): Promise<ClioTokens | null> {
  */
 async function getValidAccessToken(): Promise<string | null> {
   let tokens = await getTokens()
-  
+
   if (!tokens) {
     console.error('[Clio] No tokens found')
     return null
@@ -151,7 +151,7 @@ async function getValidAccessToken(): Promise<string | null> {
  */
 async function getCachedResponse<T>(cacheKey: string): Promise<T | null> {
   const supabase = createAdminClient()
-  
+
   const { data, error } = await supabase
     .from('clio_audit_cache')
     .select('response, expires_at')
@@ -182,7 +182,7 @@ async function cacheResponse(
   response: unknown
 ): Promise<void> {
   const supabase = createAdminClient()
-  
+
   const expiresAt = new Date(Date.now() + CACHE_TTL_MINUTES * 60 * 1000)
 
   await supabase
@@ -346,6 +346,7 @@ export async function getRecentMatters(
   const params = {
     fields: 'id,display_number,description,status,open_date,close_date,pending_date,created_at,updated_at,client{id,name,type},responsible_attorney{id,name}',
     created_since: fromDate.toISOString(),
+    created_before: toDate.toISOString(),
     limit,
     order: 'created_at(desc)',
   }
@@ -442,9 +443,10 @@ export async function isClioConnected(): Promise<boolean> {
  */
 export async function clearExpiredCache(): Promise<void> {
   const supabase = createAdminClient()
-  
+
   await supabase
     .from('clio_audit_cache')
     .delete()
     .lt('expires_at', new Date().toISOString())
 }
+
