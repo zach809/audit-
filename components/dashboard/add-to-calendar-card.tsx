@@ -21,6 +21,11 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
   const onboardingStatus = result.onboarding_status as string | null
   const auditStatus = result.audit_status as string
   const peopleInvolved = result.people_involved as string[] | null
+  const initialCalendarEntry = result.initial_calendar_entry as string | null
+  const attorneyInstructions = result.attorney_instructions as string | null
+  const caseManagerReply = result.case_manager_reply as string | null
+  const missingOrUnclear = result.missing_or_unclear as string | null
+  const flags = result.flags as string[] | null
 
   const getOnboardingBadge = () => {
     if (onboardingStatus === 'welcome_packet_sent_meeting_scheduled') {
@@ -94,21 +99,21 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <span className="font-medium">{String(result.actual_replier ?? '') || 'No reply'}</span>
             </div>
           </div>
-          {!!result.initial_calendar_entry && (
+          {initialCalendarEntry && (
             <div className="flex items-start gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <span className="text-muted-foreground">Calendar Entry: </span>
-                <span className="font-medium">{String(result.initial_calendar_entry ?? '')}</span>
+                <span className="font-medium">{initialCalendarEntry}</span>
               </div>
             </div>
           )}
-          {!!result.attorney_instructions && (
+          {attorneyInstructions && (
             <div className="flex items-start gap-2">
               <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <span className="text-muted-foreground">Attorney Notes: </span>
-                <span className="font-medium">{String(result.attorney_instructions ?? '')}</span>
+                <span className="font-medium">{attorneyInstructions}</span>
               </div>
             </div>
           )}
@@ -117,7 +122,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
           <span className="text-sm text-muted-foreground">Onboarding Status:</span>
           {getOnboardingBadge()}
         </div>
-        {result.case_manager_reply && (
+        {caseManagerReply && (
           <>
             <Separator />
             <div className="space-y-2">
@@ -130,21 +135,21 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
                   ? 'bg-emerald-50 border-emerald-200'
                   : 'bg-amber-50 border-amber-200'
               }`}>
-                {String(result.case_manager_reply ?? '')}
+                {caseManagerReply}
               </div>
             </div>
           </>
         )}
-        {result.missing_or_unclear && (
+        {missingOrUnclear && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
             <p className="text-sm text-amber-700">
-              <strong>Missing/Unclear:</strong> {String(result.missing_or_unclear ?? '')}
+              <strong>Missing/Unclear:</strong> {missingOrUnclear}
             </p>
           </div>
         )}
-        {result.flags && (result.flags as string[]).length > 0 && (
+        {flags && flags.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {(result.flags as string[]).map((flag, index) => (
+            {flags.map((flag, index) => (
               <Badge key={index} variant="outline" className="text-xs">
                 {flag}
               </Badge>
