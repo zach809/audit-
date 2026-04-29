@@ -194,6 +194,6 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
       </CardContent>
     </Card>
   )
-}
+} 
 
 
