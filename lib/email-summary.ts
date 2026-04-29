@@ -124,7 +124,7 @@ function generateEmailHtml(
       <div class="item">
         <strong>${item.result.client_name || 'Unknown Client'}</strong>
         <span class="badge ${item.result.audit_status === 'no_reply' ? 'badge-error' : 'badge-warning'}">
-          ${formatStatus(item.result.audit_status)}
+          ${formatStatus(item.result.audit_status as AuditStatus)}
         </span>
         <p><strong>Attorney:</strong> ${item.result.attorney || 'N/A'}</p>
         <p><strong>Subject:</strong> ${item.thread.subject}</p>
@@ -165,7 +165,7 @@ function generateEmailText(
     
     for (const item of needsAttention) {
       text += `Client: ${item.result.client_name || 'Unknown'}\n`
-      text += `Status: ${formatStatus(item.result.audit_status)}\n`
+      text += `Status: ${formatStatus(item.result.audit_status as AuditStatus)}\n`
       text += `Attorney: ${item.result.attorney || 'N/A'}\n`
       text += `Subject: ${item.thread.subject}\n`
       if (item.result.missing_or_unclear) {
