@@ -1,33 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import Link from 'next/link'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useCallback } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import {
-  Play,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  ArrowLeft,
-  Loader2,
-  Phone,
-  Mail,
-  Download,
-  ChevronDown,
-  Calendar
-} from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
-type YesNoNA = 'Yes' | 'No' | 'N/A'
-type AuditStatus = 'Pass' | 'Flag'
 type AuditRunStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'rate_limited'
 
 export default function ClioAuditPage() {
-  const [isConnected, setIsConnected] = useState<boolean>(true) // ✅ FORCE TRUE DEFAULT
   const [auditStatus, setAuditStatus] = useState<AuditRunStatus | null>(null)
   const [totalMatters, setTotalMatters] = useState(0)
   const [processedMatters, setProcessedMatters] = useState(0)
@@ -41,27 +24,35 @@ export default function ClioAuditPage() {
     d.setDate(d.getDate() - 14)
     return d.toISOString().split('T')[0]
   })
+
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
 
-  // ✅ FIXED CONNECTION CHECK (never blocks UI)
-  const checkConnection = useCallback(async () => {
+  const fetchResults = async (auditRunId: string) => {
     try {
-      const res = await fetch('/api/clio/status')
+      const res = await fetch(`/api/clio/audit/results?audit_run_id=${auditRunId}`)
       const data = await res.json()
-      setIsConnected(Boolean(data?.connected ?? data?.isConnected ?? true))
-    } catch {
-      setIsConnected(true) // ✅ NEVER BLOCK UI
+
+      if (data.results) {
+        setRows(data.results)
+      }
+    } catch (err) {
+      console.error('Failed to fetch results:', err)
     }
-  }, [])
+  }
 
   const fetchAuditStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/clio/audit/status')
       const data = await res.json()
+
       if (data.audit_run) {
         setAuditStatus(data.audit_run.status)
         setTotalMatters(data.audit_run.total_matters || 0)
         setProcessedMatters(data.audit_run.processed_matters || 0)
+
+        if (data.audit_run.id) {
+          await fetchResults(data.audit_run.id)
+        }
       }
     } catch (err) {
       console.error(err)
@@ -69,6 +60,50 @@ export default function ClioAuditPage() {
       setIsLoading(false)
     }
   }, [])
+
+  const processBatches = async (auditRunId: string) => {
+    let keepGoing = true
+
+    while (keepGoing) {
+      try {
+        const res = await fetch('/api/clio/audit/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audit_run_id: auditRunId }),
+        })
+
+        const data = await res.json()
+
+        if (!data.success) {
+          setError(data.error || 'Batch processing failed')
+          keepGoing = false
+          break
+        }
+
+        setAuditStatus(data.status)
+        setProcessedMatters(data.total_processed || 0)
+        setTotalMatters(data.total_matters || 0)
+
+        if (
+          data.status === 'completed' ||
+          data.status === 'failed' ||
+          data.status === 'rate_limited'
+        ) {
+          keepGoing = false
+        }
+
+        if (keepGoing) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Batch processing error')
+        keepGoing = false
+      }
+    }
+
+    await fetchAuditStatus()
+    setIsProcessing(false)
+  }
 
   const startAudit = async () => {
     setIsProcessing(true)
@@ -78,7 +113,11 @@ export default function ClioAuditPage() {
       const res = await fetch('/api/clio/audit/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ start_date: startDate, end_date: endDate })
+        body: JSON.stringify({
+          batch_size: 5,
+          start_date: startDate,
+          end_date: endDate,
+        }),
       })
 
       const data = await res.json()
@@ -90,17 +129,16 @@ export default function ClioAuditPage() {
       }
 
       setAuditStatus('in_progress')
+      await processBatches(data.audit_run_id)
     } catch (err) {
-      setError('Failed to start audit')
-    } finally {
+      setError(err instanceof Error ? err.message : 'Failed to start audit')
       setIsProcessing(false)
     }
   }
 
   useEffect(() => {
-    checkConnection()
     fetchAuditStatus()
-  }, [checkConnection, fetchAuditStatus])
+  }, [fetchAuditStatus])
 
   if (isLoading) {
     return (
@@ -112,13 +150,8 @@ export default function ClioAuditPage() {
 
   return (
     <div className="space-y-6 p-6">
+      <h1 className="text-2xl font-bold">Clio Audit</h1>
 
-      {/* HEADER */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Clio Audit</h1>
-      </div>
-
-      {/* ERROR */}
       {error && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
@@ -127,46 +160,66 @@ export default function ClioAuditPage() {
         </Card>
       )}
 
-      {/* ✅ ALWAYS SHOW CONTROLS */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-
-          {/* DATE RANGE */}
           <div className="flex gap-2">
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
 
-          {/* RUN BUTTON */}
           <Button onClick={startAudit} disabled={isProcessing}>
             {isProcessing ? 'Processing...' : 'Run Audit'}
           </Button>
 
-          {/* STATUS */}
-          {auditStatus && (
-            <Badge>{auditStatus}</Badge>
-          )}
+          {auditStatus && <Badge>{auditStatus}</Badge>}
 
-          {/* PROGRESS */}
           {totalMatters > 0 && (
-            <div>
+            <div className="space-y-2">
               <p>{processedMatters} / {totalMatters}</p>
               <Progress value={(processedMatters / totalMatters) * 100} />
             </div>
           )}
-
         </CardContent>
       </Card>
 
-      {/* EMPTY STATE */}
-      {rows.length === 0 && (
+      {rows.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p>No audit data yet. Click "Run Audit".</p>
           </CardContent>
         </Card>
+      ) : (
+        <Card>
+          <CardContent className="pt-6 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-2">Client</th>
+                  <th className="text-left p-2">Matter</th>
+                  <th className="text-left p-2">Attorney</th>
+                  <th className="text-left p-2">Status</th>
+                  <th className="text-left p-2">Missing Items</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row: any) => (
+                  <tr key={row.id} className="border-b">
+                    <td className="p-2">{row.client_name || 'Unknown'}</td>
+                    <td className="p-2">{row.matter_display_number || row.matter_id}</td>
+                    <td className="p-2">{row.attorney_name || '—'}</td>
+                    <td className="p-2">{row.overall_status}</td>
+                    <td className="p-2">
+                      {Array.isArray(row.missing_items)
+                        ? row.missing_items.join(', ')
+                        : row.missing_items || 'OK'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       )}
-
     </div>
   )
 }
