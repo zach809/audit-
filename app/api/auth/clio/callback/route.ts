@@ -64,9 +64,10 @@ export async function GET(request: NextRequest) {
     const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000)).toISOString()
 
     const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-})
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    })
+
     const client = await pool.connect()
 
     try {
