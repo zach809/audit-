@@ -1,5 +1,18 @@
-import { google, gmail_v1 } from 'googleapis'
+import { google, gmail_v1, calendar_v3 } from 'googleapis'
 import { createAdminClient } from '@/lib/supabase/admin'
+
+export interface CalendarEvent {
+  id: string
+  summary: string
+  description: string | null
+  start: string | null
+  end: string | null
+  attendees: string[]
+  organizer: string | null
+  location: string | null
+  status: string
+  htmlLink: string | null
+}
 
 interface EmailThread {
   id: string
