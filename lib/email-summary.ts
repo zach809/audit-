@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import type { AuditResult, AuditStatus, EmailType } from '@/lib/types'
+import type { EmailAudit } from '@/lib/types'
+
+type AuditStatus = 'looks_good' | 'needs_follow_up' | 'no_reply' | 'wrong_case_manager' | 'needs_clarification'
+type EmailType = 'court_results' | 'add_to_calendar'
+type AuditResult = EmailAudit
 
 interface AuditResults {
   totalProcessed: number
