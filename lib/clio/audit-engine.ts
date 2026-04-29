@@ -1,436 +1,252 @@
-export type ClioMatter = {
-  id: string | number
-  display_number?: string
-  description?: string
-  status?: string
-  created_at?: string
-  updated_at?: string
+// lib/clio/audit-engine.ts
 
-  client?: {
-    id?: string | number
-    name?: string
-    first_name?: string
-    last_name?: string
-    primary_email_address?: string
-    primary_phone_number?: string
-  }
+import {
+  ClioMatter,
+  ClioCalendarEntry,
+  ClioCommunication,
+  ClioNote,
+} from "./types"
 
-  custom_field_values?: any[]
-  relationships?: any[]
-  calendar_entries?: any[]
-  communications?: any[]
-  notes?: any[]
-  tasks?: any[]
+export type AuditStatus = "Pass" | "Flag"
+export type YesNoNA = "Yes" | "No" | "N/A"
+
+export type MissingItemType =
+  | "Attorney Call"
+  | "Court Reminder/Court Date"
+  | "Welcome Packet"
+  | "Client Contact"
+  | "Appearance Filing Email"
+  | "Court Results Email"
+  | "Court Results Notes"
+  | "Next Court Date"
+  | "Late Court Results"
+  | "Matter Data"
+
+export type MatterAuditBundle = {
+  matter: ClioMatter
+  calendarEntries: ClioCalendarEntry[]
+  communications: ClioCommunication[]
+  notes: ClioNote[]
 }
 
-export type AuditIssueSeverity = "pass" | "warning" | "critical"
+export type AuditRow = {
+  id: string
 
-export type AuditIssue = {
-  code: string
-  title: string
-  severity: AuditIssueSeverity
-  message: string
-}
-
-export type AuditResult = {
-  matterId: string
-  matterNumber?: string
   clientName: string
-  matterDescription?: string
-  createdAt?: string
-  status?: string
-  passed: boolean
-  issues: AuditIssue[]
+  matterNumber: string
+  responsibleAttorney: string
+  matterCreatedAt: string
+
+  attorneyCallScheduledWithin15Minutes: YesNoNA
+  courtDateWithin15Minutes: YesNoNA
+  welcomePacketSentWithin15Minutes: YesNoNA
+
+  clientContactWithin24Hours: YesNoNA
+  appearanceFilingEmailWithin24Hours: YesNoNA
+
+  courtDate: string
+  courtResultsEmailSent: YesNoNA
+  courtResultsSentWithin24Hours: YesNoNA
+  courtResultsDocumentedInNotes: YesNoNA
+  resultSentTimestamp: string
+  nextCourtDateAdded: YesNoNA
+
+  status: AuditStatus
+  missingItemTypes: MissingItemType[]
+  notes: string
 }
 
-export type AuditSummary = {
-  totalMatters: number
-  passedMatters: number
-  flaggedMatters: number
-  criticalIssues: number
-  warningIssues: number
-  totalIssues: number
+const FIFTEEN_MIN = 15 * 60 * 1000
+const DAY_24 = 24 * 60 * 60 * 1000
+
+const lower = (v: any) => (v ? String(v).toLowerCase() : "")
+
+const toDate = (v?: string) => {
+  if (!v) return null
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? null : d
 }
 
-function toText(value: unknown): string {
-  if (value === null || value === undefined) return ""
-  return String(value).toLowerCase()
+const format = (v?: string) => {
+  const d = toDate(v)
+  return d ? d.toLocaleString() : ""
 }
 
-function getClientName(matter: ClioMatter): string {
-  const client = matter.client
+const getClient = (m: ClioMatter) =>
+  m.client?.name ||
+  [m.client?.first_name, m.client?.last_name].filter(Boolean).join(" ") ||
+  "Unknown Client"
 
-  if (!client) return "Unknown Client"
+const getMatterNum = (m: ClioMatter) =>
+  m.display_number || String(m.id || "")
 
-  if (client.name) return client.name
+const getAttorney = (m: ClioMatter) =>
+  m.responsible_attorney?.name || "Unassigned"
 
-  const fullName = [client.first_name, client.last_name]
-    .filter(Boolean)
-    .join(" ")
-    .trim()
+const textCalendar = (e: ClioCalendarEntry) =>
+  [e.summary, e.description].map(lower).join(" ")
 
-  return fullName || "Unknown Client"
+const textComm = (c: ClioCommunication) =>
+  [c.subject, c.body].map(lower).join(" ")
+
+const textNote = (n: ClioNote) =>
+  [n.detail, (n as any).subject].map(lower).join(" ")
+
+const hasKeyword = (text: string, keys: string[]) =>
+  keys.some(k => text.includes(k))
+
+const within = (target?: string, base?: Date, ms?: number) => {
+  const d = toDate(target)
+  if (!d || !base || !ms) return false
+  const diff = d.getTime() - base.getTime()
+  return diff >= 0 && diff <= ms
 }
 
-function daysSince(dateValue?: string): number | null {
-  if (!dateValue) return null
-
-  const date = new Date(dateValue)
-
-  if (Number.isNaN(date.getTime())) return null
-
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+const findComm = (comms: ClioCommunication[], keys: string[], base?: Date, ms?: number) => {
+  return comms.find(c => {
+    if (!hasKeyword(textComm(c), keys)) return false
+    if (base && ms) return within(c.created_at, base, ms)
+    return true
+  }) || null
 }
 
-function hoursSince(dateValue?: string): number | null {
-  if (!dateValue) return null
-
-  const date = new Date(dateValue)
-
-  if (Number.isNaN(date.getTime())) return null
-
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-
-  return Math.floor(diffMs / (1000 * 60 * 60))
+const findCal = (cal: ClioCalendarEntry[], keys: string[], base?: Date, ms?: number) => {
+  return cal.find(e => {
+    if (!hasKeyword(textCalendar(e), keys)) return false
+    if (base && ms) return within(e.start_at, base, ms)
+    return true
+  }) || null
 }
 
-function arrayText(items?: any[]): string {
-  if (!Array.isArray(items)) return ""
-
-  return items
-    .map((item) => JSON.stringify(item))
-    .join(" ")
-    .toLowerCase()
+const findNote = (notes: ClioNote[], keys: string[]) => {
+  return notes.find(n => hasKeyword(textNote(n), keys)) || null
 }
 
-function hasCalendarEvent(matter: ClioMatter, keywords: string[]): boolean {
-  const text = arrayText(matter.calendar_entries)
+const getCourtEvents = (cal: ClioCalendarEntry[]) =>
+  cal.filter(e =>
+    hasKeyword(textCalendar(e), [
+      "court",
+      "hearing",
+      "trial",
+      "zoom",
+      "corte",
+    ])
+  )
 
-  return keywords.some((keyword) => text.includes(keyword.toLowerCase()))
-}
+export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
+  const m = bundle.matter
+  const created = toDate(m.created_at)
 
-function hasCommunication(matter: ClioMatter, keywords: string[]): boolean {
-  const text = arrayText(matter.communications)
+  if (!created) {
+    return [{
+      id: `${m?.id || "unknown"}-missing-created`,
+      clientName: getClient(m),
+      matterNumber: getMatterNum(m),
+      responsibleAttorney: getAttorney(m),
+      matterCreatedAt: "",
+      attorneyCallScheduledWithin15Minutes: "N/A",
+      courtDateWithin15Minutes: "N/A",
+      welcomePacketSentWithin15Minutes: "N/A",
+      clientContactWithin24Hours: "N/A",
+      appearanceFilingEmailWithin24Hours: "N/A",
+      courtDate: "",
+      courtResultsEmailSent: "N/A",
+      courtResultsSentWithin24Hours: "N/A",
+      courtResultsDocumentedInNotes: "N/A",
+      resultSentTimestamp: "",
+      nextCourtDateAdded: "N/A",
+      status: "Flag",
+      missingItemTypes: ["Matter Data"],
+      notes: "Missing created_at",
+    }]
+  }
 
-  return keywords.some((keyword) => text.includes(keyword.toLowerCase()))
-}
+  const cal = bundle.calendarEntries
+  const comm = bundle.communications
+  const notes = bundle.notes
 
-function hasNote(matter: ClioMatter, keywords: string[]): boolean {
-  const text = arrayText(matter.notes)
+  const attorneyCall = findCal(cal, ["call", "phone"], created, FIFTEEN_MIN)
+  const courtEarly = findCal(cal, ["court", "hearing"], created, FIFTEEN_MIN)
+  const welcome = findComm(comm, ["welcome"], created, FIFTEEN_MIN)
 
-  return keywords.some((keyword) => text.includes(keyword.toLowerCase()))
-}
+  const contact = findComm(comm, ["call", "voicemail"], created, DAY_24)
+  const appearance = findComm(comm, ["appearance"], created, DAY_24)
 
-function hasTask(matter: ClioMatter, keywords: string[]): boolean {
-  const text = arrayText(matter.tasks)
+  const baseMissing: MissingItemType[] = []
 
-  return keywords.some((keyword) => text.includes(keyword.toLowerCase()))
-}
+  if (!attorneyCall) baseMissing.push("Attorney Call")
+  if (!courtEarly) baseMissing.push("Court Reminder/Court Date")
+  if (!welcome) baseMissing.push("Welcome Packet")
+  if (!contact) baseMissing.push("Client Contact")
+  if (!appearance) baseMissing.push("Appearance Filing Email")
 
-function addIssue(
-  issues: AuditIssue[],
-  code: string,
-  title: string,
-  severity: AuditIssueSeverity,
-  message: string
-) {
-  issues.push({
-    code,
-    title,
-    severity,
-    message,
+  const courtEvents = getCourtEvents(cal)
+
+  if (!courtEvents.length) {
+    return [{
+      id: `${m.id}-base`,
+      clientName: getClient(m),
+      matterNumber: getMatterNum(m),
+      responsibleAttorney: getAttorney(m),
+      matterCreatedAt: format(m.created_at),
+      attorneyCallScheduledWithin15Minutes: attorneyCall ? "Yes" : "No",
+      courtDateWithin15Minutes: courtEarly ? "Yes" : "No",
+      welcomePacketSentWithin15Minutes: welcome ? "Yes" : "No",
+      clientContactWithin24Hours: contact ? "Yes" : "No",
+      appearanceFilingEmailWithin24Hours: appearance ? "Yes" : "No",
+      courtDate: "",
+      courtResultsEmailSent: "N/A",
+      courtResultsSentWithin24Hours: "N/A",
+      courtResultsDocumentedInNotes: "N/A",
+      resultSentTimestamp: "",
+      nextCourtDateAdded: "N/A",
+      status: baseMissing.length ? "Flag" : "Pass",
+      missingItemTypes: baseMissing,
+      notes: baseMissing.join(", ") || "OK",
+    }]
+  }
+
+  return courtEvents.map((e, i) => {
+    const courtDate = toDate(e.start_at)
+
+    const resultEmail = findComm(comm, ["result", "resultado"])
+    const resultNote = findNote(notes, ["result", "resultado"])
+
+    const late =
+      resultEmail && courtDate
+        ? !within(resultEmail.created_at, courtDate, DAY_24)
+        : true
+
+    const missing = [...baseMissing]
+
+    if (!resultEmail) missing.push("Court Results Email")
+    if (!resultNote) missing.push("Court Results Notes")
+    if (late) missing.push("Late Court Results")
+
+    return {
+      id: `${m.id}-court-${i}`,
+      clientName: getClient(m),
+      matterNumber: getMatterNum(m),
+      responsibleAttorney: getAttorney(m),
+      matterCreatedAt: format(m.created_at),
+
+      attorneyCallScheduledWithin15Minutes: attorneyCall ? "Yes" : "No",
+      courtDateWithin15Minutes: courtEarly ? "Yes" : "No",
+      welcomePacketSentWithin15Minutes: welcome ? "Yes" : "No",
+
+      clientContactWithin24Hours: contact ? "Yes" : "No",
+      appearanceFilingEmailWithin24Hours: appearance ? "Yes" : "No",
+
+      courtDate: format(e.start_at),
+      courtResultsEmailSent: resultEmail ? "Yes" : "No",
+      courtResultsSentWithin24Hours: late ? "No" : "Yes",
+      courtResultsDocumentedInNotes: resultNote ? "Yes" : "No",
+      resultSentTimestamp: format(resultEmail?.created_at),
+      nextCourtDateAdded: "N/A",
+
+      status: missing.length ? "Flag" : "Pass",
+      missingItemTypes: missing,
+      notes: missing.join(", ") || "OK",
+    }
   })
-}
-
-export function auditMatter(matter: ClioMatter): AuditResult {
-  const issues: AuditIssue[] = []
-
-  const matterId = String(matter.id)
-  const clientName = getClientName(matter)
-
-  const createdHoursAgo = hoursSince(matter.created_at)
-  const createdDaysAgo = daysSince(matter.created_at)
-
-  const statusText = toText(matter.status)
-
-  const hasWelcomePacket = hasCommunication(matter, [
-    "welcome packet",
-    "welcome email",
-    "bienvenido",
-    "paquete de bienvenida",
-  ])
-
-  const hasAttorneyCall = hasCalendarEvent(matter, [
-    "phone",
-    "call",
-    "client-attorney",
-    "attorney call",
-    "mf-phone",
-    "meeting",
-    "consulta",
-    "llamada",
-  ])
-
-  const hasCourtDate = hasCalendarEvent(matter, [
-    "court",
-    "hearing",
-    "zoom",
-    "trial",
-    "pretrial",
-    "arraignment",
-    "status",
-    "corte",
-    "audiencia",
-  ])
-
-  const hasCourtReminder = hasCalendarEvent(matter, [
-    "court",
-    "hearing",
-    "zoom",
-    "corte",
-    "audiencia",
-  ])
-
-  const hasAppearanceFiled = hasCommunication(matter, [
-    "appearance",
-    "filed appearance",
-    "notice of appearance",
-    "entry of appearance",
-    "comparecencia",
-  ])
-
-  const hasCourtResultSent = hasCommunication(matter, [
-    "court result",
-    "results from court",
-    "resultado",
-    "resultados de corte",
-  ])
-
-  const hasCourtResultNote = hasNote(matter, [
-    "court result",
-    "results from court",
-    "resultado",
-    "resultados de corte",
-  ])
-
-  const hasClientContact = hasCommunication(matter, [
-    "called client",
-    "spoke with client",
-    "left voicemail",
-    "voicemail",
-    "client contacted",
-    "llamé",
-    "llamada",
-    "mensaje de voz",
-  ])
-
-  if (!matter.id) {
-    addIssue(
-      issues,
-      "MISSING_MATTER_ID",
-      "Missing matter ID",
-      "critical",
-      "This matter is missing an ID."
-    )
-  }
-
-  if (clientName === "Unknown Client") {
-    addIssue(
-      issues,
-      "MISSING_CLIENT_NAME",
-      "Missing client name",
-      "critical",
-      "No client name was found on this matter."
-    )
-  }
-
-  if (!matter.created_at) {
-    addIssue(
-      issues,
-      "MISSING_CREATED_DATE",
-      "Missing created date",
-      "warning",
-      "This matter does not have a created date."
-    )
-  }
-
-  if (statusText && !["open", "active", "pending"].some((s) => statusText.includes(s))) {
-    addIssue(
-      issues,
-      "MATTER_NOT_OPEN",
-      "Matter may not be open",
-      "warning",
-      `Matter status is "${matter.status}".`
-    )
-  }
-
-  if (createdHoursAgo !== null && createdHoursAgo >= 0 && createdHoursAgo <= 24) {
-    if (!hasWelcomePacket) {
-      addIssue(
-        issues,
-        "WELCOME_PACKET_MISSING",
-        "Welcome packet not found",
-        "critical",
-        "No welcome packet or welcome email was found in communications."
-      )
-    }
-
-    if (!hasAttorneyCall) {
-      addIssue(
-        issues,
-        "ATTORNEY_CALL_MISSING",
-        "Client-attorney call not scheduled",
-        "critical",
-        "No client-attorney call/calendar meeting was found."
-      )
-    }
-
-    if (!hasCourtReminder) {
-      addIssue(
-        issues,
-        "COURT_REMINDER_MISSING",
-        "Court reminder/date missing",
-        "critical",
-        "No court date, hearing, Zoom, or court reminder was found on the calendar."
-      )
-    }
-  }
-
-  if (createdHoursAgo !== null && createdHoursAgo >= 24) {
-    if (!hasClientContact) {
-      addIssue(
-        issues,
-        "CLIENT_CONTACT_MISSING",
-        "Client contact not confirmed",
-        "warning",
-        "No communication showing client contact, call, or voicemail was found within the expected workflow."
-      )
-    }
-
-    if (!hasAppearanceFiled) {
-      addIssue(
-        issues,
-        "APPEARANCE_NOT_FILED",
-        "Appearance filing not found",
-        "critical",
-        "No communication/template showing that the appearance was filed was found."
-      )
-    }
-  }
-
-  if (createdHoursAgo !== null && createdHoursAgo >= 48 && !hasAppearanceFiled) {
-    addIssue(
-      issues,
-      "APPEARANCE_OVERDUE_48_HOURS",
-      "Appearance overdue",
-      "critical",
-      "This matter appears to be more than 48 hours old and no appearance filing was found."
-    )
-  }
-
-  if (hasCourtDate && !hasCourtResultSent) {
-    addIssue(
-      issues,
-      "COURT_RESULT_NOT_SENT",
-      "Court result email not found",
-      "warning",
-      "A court date exists, but no court result email/template was found."
-    )
-  }
-
-  if (hasCourtDate && !hasCourtResultNote) {
-    addIssue(
-      issues,
-      "COURT_RESULT_NOTE_MISSING",
-      "Court result not in matter notes",
-      "warning",
-      "A court date exists, but no matching court result note was found in matter notes."
-    )
-  }
-
-  if (hasCourtResultSent && !hasCourtResultNote) {
-    addIssue(
-      issues,
-      "RESULT_SENT_BUT_NOT_NOTED",
-      "Court result sent but not noted",
-      "warning",
-      "Court result communication exists, but the result was not found in matter notes."
-    )
-  }
-
-  if (hasCourtResultNote && !hasCourtResultSent) {
-    addIssue(
-      issues,
-      "RESULT_NOTED_BUT_NOT_SENT",
-      "Court result noted but not sent",
-      "warning",
-      "Court result appears in notes, but no client-facing result communication was found."
-    )
-  }
-
-  return {
-    matterId,
-    matterNumber: matter.display_number,
-    clientName,
-    matterDescription: matter.description,
-    createdAt: matter.created_at,
-    status: matter.status,
-    passed: issues.length === 0,
-    issues,
-  }
-}
-
-export function runAudit(matters: ClioMatter[]): AuditResult[] {
-  if (!Array.isArray(matters)) return []
-
-  return matters.map(auditMatter)
-}
-
-export function summarizeAudit(results: AuditResult[]): AuditSummary {
-  const safeResults = Array.isArray(results) ? results : []
-
-  let criticalIssues = 0
-  let warningIssues = 0
-
-  for (const result of safeResults) {
-    for (const issue of result.issues || []) {
-      if (issue.severity === "critical") criticalIssues += 1
-      if (issue.severity === "warning") warningIssues += 1
-    }
-  }
-
-  return {
-    totalMatters: safeResults.length,
-    passedMatters: safeResults.filter((result) => result.passed).length,
-    flaggedMatters: safeResults.filter((result) => !result.passed).length,
-    criticalIssues,
-    warningIssues,
-    totalIssues: criticalIssues + warningIssues,
-  }
-}
-
-export function getFlaggedResults(results: AuditResult[]): AuditResult[] {
-  if (!Array.isArray(results)) return []
-
-  return results.filter((result) => !result.passed)
-}
-
-export function getCriticalResults(results: AuditResult[]): AuditResult[] {
-  if (!Array.isArray(results)) return []
-
-  return results.filter((result) =>
-    result.issues.some((issue) => issue.severity === "critical")
-  )
-}
-
-export function getWarningResults(results: AuditResult[]): AuditResult[] {
-  if (!Array.isArray(results)) return []
-
-  return results.filter((result) =>
-    result.issues.some((issue) => issue.severity === "warning")
-  )
 }
