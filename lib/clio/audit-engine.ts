@@ -100,7 +100,7 @@ export async function startAuditRun(
         0,
         batchSize,
         timeWindowDays,
-        JSON.stringify(matterIds),
+        matterIds,
         new Date().toISOString(),
       ]
     )
