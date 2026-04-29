@@ -140,8 +140,8 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
                 Case Manager Response
               </div>
               <div className={`text-sm p-3 rounded-md border ${onboardingStatus === 'welcome_packet_sent_meeting_scheduled'
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : 'bg-amber-50 border-amber-200'
+                ? 'bg-emerald-50 border-emerald-200'
+                : 'bg-amber-50 border-amber-200'
                 }`}>
                 {String(result.case_manager_reply ?? '')}
               </div>
