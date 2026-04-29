@@ -1,10 +1,10 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { 
-  User, 
-  Briefcase, 
-  Users, 
+import {
+  User,
+  Briefcase,
+  Users,
   Calendar,
   CheckCircle2,
   Clock,
@@ -62,7 +62,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="font-semibold">{result.client_name as string || 'Unknown Client'}</h4>
+              <h4 className="font-semibold">{String(result.client_name ?? '') || 'Unknown Client'}</h4>
               {getAuditStatusBadge()}
             </div>
             <p className="text-sm text-muted-foreground line-clamp-1">{subject}</p>
@@ -88,7 +88,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
             <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
               <span className="text-muted-foreground">Attorney: </span>
-              <span className="font-medium">{result.attorney as string || 'N/A'}</span>
+              <span className="font-medium">{String(result.attorney ?? '') || 'N/A'}</span>
             </div>
           </div>
 
@@ -97,7 +97,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
             <User className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div>
               <span className="text-muted-foreground">Case Manager: </span>
-              <span className="font-medium">{result.actual_replier as string || 'No reply'}</span>
+              <span className="font-medium">{String(result.actual_replier ?? '') || 'No reply'}</span>
             </div>
           </div>
 
@@ -107,7 +107,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <Calendar className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <span className="text-muted-foreground">Calendar Entry: </span>
-                <span className="font-medium">{result.initial_calendar_entry as string}</span>
+                <span className="font-medium">{String(result.initial_calendar_entry ?? '')}</span>
               </div>
             </div>
           )}
@@ -118,7 +118,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
               <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div>
                 <span className="text-muted-foreground">Attorney Notes: </span>
-                <span className="font-medium">{result.attorney_instructions as string}</span>
+                <span className="font-medium">{String(result.attorney_instructions ?? '')}</span>
               </div>
             </div>
           )}
@@ -139,12 +139,11 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
                 <MessageSquare className="h-4 w-4" />
                 Case Manager Response
               </div>
-              <div className={`text-sm p-3 rounded-md border ${
-                onboardingStatus === 'welcome_packet_sent_meeting_scheduled'
+              <div className={`text-sm p-3 rounded-md border ${onboardingStatus === 'welcome_packet_sent_meeting_scheduled'
                   ? 'bg-emerald-50 border-emerald-200'
                   : 'bg-amber-50 border-amber-200'
-              }`}>
-                {result.case_manager_reply as string}
+                }`}>
+                {String(result.case_manager_reply ?? '')}
               </div>
             </div>
           </>
@@ -154,7 +153,7 @@ export function AddToCalendarCard({ result, subject }: AddToCalendarCardProps) {
         {result.missing_or_unclear && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-md">
             <p className="text-sm text-amber-700">
-              <strong>Missing/Unclear:</strong> {result.missing_or_unclear as string}
+              <strong>Missing/Unclear:</strong> {String(result.missing_or_unclear ?? '')}
             </p>
           </div>
         )}
