@@ -195,8 +195,3 @@ export function CourtResultsCard({ result, subject }: CourtResultsCardProps) {
     </Card>
   )
 }
-
-
-
-
-}
