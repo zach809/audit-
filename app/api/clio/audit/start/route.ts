@@ -6,9 +6,15 @@ import type { StartAuditRequest, StartAuditResponse } from '@/lib/clio/types'
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify user is authenticated
+    // -----------------------------
+    // Auth check
+    // -----------------------------
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json(
@@ -17,8 +23,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if Clio is connected
+    // -----------------------------
+    // Clio connection check
+    // -----------------------------
     const connected = await isClioConnected()
+
     if (!connected) {
       return NextResponse.json(
         { success: false, error: 'Clio not connected' },
@@ -26,9 +35,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if there's an in-progress audit (only resume truly in-progress ones)
+    // -----------------------------
+    // Resume existing audit if active
+    // -----------------------------
     const currentRun = await getCurrentAuditRun()
-    if (currentRun && (currentRun.status === 'pending' || currentRun.status === 'in_progress')) {
+
+    if (
+      currentRun &&
+      (currentRun.status === 'pending' || currentRun.status === 'in_progress')
+    ) {
       return NextResponse.json({
         success: true,
         audit_run_id: currentRun.id,
@@ -36,28 +51,50 @@ export async function POST(request: NextRequest) {
       } satisfies StartAuditResponse)
     }
 
-    // Parse request body
+    // -----------------------------
+    // Parse request body safely
+    // -----------------------------
     let body: StartAuditRequest = {}
+
     try {
-      body = await request.json()
+      const parsed = await request.json()
+      if (parsed && typeof parsed === 'object') {
+        body = parsed
+      }
     } catch {
-      // Empty body is fine
+      // ignore empty/invalid body
     }
 
-    const batchSize = body.batch_size || 5  // Small batches to avoid rate limits
-    const startDate = body.start_date || null
-    const endDate = body.end_date || null
+    const batchSize = body.batch_size ?? 5
+    const startDate = body.start_date ?? null
+    const endDate = body.end_date ?? null
 
-    // Calculate time window days from dates, or default to 14
+    // -----------------------------
+    // Calculate time window
+    // -----------------------------
     let timeWindowDays = 14
+
     if (startDate && endDate) {
       const start = new Date(startDate)
       const end = new Date(endDate)
-      timeWindowDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        const diffMs = end.getTime() - start.getTime()
+
+        timeWindowDays =
+          Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1
+      }
     }
 
-    // Start new audit run
-    const auditRun = await startAuditRun(batchSize, timeWindowDays, startDate, endDate)
+    // -----------------------------
+    // Start audit run
+    // -----------------------------
+    const auditRun = await startAuditRun(
+      batchSize,
+      timeWindowDays,
+      startDate,
+      endDate
+    )
 
     return NextResponse.json({
       success: true,
@@ -66,10 +103,16 @@ export async function POST(request: NextRequest) {
     } satisfies StartAuditResponse)
   } catch (error) {
     console.error('[Clio Audit Start] Error:', error)
+
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+      },
       { status: 500 }
     )
   }
 }
-
