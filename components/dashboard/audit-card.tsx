@@ -162,8 +162,8 @@ export function AuditCard({ audit }: AuditCardProps) {
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">Response Time:</span>
-            <span className={`font-medium ${getResponseTimeColor(audit.response_time_minutes)}`}>
-              {formatResponseTime(audit.response_time_minutes)}
+            <span className={`font-medium ${getResponseTimeColor(audit.response_time_minutes ?? null)}`}>
+              {formatResponseTime(audit.response_time_minutes ?? null)}
             </span>
           </div>
         </div>
@@ -177,7 +177,7 @@ export function AuditCard({ audit }: AuditCardProps) {
                 Court Results
               </div>
               <p className="text-sm bg-background p-3 rounded-md border">
-                {audit.court_results_details}
+                {typeof audit.court_results_details === "string" ? audit.court_results_details : JSON.stringify(audit.court_results_details)}
               </p>
             </div>
           </>
