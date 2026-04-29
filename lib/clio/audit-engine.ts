@@ -21,12 +21,23 @@ export type MissingItemType =
   | "Next Court Date"
   | "Late Court Results"
   | "Matter Data"
+  | "Attorney-Client Meeting"
+  | "Scheduled Call"
 
 export type MatterAuditBundle = {
   matter: ClioMatter
   calendarEntries: ClioCalendarEntry[]
   communications: ClioCommunication[]
   notes: ClioNote[]
+}
+
+export type ScheduledEvent = {
+  id: string
+  summary: string
+  startAt: string
+  endAt: string
+  attendees: string[]
+  type: 'meeting' | 'call' | 'court' | 'other'
 }
 
 export type AuditRow = {
@@ -50,6 +61,13 @@ export type AuditRow = {
   courtResultsDocumentedInNotes: YesNoNA
   resultSentTimestamp: string
   nextCourtDateAdded: YesNoNA
+
+  // New calendar tracking fields
+  hasAttorneyClientMeeting: YesNoNA
+  hasScheduledCall: YesNoNA
+  scheduledEvents: ScheduledEvent[]
+  upcomingMeetings: ScheduledEvent[]
+  upcomingCalls: ScheduledEvent[]
 
   status: AuditStatus
   missingItemTypes: MissingItemType[]
@@ -128,10 +146,71 @@ const getCourtEvents = (cal: ClioCalendarEntry[]) =>
       "court",
       "hearing",
       "trial",
-      "zoom",
       "corte",
     ])
   )
+
+// Detect attorney-client meetings
+const getMeetingEvents = (cal: ClioCalendarEntry[]) =>
+  cal.filter(e =>
+    hasKeyword(textCalendar(e), [
+      "meeting",
+      "consultation",
+      "consult",
+      "intake",
+      "appointment",
+      "reunion",
+      "cita",
+      "zoom",
+      "teams",
+      "video",
+    ])
+  )
+
+// Detect scheduled calls (phone calls, callbacks)
+const getCallEvents = (cal: ClioCalendarEntry[]) =>
+  cal.filter(e =>
+    hasKeyword(textCalendar(e), [
+      "call",
+      "phone",
+      "callback",
+      "llamada",
+      "telefono",
+      "follow-up call",
+      "follow up call",
+    ])
+  )
+
+// Categorize calendar event type
+const categorizeEvent = (e: ClioCalendarEntry): ScheduledEvent['type'] => {
+  const text = textCalendar(e)
+  if (hasKeyword(text, ["court", "hearing", "trial", "corte"])) return 'court'
+  if (hasKeyword(text, ["meeting", "consultation", "consult", "intake", "appointment", "reunion", "cita", "zoom", "teams", "video"])) return 'meeting'
+  if (hasKeyword(text, ["call", "phone", "callback", "llamada", "telefono"])) return 'call'
+  return 'other'
+}
+
+// Convert ClioCalendarEntry to ScheduledEvent
+const toScheduledEvent = (e: ClioCalendarEntry): ScheduledEvent => ({
+  id: String(e.id),
+  summary: e.summary || 'Untitled Event',
+  startAt: e.start_at || '',
+  endAt: e.end_at || '',
+  attendees: (e.attendees || []).map(a => a.name || 'Unknown').filter(Boolean),
+  type: categorizeEvent(e),
+})
+
+// Get upcoming events (future only)
+const getUpcomingEvents = (events: ClioCalendarEntry[]): ScheduledEvent[] => {
+  const now = new Date()
+  return events
+    .filter(e => {
+      const start = toDate(e.start_at)
+      return start && start > now
+    })
+    .map(toScheduledEvent)
+    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
+}
 
 export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
   const m = bundle.matter
@@ -155,6 +234,11 @@ export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
       courtResultsDocumentedInNotes: "N/A",
       resultSentTimestamp: "",
       nextCourtDateAdded: "N/A",
+      hasAttorneyClientMeeting: "N/A",
+      hasScheduledCall: "N/A",
+      scheduledEvents: [],
+      upcomingMeetings: [],
+      upcomingCalls: [],
       status: "Flag",
       missingItemTypes: ["Matter Data"],
       notes: "Missing created_at",
@@ -172,6 +256,21 @@ export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
   const contact = findComm(comm, ["call", "voicemail"], created, DAY_24)
   const appearance = findComm(comm, ["appearance"], created, DAY_24)
 
+  // Get all meeting and call events
+  const meetingEvents = getMeetingEvents(cal)
+  const callEvents = getCallEvents(cal)
+  const courtEvents = getCourtEvents(cal)
+  
+  // Get upcoming meetings and calls
+  const upcomingMeetings = getUpcomingEvents(meetingEvents)
+  const upcomingCalls = getUpcomingEvents(callEvents)
+  
+  // All scheduled events for display
+  const allScheduledEvents = cal.map(toScheduledEvent)
+  
+  const hasMeeting = meetingEvents.length > 0
+  const hasCall = callEvents.length > 0
+
   const baseMissing: MissingItemType[] = []
 
   if (!attorneyCall) baseMissing.push("Attorney Call")
@@ -179,8 +278,8 @@ export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
   if (!welcome) baseMissing.push("Welcome Packet")
   if (!contact) baseMissing.push("Client Contact")
   if (!appearance) baseMissing.push("Appearance Filing Email")
-
-  const courtEvents = getCourtEvents(cal)
+  if (!hasMeeting) baseMissing.push("Attorney-Client Meeting")
+  if (!hasCall) baseMissing.push("Scheduled Call")
 
   if (!courtEvents.length) {
     return [{
@@ -200,6 +299,11 @@ export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
       courtResultsDocumentedInNotes: "N/A",
       resultSentTimestamp: "",
       nextCourtDateAdded: "N/A",
+      hasAttorneyClientMeeting: hasMeeting ? "Yes" : "No",
+      hasScheduledCall: hasCall ? "Yes" : "No",
+      scheduledEvents: allScheduledEvents,
+      upcomingMeetings,
+      upcomingCalls,
       status: baseMissing.length ? "Flag" : "Pass",
       missingItemTypes: baseMissing,
       notes: baseMissing.join(", ") || "OK",
@@ -243,6 +347,12 @@ export function auditMatterBundle(bundle: MatterAuditBundle): AuditRow[] {
       courtResultsDocumentedInNotes: resultNote ? "Yes" : "No",
       resultSentTimestamp: format(resultEmail?.created_at),
       nextCourtDateAdded: "N/A",
+
+      hasAttorneyClientMeeting: hasMeeting ? "Yes" : "No",
+      hasScheduledCall: hasCall ? "Yes" : "No",
+      scheduledEvents: allScheduledEvents,
+      upcomingMeetings,
+      upcomingCalls,
 
       status: missing.length ? "Flag" : "Pass",
       missingItemTypes: missing,

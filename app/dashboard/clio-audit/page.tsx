@@ -5,6 +5,15 @@ import { useMemo, useState } from "react"
 type YesNoNA = "Yes" | "No" | "N/A"
 type AuditStatus = "Pass" | "Flag"
 
+type ScheduledEvent = {
+  id: string
+  summary: string
+  startAt: string
+  endAt: string
+  attendees: string[]
+  type: 'meeting' | 'call' | 'court' | 'other'
+}
+
 type AuditRow = {
   id: string
   clientName: string
@@ -25,6 +34,13 @@ type AuditRow = {
   courtResultsDocumentedInNotes: YesNoNA
   resultSentTimestamp: string
   nextCourtDateAdded: YesNoNA
+
+  // Calendar tracking
+  hasAttorneyClientMeeting: YesNoNA
+  hasScheduledCall: YesNoNA
+  scheduledEvents: ScheduledEvent[]
+  upcomingMeetings: ScheduledEvent[]
+  upcomingCalls: ScheduledEvent[]
 
   status: AuditStatus
   missingItemTypes: string[]
@@ -62,6 +78,9 @@ export default function ClioAuditPage() {
   const [welcomeFilter, setWelcomeFilter] = useState("All")
   const [appearanceFilter, setAppearanceFilter] = useState("All")
   const [courtResultsFilter, setCourtResultsFilter] = useState("All")
+  const [meetingFilter, setMeetingFilter] = useState("All")
+  const [callFilter, setCallFilter] = useState("All")
+  const [expandedRow, setExpandedRow] = useState<string | null>(null)
 
   async function runAudit() {
     setLoading(true)
@@ -140,6 +159,20 @@ export default function ClioAuditPage() {
         return false
       }
 
+      if (
+        meetingFilter !== "All" &&
+        row.hasAttorneyClientMeeting !== meetingFilter
+      ) {
+        return false
+      }
+
+      if (
+        callFilter !== "All" &&
+        row.hasScheduledCall !== callFilter
+      ) {
+        return false
+      }
+
       return true
     })
   }, [
@@ -150,6 +183,8 @@ export default function ClioAuditPage() {
     welcomeFilter,
     appearanceFilter,
     courtResultsFilter,
+    meetingFilter,
+    callFilter,
   ])
 
   function exportCsv() {
@@ -163,6 +198,10 @@ export default function ClioAuditPage() {
       "Welcome Packet Sent Within 15 Minutes?",
       "Client Contact Within 24 Hours?",
       "Appearance Filing Email Within 24 Hours?",
+      "Has Attorney-Client Meeting?",
+      "Has Scheduled Call?",
+      "Upcoming Meetings",
+      "Upcoming Calls",
       "Court Date",
       "Court Results Template/Email Sent?",
       "Court Results Sent Within 24 Hours?",
@@ -172,6 +211,9 @@ export default function ClioAuditPage() {
       "Status",
       "Notes / Missing Items",
     ]
+
+    const formatEvents = (events: ScheduledEvent[]) => 
+      events.map(e => `${e.summary} (${e.startAt})`).join("; ") || "None"
 
     const csvRows = filteredRows.map((row) => [
       row.clientName,
@@ -183,6 +225,10 @@ export default function ClioAuditPage() {
       row.welcomePacketSentWithin15Minutes,
       row.clientContactWithin24Hours,
       row.appearanceFilingEmailWithin24Hours,
+      row.hasAttorneyClientMeeting,
+      row.hasScheduledCall,
+      formatEvents(row.upcomingMeetings || []),
+      formatEvents(row.upcomingCalls || []),
       row.courtDate,
       row.courtResultsEmailSent,
       row.courtResultsSentWithin24Hours,
@@ -338,6 +384,32 @@ export default function ClioAuditPage() {
           </select>
         </label>
 
+        <label>
+          <div>Meeting Scheduled</div>
+          <select
+            value={meetingFilter}
+            onChange={(event) => setMeetingFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="N/A">N/A</option>
+          </select>
+        </label>
+
+        <label>
+          <div>Call Scheduled</div>
+          <select
+            value={callFilter}
+            onChange={(event) => setCallFilter(event.target.value)}
+          >
+            <option value="All">All</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="N/A">N/A</option>
+          </select>
+        </label>
+
         <button onClick={runAudit} disabled={loading}>
           {loading ? "Running..." : "Run Audit"}
         </button>
@@ -415,6 +487,10 @@ export default function ClioAuditPage() {
               <Th>Welcome Packet Within 15 Min?</Th>
               <Th>Client Contact Within 24 Hr?</Th>
               <Th>Appearance Filing Within 24 Hr?</Th>
+              <Th>Meeting Scheduled?</Th>
+              <Th>Call Scheduled?</Th>
+              <Th>Upcoming Meetings</Th>
+              <Th>Upcoming Calls</Th>
               <Th>Court Date</Th>
               <Th>Court Results Email Sent?</Th>
               <Th>Court Results Sent Within 24 Hr?</Th>
@@ -428,7 +504,7 @@ export default function ClioAuditPage() {
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={17} style={{ padding: 20, textAlign: "center" }}>
+                <td colSpan={21} style={{ padding: 20, textAlign: "center" }}>
                   No audit rows yet. Click Run Audit.
                 </td>
               </tr>
@@ -461,6 +537,48 @@ export default function ClioAuditPage() {
                   <Td>{row.welcomePacketSentWithin15Minutes}</Td>
                   <Td>{row.clientContactWithin24Hours}</Td>
                   <Td>{row.appearanceFilingEmailWithin24Hours}</Td>
+                  <Td style={{ color: row.hasAttorneyClientMeeting === "Yes" ? "#0f7a35" : row.hasAttorneyClientMeeting === "No" ? "#b42318" : undefined }}>
+                    {row.hasAttorneyClientMeeting}
+                  </Td>
+                  <Td style={{ color: row.hasScheduledCall === "Yes" ? "#0f7a35" : row.hasScheduledCall === "No" ? "#b42318" : undefined }}>
+                    {row.hasScheduledCall}
+                  </Td>
+                  <Td>
+                    {(row.upcomingMeetings || []).length > 0 ? (
+                      <div style={{ fontSize: 12 }}>
+                        {row.upcomingMeetings.slice(0, 3).map((e, i) => (
+                          <div key={i} style={{ marginBottom: 4, padding: "2px 4px", background: "#e0f2fe", borderRadius: 4 }}>
+                            <strong>{e.summary}</strong>
+                            <br />
+                            <span style={{ color: "#666" }}>{new Date(e.startAt).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        {row.upcomingMeetings.length > 3 && (
+                          <div style={{ color: "#666" }}>+{row.upcomingMeetings.length - 3} more</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ color: "#999" }}>None</span>
+                    )}
+                  </Td>
+                  <Td>
+                    {(row.upcomingCalls || []).length > 0 ? (
+                      <div style={{ fontSize: 12 }}>
+                        {row.upcomingCalls.slice(0, 3).map((e, i) => (
+                          <div key={i} style={{ marginBottom: 4, padding: "2px 4px", background: "#fef3c7", borderRadius: 4 }}>
+                            <strong>{e.summary}</strong>
+                            <br />
+                            <span style={{ color: "#666" }}>{new Date(e.startAt).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        {row.upcomingCalls.length > 3 && (
+                          <div style={{ color: "#666" }}>+{row.upcomingCalls.length - 3} more</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ color: "#999" }}>None</span>
+                    )}
+                  </Td>
                   <Td>{row.courtDate}</Td>
                   <Td>{row.courtResultsEmailSent}</Td>
                   <Td>{row.courtResultsSentWithin24Hours}</Td>
