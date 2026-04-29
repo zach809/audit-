@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body: ProcessBatchRequest = await request.json()
-    
+
     if (!body.audit_run_id) {
       return NextResponse.json(
         { success: false, error: 'audit_run_id is required' },
@@ -50,11 +50,11 @@ export async function POST(request: NextRequest) {
       success: true,
       audit_run_id: auditRun.id,
       status: auditRun.status,
-      processed: result.processed,
-      processed_matters: auditRun.processed_matters,
+      processed_in_batch: result.processed,
+      total_processed: auditRun.processed_matters,
       total_matters: auditRun.total_matters,
       rate_limited: result.rateLimited,
-    } as ProcessBatchResponse)
+    } satisfies ProcessBatchResponse)
   } catch (error) {
     console.error('[Clio Audit Batch] Error:', error)
     return NextResponse.json(
