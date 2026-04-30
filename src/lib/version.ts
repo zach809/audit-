@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-direct-audit-button-2026-04-30-1725";
+export const APP_VERSION = "cwca-no-prefetch-actions-2026-04-30-1735";

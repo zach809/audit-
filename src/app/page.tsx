@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
@@ -66,13 +65,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           {connected ? (
             <span className="badge Pass">Clio Connected</span>
           ) : (
-            <Link className="button primary" href="/api/auth/clio/start">Connect Clio</Link>
+            <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>
           )}
           <form action="/api/audit/run" method="post">
             <button className="primary" type="submit">Run Audit Now</button>
           </form>
-          <Link className="button" href={`/api/export.csv?${exportParams}`}>Export CSV</Link>
-          <Link className="button" href="/logout">Log Out</Link>
+          <a className="button" href={`/api/export.csv?${exportParams}`}>Export CSV</a>
+          <a className="button" href="/logout">Log Out</a>
         </div>
       </div>
 
@@ -120,7 +119,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <input name="to" type="date" defaultValue={filters.to} />
           </label>
           <button type="submit">Apply</button>
-          <Link className="button" href="/">Clear</Link>
+          <a className="button" href="/">Clear</a>
         </form>
         <p className="muted small">
           Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
