@@ -77,7 +77,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <form action="/api/audit/run" method="post">
             <button className="primary" type="submit">Run Audit Now</button>
           </form>
-          <a className="button" href={`/api/export.csv?${exportParams}`}>Export CSV</a>
+          <form action={`/api/export.csv?${exportParams}`} method="post">
+            <button type="submit">Export CSV</button>
+          </form>
           <form action="/logout" method="post">
             <button type="submit">Log Out</button>
           </form>
@@ -135,6 +137,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <p className="muted small">
           Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
         </p>
+        <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
       </section>
 
       <section className="table-wrap">

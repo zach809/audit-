@@ -45,7 +45,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     order by
       case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
       m.matter_created_at desc
-    limit 500
+    limit 150
   `;
 
   const attorneys = await sql`

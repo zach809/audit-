@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-endpoint-error-detail-2026-04-30-1805";
+export const APP_VERSION = "cwca-stability-spec-align-2026-04-30-1825";

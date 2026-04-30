@@ -349,24 +349,15 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     : null;
 
   const clientContact = earliest(
-    [
-      ...(evidence.communications
-        .map((comm): Evidence<ClioCommunication> | null => {
-          const at = commDate(comm);
-          if (!at) return null;
-          const direction = isOutbound(comm, record.client_id);
-          if (direction !== true) return null;
-          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
-        })
-        .filter(Boolean) as Evidence<ClioCommunication>[]),
-      ...(evidence.notes
-        .map((note): Evidence<ClioNote> | null => {
-          const at = parseDate(note.created_at);
-          if (!at) return null;
-          return { item: note, at, source: "Note", url: evidenceUrl("notes", note.id) };
-        })
-        .filter(Boolean) as Evidence<ClioNote>[]),
-    ],
+    evidence.communications
+      .map((comm): Evidence<ClioCommunication> | null => {
+        const at = commDate(comm);
+        if (!at) return null;
+        const direction = isOutbound(comm, record.client_id);
+        if (direction !== true) return null;
+        return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+      })
+      .filter(Boolean) as Evidence<ClioCommunication>[],
   );
 
   const unknownDirection = evidence.communications.some((comm) => isOutbound(comm, record.client_id) === null);
@@ -408,8 +399,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     }),
     classify("CLIENT_CONTACT", clientContact, clientDeadline, {
       operationalState: "Needs Client Contact",
-      unknown: !clientContact && Boolean(commError || noteError || unknownDirection),
-      reasonCode: commError || noteError || "DIRECTION_UNCLEAR",
+      unknown: !clientContact && Boolean(commError || unknownDirection),
+      reasonCode: commError || "DIRECTION_UNCLEAR",
       now,
     }),
     classify("APPEARANCE_FILING", communicationEvidence(isAppearanceTemplate), appearanceDeadline, {
@@ -459,7 +450,10 @@ export async function auditNextBatch(client = new ClioClient()): Promise<{ audit
       select *
       from audit_matter
       where matter_status is distinct from 'Closed'
-      order by last_audited_at nulls first, matter_created_at desc
+      order by
+        case overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
+        last_audited_at nulls first,
+        matter_created_at desc
       limit ${appConfig().auditBatchSize}
     `;
     for (const matter of matters) {
@@ -469,7 +463,7 @@ export async function auditNextBatch(client = new ClioClient()): Promise<{ audit
         await upsertItems(matter.matter_id, result.items, result.overallStatus, result.court);
         audited += 1;
       } catch (error) {
-        const status = error instanceof ClioApiError && error.status === 403 ? "API_PERMISSION_DENIED" : "API_ERROR";
+        const status = apiReason(error, "matter");
         const items: AuditItemResult[] = [
           "SETUP_WELCOME",
           "SETUP_ATTY_CALL",

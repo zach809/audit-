@@ -3,6 +3,10 @@ import { dashboardCsv } from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
+  return NextResponse.redirect(new URL("/", request.url), 303);
+}
+
+export async function POST(request: NextRequest) {
   if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
