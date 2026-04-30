@@ -1,5 +1,5 @@
 import { addBusinessDaysDeadline, effectiveIntake, setupDeadlines } from "./business-time";
-import { ClioApiError, ClioClient, clioManageUrl } from "./clio";
+import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb } from "./db";
 import {
   haystack,
@@ -15,7 +15,6 @@ import type {
   ClioCalendarEntry,
   ClioCommunication,
   ClioMatter,
-  ClioNote,
   MatterRecord,
   OverallStatus,
   StepCode,
@@ -26,12 +25,10 @@ type Evidence<T> = { item: T; at: Date; source: AuditItemResult["evidenceSource"
 type EvidenceErrors = {
   communications?: string;
   calendars?: string;
-  notes?: string;
 };
 type EvidenceBundle = {
   communications: ClioCommunication[];
   calendars: ClioCalendarEntry[];
-  notes: ClioNote[];
   errors: EvidenceErrors;
 };
 
@@ -149,8 +146,8 @@ function matterNumber(matter: ClioMatter): string {
   return matter.display_number ?? String(matter.number ?? matter.id);
 }
 
-function evidenceUrl(type: "communications" | "calendar_entries" | "notes", id: number): string {
-  return clioManageUrl(`/${type}/${id}`);
+function evidenceUrl(type: "communications" | "calendar_entries", id: number): string {
+  return `/evidence/${type}/${id}`;
 }
 
 async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
@@ -246,7 +243,7 @@ export async function discoverMatters(client = new ClioClient()): Promise<number
 async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<EvidenceBundle> {
   const since = matter.effective_intake_at.toISOString();
   const to = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
-  const [communicationsResult, calendarsResult, notesResult] = await Promise.allSettled([
+  const [communicationsResult, calendarsResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
       fields: "id,subject,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name},receivers{id,name}",
       matter_id: matter.matter_id,
@@ -258,20 +255,13 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
       from: since,
       to,
     }),
-    client.list<ClioNote>("/notes.json", {
-      fields: "id,subject,created_at,updated_at,matter{id},author{id,name}",
-      matter_id: matter.matter_id,
-      created_since: since,
-    }),
   ]);
   const errors: EvidenceErrors = {};
   if (communicationsResult.status === "rejected") errors.communications = apiReason(communicationsResult.reason, "communications");
   if (calendarsResult.status === "rejected") errors.calendars = apiReason(calendarsResult.reason, "calendars");
-  if (notesResult.status === "rejected") errors.notes = apiReason(notesResult.reason, "notes");
   return {
     communications: communicationsResult.status === "fulfilled" ? communicationsResult.value : [],
     calendars: calendarsResult.status === "fulfilled" ? calendarsResult.value : [],
-    notes: notesResult.status === "fulfilled" ? notesResult.value : [],
     errors,
   };
 }
@@ -282,7 +272,6 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const appearanceDeadline = addBusinessDaysDeadline(record.effective_intake_at, 2);
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
-  const noteError = evidence.errors.notes;
 
   const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date) =>
     earliest(
@@ -412,8 +401,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     classify("COURT_RESULTS", courtResult, courtResultDeadline, {
       required: Boolean(lastCourtEnd),
       operationalState: "Needs Court Results",
-      unknown: Boolean(lastCourtEnd && !courtResult && (commError || calendarError || noteError)),
-      reasonCode: commError || calendarError || noteError,
+      unknown: Boolean(lastCourtEnd && !courtResult && (commError || calendarError)),
+      reasonCode: commError || calendarError,
       now,
     }),
     classify("POST_COURT_CALL", postCourtCall, postCourtCallDeadline, {

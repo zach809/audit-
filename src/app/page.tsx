@@ -29,15 +29,36 @@ function itemLabelsWithReasons(items: Array<{ stepCode: string; status: string; 
     .join(", ");
 }
 
-function stepCell(items: Array<{ stepCode: string; status: string; operationalState?: string; reasonCode?: string; evidenceUrl?: string }>, code: string) {
+type DashboardItem = {
+  stepCode: string;
+  status: string;
+  operationalState?: string;
+  reasonCode?: string;
+  evidenceSource?: string;
+  evidenceRefId?: string;
+  evidenceUrl?: string;
+};
+
+function evidencePath(item: DashboardItem): string {
+  if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}`;
+  if (item.evidenceRefId && item.evidenceSource === "Calendar") return `/evidence/calendar_entries/${item.evidenceRefId}`;
+  return item.evidenceUrl ?? "";
+}
+
+function evidenceLabel(item: DashboardItem): string {
+  return item.evidenceSource && item.evidenceRefId ? `${item.evidenceSource} #${item.evidenceRefId}` : "Evidence";
+}
+
+function stepCell(items: DashboardItem[], code: string) {
   const item = items.find((i) => i.stepCode === code);
   const status = item?.status ?? "Pending";
   const detail = item?.reasonCode || item?.operationalState || "";
+  const href = item ? evidencePath(item) : "";
   return (
     <div className="step-cell">
       {badge(status)}
       {detail && detail !== status ? <div className="detail">{detail}</div> : null}
-      {item?.evidenceUrl ? <a className="evidence-link" href={item.evidenceUrl} target="_blank" rel="noreferrer">Evidence</a> : null}
+      {href ? <a className="evidence-link" href={href}>{evidenceLabel(item!)}</a> : null}
     </div>
   );
 }
@@ -168,7 +189,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </thead>
           <tbody>
             {data.matters.map((m) => {
-              const items = m.items as Array<{ stepCode: string; status: string; operationalState?: string; evidenceUrl?: string; reasonCode?: string }>;
+              const items = m.items as DashboardItem[];
               return (
                 <tr key={m.matter_id}>
                   <td>{`${m.client_first_name} ${m.client_last_name}`.trim()}</td>
@@ -191,9 +212,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     <div><strong>Unknown:</strong> {itemLabelsWithReasons(items, "Unknown") || "None"}</div>
                   </td>
                   <td>
-                    {items.filter((i) => i.evidenceUrl).map((i) => (
-                      <div key={`${i.stepCode}-${i.evidenceUrl}`}>
-                        <a href={i.evidenceUrl} target="_blank" rel="noreferrer">{i.stepCode.replaceAll("_", " ")}</a>
+                    {items.filter((i) => evidencePath(i)).map((i) => (
+                      <div key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
+                        <a href={evidencePath(i)}>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</a>
                       </div>
                     ))}
                   </td>

@@ -27,21 +27,61 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     select
       m.*,
       case
-        when count(*) filter (where i.status = 'Unknown') > 0 then 'Review'
-        when count(*) filter (where i.status = 'Missing') > 0 then 'Flag'
-        when count(*) filter (where i.status = 'Late') > 0 then 'Late'
-        when count(*) filter (where i.status = 'Pending') > 0 then 'Pending'
+        when count(*) filter (where (
+          case
+            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+            else i.status
+          end
+        ) = 'Unknown') > 0 then 'Review'
+        when count(*) filter (where (
+          case
+            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+            else i.status
+          end
+        ) = 'Missing') > 0 then 'Flag'
+        when count(*) filter (where (
+          case
+            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+            else i.status
+          end
+        ) = 'Late') > 0 then 'Late'
+        when count(*) filter (where (
+          case
+            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+            else i.status
+          end
+        ) = 'Pending') > 0 then 'Pending'
         else m.overall_status
       end as display_overall_status,
       coalesce(json_agg(
         json_build_object(
           'stepCode', i.step_code,
-          'status', i.status,
-          'operationalState', i.operational_state,
+          'status',
+            case
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+              else i.status
+            end,
+          'operationalState',
+            case
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Needs Court Results' else 'Overdue' end
+              else i.operational_state
+            end,
           'deadlineAt', i.deadline_at,
           'evidenceAt', i.evidence_at,
+          'evidenceSource', i.evidence_source,
+          'evidenceRefId', i.evidence_ref_id,
           'evidenceUrl', i.evidence_url,
-          'reasonCode', i.reason_code
+          'reasonCode',
+            case
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%' then 'NOT_FOUND'
+              else i.reason_code
+            end
         )
         order by i.step_code
       ) filter (where i.step_code is not null), '[]') as items
@@ -74,10 +114,34 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       select
         m.matter_id,
         case
-          when count(*) filter (where i.status = 'Unknown') > 0 then 'Review'
-          when count(*) filter (where i.status = 'Missing') > 0 then 'Flag'
-          when count(*) filter (where i.status = 'Late') > 0 then 'Late'
-          when count(*) filter (where i.status = 'Pending') > 0 then 'Pending'
+          when count(*) filter (where (
+            case
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+              else i.status
+            end
+          ) = 'Unknown') > 0 then 'Review'
+          when count(*) filter (where (
+            case
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+              else i.status
+            end
+          ) = 'Missing') > 0 then 'Flag'
+          when count(*) filter (where (
+            case
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+              else i.status
+            end
+          ) = 'Late') > 0 then 'Late'
+          when count(*) filter (where (
+            case
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+              else i.status
+            end
+          ) = 'Pending') > 0 then 'Pending'
           else m.overall_status
         end as display_overall_status
       from audit_matter m
@@ -131,7 +195,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     "Evidence Links",
   ];
   const rows = matters.map((m) => {
-    const items = m.items as Array<{ stepCode: string; status: string; evidenceUrl?: string; reasonCode?: string }>;
+    const items = m.items as Array<{ stepCode: string; status: string; evidenceSource?: string; evidenceRefId?: string; evidenceUrl?: string; reasonCode?: string }>;
     const labels = (status: string) => items.filter((i) => i.status === status).map((i) => i.stepCode).join(", ");
     const getWithReason = (step: string) => {
       const item = items.find((i) => i.stepCode === step);
@@ -153,7 +217,10 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
       m.matter_created_at,
       m.last_court_date,
       `Late: ${labels("Late")}; Missing: ${labels("Missing")}; Unknown: ${labels("Unknown")}`,
-      items.map((i) => i.evidenceUrl).filter(Boolean).join(" "),
+      items
+        .filter((i) => i.evidenceRefId)
+        .map((i) => `${i.stepCode}: ${i.evidenceSource ?? "Evidence"} #${i.evidenceRefId}`)
+        .join("; "),
     ];
   });
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
