@@ -18,15 +18,6 @@ function step(items: Array<{ stepCode: string; status: string; operationalState?
   return item?.status ?? "Pending";
 }
 
-function setupStatus(items: Array<{ stepCode: string; status: string }>) {
-  const statuses = ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].map((code) => step(items, code));
-  if (statuses.includes("Unknown")) return "Unknown";
-  if (statuses.includes("Missing")) return "Missing";
-  if (statuses.includes("Late")) return "Late";
-  if (statuses.includes("Pending")) return "Pending";
-  return "On Time";
-}
-
 function itemLabels(items: Array<{ stepCode: string; status: string }>, status: string) {
   return items.filter((i) => i.status === status).map((i) => i.stepCode.replaceAll("_", " ")).join(", ");
 }
@@ -36,6 +27,19 @@ function itemLabelsWithReasons(items: Array<{ stepCode: string; status: string; 
     .filter((i) => i.status === status)
     .map((i) => `${i.stepCode.replaceAll("_", " ")}${i.reasonCode ? ` (${i.reasonCode})` : ""}`)
     .join(", ");
+}
+
+function stepCell(items: Array<{ stepCode: string; status: string; operationalState?: string; reasonCode?: string; evidenceUrl?: string }>, code: string) {
+  const item = items.find((i) => i.stepCode === code);
+  const status = item?.status ?? "Pending";
+  const detail = item?.reasonCode || item?.operationalState || "";
+  return (
+    <div className="step-cell">
+      {badge(status)}
+      {detail && detail !== status ? <div className="detail">{detail}</div> : null}
+      {item?.evidenceUrl ? <a className="evidence-link" href={item.evidenceUrl} target="_blank" rel="noreferrer">Evidence</a> : null}
+    </div>
+  );
 }
 
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
@@ -148,17 +152,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <th>Matter</th>
               <th>Attorney</th>
               <th>Overall</th>
-              <th>Setup</th>
+              <th>Welcome Packet</th>
+              <th>Attorney Call</th>
+              <th>Court Date Added</th>
               <th>Client Contact</th>
-              <th>Appearance</th>
+              <th>Appearance Filed</th>
               <th>Court Results</th>
               <th>Post-Court Call</th>
-              <th>Follow-Up</th>
+              <th>Client Follow-Up</th>
               <th>Created</th>
               <th>Last Court</th>
-              <th>Late</th>
-              <th>Missing</th>
-              <th>Unknown</th>
+              <th>Problems</th>
               <th>Evidence</th>
             </tr>
           </thead>
@@ -170,18 +174,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <td>{`${m.client_first_name} ${m.client_last_name}`.trim()}</td>
                   <td>{m.matter_number}</td>
                   <td>{m.responsible_attorney_name}</td>
-                  <td>{badge(m.overall_status)}</td>
-                  <td>{badge(setupStatus(items))}</td>
-                  <td>{badge(step(items, "CLIENT_CONTACT"))}</td>
-                  <td>{badge(step(items, "APPEARANCE_FILING"))}</td>
-                  <td>{badge(step(items, "COURT_RESULTS"))}</td>
-                  <td>{badge(step(items, "POST_COURT_CALL"))}</td>
-                  <td>{badge(step(items, "CLIENT_FOLLOWUP"))}</td>
+                  <td>{badge(m.display_overall_status ?? m.overall_status)}</td>
+                  <td>{stepCell(items, "SETUP_WELCOME")}</td>
+                  <td>{stepCell(items, "SETUP_ATTY_CALL")}</td>
+                  <td>{stepCell(items, "SETUP_COURT_DATE")}</td>
+                  <td>{stepCell(items, "CLIENT_CONTACT")}</td>
+                  <td>{stepCell(items, "APPEARANCE_FILING")}</td>
+                  <td>{stepCell(items, "COURT_RESULTS")}</td>
+                  <td>{stepCell(items, "POST_COURT_CALL")}</td>
+                  <td>{stepCell(items, "CLIENT_FOLLOWUP")}</td>
                   <td>{formatLocal(m.matter_created_at)}</td>
                   <td>{formatLocal(m.last_court_date)}</td>
-                  <td>{itemLabels(items, "Late")}</td>
-                  <td>{itemLabels(items, "Missing")}</td>
-                  <td>{itemLabelsWithReasons(items, "Unknown")}</td>
+                  <td>
+                    <div><strong>Late:</strong> {itemLabels(items, "Late") || "None"}</div>
+                    <div><strong>Missing:</strong> {itemLabels(items, "Missing") || "None"}</div>
+                    <div><strong>Unknown:</strong> {itemLabelsWithReasons(items, "Unknown") || "None"}</div>
+                  </td>
                   <td>
                     {items.filter((i) => i.evidenceUrl).map((i) => (
                       <div key={`${i.stepCode}-${i.evidenceUrl}`}>

@@ -80,6 +80,9 @@ input, select {
 table { width: 100%; border-collapse: collapse; min-width: 1200px; }
 th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; font-size: 13px; }
 th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
+.step-cell { min-width: 120px; }
+.detail { color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 6px; max-width: 220px; }
+.evidence-link { display: inline-block; font-size: 12px; margin-top: 6px; }
 .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; white-space: nowrap; }
 .Pass, .On-Time { background: #e7f5ec; color: var(--green); }
 .Pending { background: #e8f1ff; color: var(--blue); }

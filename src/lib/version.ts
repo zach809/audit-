@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-quick-manual-audit-2026-04-30-1835";
+export const APP_VERSION = "cwca-individual-step-columns-2026-04-30-1905";
