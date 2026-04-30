@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auditNextBatch } from "@/lib/audit";
 import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
+import { appConfig } from "@/lib/config";
 
 export const maxDuration = 300;
 
@@ -14,8 +15,12 @@ export async function GET(request: NextRequest) {
   }
   await initDb();
   let result;
+  const isManualDashboardRun = Boolean(request.cookies.get("cwca_session"));
   try {
-    result = await auditNextBatch();
+    result = await auditNextBatch(undefined, {
+      discover: !isManualDashboardRun,
+      batchSize: isManualDashboardRun ? 1 : appConfig().auditBatchSize,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (request.cookies.get("cwca_session")) {

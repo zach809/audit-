@@ -437,7 +437,10 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   };
 }
 
-export async function auditNextBatch(client = new ClioClient()): Promise<{ audited: number; discovered: number; message: string }> {
+export async function auditNextBatch(
+  client = new ClioClient(),
+  options: { discover?: boolean; batchSize?: number } = {},
+): Promise<{ audited: number; discovered: number; message: string }> {
   await initDb();
   const sql = db();
   const runRows = await sql`insert into audit_run(status) values ('running') returning id`;
@@ -445,7 +448,11 @@ export async function auditNextBatch(client = new ClioClient()): Promise<{ audit
   let discovered = 0;
   let audited = 0;
   try {
-    discovered = await discoverMatters(client);
+    const existingRows = await sql`select count(*)::int as count from audit_matter`;
+    const needsDiscovery = Number(existingRows[0]?.count ?? 0) === 0;
+    if (options.discover ?? needsDiscovery) {
+      discovered = await discoverMatters(client);
+    }
     const matters = await sql<MatterRecord[]>`
       select *
       from audit_matter
@@ -454,7 +461,7 @@ export async function auditNextBatch(client = new ClioClient()): Promise<{ audit
         case overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
         last_audited_at nulls first,
         matter_created_at desc
-      limit ${appConfig().auditBatchSize}
+      limit ${options.batchSize ?? appConfig().auditBatchSize}
     `;
     for (const matter of matters) {
       try {

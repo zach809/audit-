@@ -75,7 +75,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>
           )}
           <form action="/api/audit/run" method="post">
-            <button className="primary" type="submit">Run Audit Now</button>
+            <button className="primary" type="submit">Run Quick Audit</button>
           </form>
           <form action={`/api/export.csv?${exportParams}`} method="post">
             <button type="submit">Export CSV</button>
