@@ -146,6 +146,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         end as display_overall_status
       from audit_matter m
       left join audit_item i on i.matter_id = m.matter_id
+      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]}
       group by m.matter_id, m.overall_status
     ) s
   `;

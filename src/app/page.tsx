@@ -4,6 +4,7 @@ import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
+import { APP_TZ } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,32 @@ function stepCell(items: DashboardItem[], code: string) {
   );
 }
 
+function dateInput(date: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: APP_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function monthStartInput(date: Date): string {
+  const today = dateInput(date);
+  return `${today.slice(0, 8)}01`;
+}
+
+function filterLink(filters: Record<string, string>, next: Record<string, string>) {
+  const params = new URLSearchParams({ ...filters, ...next });
+  for (const [key, value] of Array.from(params.entries())) {
+    if (!value) params.delete(key);
+  }
+  const query = params.toString();
+  return query ? `/?${query}` : "/";
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
@@ -72,6 +99,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     from: searchParams.from ?? "",
     to: searchParams.to ?? "",
   };
+  const today = dateInput(new Date());
+  const monthStart = monthStartInput(new Date());
+  const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   const data = await getDashboardData(filters);
   const exportParams = new URLSearchParams(filters).toString();
   const notice =
@@ -100,7 +130,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>
           )}
           <form action="/api/audit/run" method="post">
-            <button className="primary" type="submit">Run Quick Audit</button>
+            <button className="primary" type="submit">Refresh Recent</button>
           </form>
           <form action={`/api/export.csv?${exportParams}`} method="post">
             <button type="submit">Export CSV</button>
@@ -159,6 +189,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <button type="submit">Apply</button>
           <a className="button" href="/">Clear</a>
         </form>
+        <div className="quick-filters">
+          <a className="button" href={filterLink(filters, { from: today, to: today })}>Today</a>
+          <a className="button" href={filterLink(filters, { from: monthStart, to: today })}>This Month</a>
+          <a className="button" href={filterLink(filters, { from: "", to: "" })}>All Dates</a>
+        </div>
+        {hasFilters ? (
+          <p className="filter-alert">
+            Filtered view is on. The totals and table now match these filters.
+          </p>
+        ) : null}
         <p className="muted small">
           Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
         </p>
@@ -226,7 +266,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       <section className="panel">
-        <h2>Monthly Attorney Metrics</h2>
+        <h2>Current Month Attorney Metrics</h2>
+        <p className="muted small">This summary covers the current month across the firm. Use the table filters above for matter-level review.</p>
         <div className="table-wrap">
           <table>
             <thead>

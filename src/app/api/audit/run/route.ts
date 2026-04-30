@@ -18,8 +18,10 @@ export async function GET(request: NextRequest) {
   const isManualDashboardRun = Boolean(request.cookies.get("cwca_session"));
   try {
     result = await auditNextBatch(undefined, {
-      discover: !isManualDashboardRun,
-      batchSize: isManualDashboardRun ? 1 : appConfig().auditBatchSize,
+      discover: true,
+      discoverLookbackDays: isManualDashboardRun ? 7 : undefined,
+      batchSize: isManualDashboardRun ? 3 : appConfig().auditBatchSize,
+      selection: isManualDashboardRun ? "recent" : "priority",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

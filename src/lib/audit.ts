@@ -226,9 +226,9 @@ async function upsertItems(matterId: string, items: AuditItemResult[], overallSt
   `;
 }
 
-export async function discoverMatters(client = new ClioClient()): Promise<number> {
+export async function discoverMatters(client = new ClioClient(), lookbackDays = appConfig().initialLookbackDays): Promise<number> {
   await initDb();
-  const since = new Date(Date.now() - appConfig().initialLookbackDays * 24 * 60 * 60 * 1000);
+  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
   const fields = "id,number,display_number,status,created_at,responsible_attorney{id,name},client{id,first_name,last_name,name}";
   const matters = await client.list<ClioMatter>("/matters.json", { fields, created_since: since.toISOString() });
   let count = 0;
@@ -428,7 +428,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
 
 export async function auditNextBatch(
   client = new ClioClient(),
-  options: { discover?: boolean; batchSize?: number } = {},
+  options: { discover?: boolean; batchSize?: number; discoverLookbackDays?: number; selection?: "priority" | "recent" } = {},
 ): Promise<{ audited: number; discovered: number; message: string }> {
   await initDb();
   const sql = db();
@@ -440,18 +440,28 @@ export async function auditNextBatch(
     const existingRows = await sql`select count(*)::int as count from audit_matter`;
     const needsDiscovery = Number(existingRows[0]?.count ?? 0) === 0;
     if (options.discover ?? needsDiscovery) {
-      discovered = await discoverMatters(client);
+      discovered = await discoverMatters(client, options.discoverLookbackDays);
     }
-    const matters = await sql<MatterRecord[]>`
-      select *
-      from audit_matter
-      where matter_status is distinct from 'Closed'
-      order by
-        case overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
-        last_audited_at nulls first,
-        matter_created_at desc
-      limit ${options.batchSize ?? appConfig().auditBatchSize}
-    `;
+    const batchSize = options.batchSize ?? appConfig().auditBatchSize;
+    const matters =
+      options.selection === "recent"
+        ? await sql<MatterRecord[]>`
+            select *
+            from audit_matter
+            where matter_status is distinct from 'Closed'
+            order by matter_created_at desc, last_audited_at nulls first
+            limit ${batchSize}
+          `
+        : await sql<MatterRecord[]>`
+            select *
+            from audit_matter
+            where matter_status is distinct from 'Closed'
+            order by
+              case overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
+              last_audited_at nulls first,
+              matter_created_at desc
+            limit ${batchSize}
+          `;
     for (const matter of matters) {
       try {
         const evidence = await fetchEvidence(client, matter);

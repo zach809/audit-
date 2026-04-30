@@ -68,6 +68,18 @@ button, .button {
 .stat strong { display: block; font-size: 28px; margin-top: 4px; }
 .panel { padding: 14px; margin-bottom: 16px; }
 .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+.quick-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.quick-filters .button { padding: 6px 10px; font-size: 12px; }
+.filter-alert {
+  background: #fff7e6;
+  border: 1px solid #ffd99a;
+  color: var(--amber);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 12px 0 0;
+  padding: 8px 10px;
+}
 label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
 input, select {
   border: 1px solid #aab4c2;
