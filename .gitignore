@@ -1,6 +1,9 @@
-node_modules
-.next
-.vercel
-.env*.local
+.next/
+node_modules/
+out/
+dist/
+*.log
 .env
-.DS_Store
+.env*.local
+.vercel/
+cwca-vercel.zip

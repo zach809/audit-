@@ -1,39 +1,63 @@
-# Clio Workflow Compliance Auditor - Vercel Starter
+# Clio Workflow Compliance Auditor
 
-This is a read-only Next.js/Vercel starter for the CWCA workflow auditor.
+Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres.
 
-## What it includes
+## What It Does
 
-- Vercel Cron endpoint at `/api/audit/run`
-- Manual refresh endpoint at `/api/audit/manual`
-- Clio OAuth callback stub
-- Read-only Clio API client with explicit fields, cursor pagination, and rate limiting
-- Business-day deadline calculator for America/Chicago
-- Audit evaluator skeleton for the eight CWCA workflow steps
-- Postgres schema and initialization script
-- Dashboard page with status cards and matter-level table
+- Pulls Clio matters, communications, calendar entries, notes, and optional activity metrics.
+- Excludes Closed matters.
+- Groups the dashboard by the matter's responsible attorney.
+- Applies Monday-Friday, 8 AM-5 PM America/Chicago deadline rules.
+- Tracks setup, client contact, appearance filing, court results, post-court calls, and client follow-up risks.
+- Stores minimal local audit data and evidence references only.
+- Provides manual refresh, Vercel Cron refresh, filters, historical metrics, and CSV export.
 
-## Deployment
+No AI is used.
 
-1. Create a Vercel project from this folder.
-2. Provision Postgres and set `POSTGRES_URL`.
-3. Set all environment variables from `.env.example`.
-4. Run `npm install`.
-5. Run `npm run db:init` locally or in a secure setup job.
-6. Deploy production with `vercel deploy --prod`.
+## Deploy On Vercel
 
-Cron jobs are defined in `vercel.json` and run every 15 minutes in production.
+1. Push this folder to GitHub.
+2. In Vercel, import the GitHub repo.
+3. Add a Neon Postgres database from the Vercel Marketplace. Neon Free is enough to start.
+4. Add the environment variables from `.env.example`.
+5. In Clio Developer Portal, set the redirect URI to:
 
-## Security notes
+   `https://YOUR-APP.vercel.app/api/auth/clio/callback`
 
-- The app is designed for read-only Clio access.
-- Do not request write scopes in the Clio developer app.
-- Do not log Clio access tokens, refresh tokens, communication bodies, note details, billing data, or unrelated PII.
-- Communication bodies, if fetched later for template matching, should be scanned transiently and discarded.
+6. Deploy.
+7. Open the app, log in with `DASHBOARD_PASSWORD`, and click **Connect Clio**.
+8. After Clio OAuth succeeds, click **Run Audit Now**.
 
-## Next implementation steps
+## Required Clio Permissions
 
-- Wire Clio OAuth token exchange and encrypted token persistence in `app/api/auth/clio/callback/route.ts`.
-- Finish template matching in `audit/evaluator.ts` using firm-specific English/Spanish markers.
-- Add user auth for dashboard access before production use.
-- Add CSV export endpoint.
+Use read-only permissions only:
+
+- Matters
+- Contacts
+- Users
+- Calendars
+- Communications
+- Notes
+- Activities, optional for call metrics
+
+Do not enable write permissions.
+
+## Environment Variables
+
+- `DATABASE_URL`: Neon Postgres connection string.
+- `CLIO_CLIENT_ID`: Clio app key.
+- `CLIO_CLIENT_SECRET`: Clio app secret.
+- `CLIO_REDIRECT_URI`: OAuth callback URL.
+- `CLIO_BASE_URL`: `https://app.clio.com` for US.
+- `DASHBOARD_PASSWORD`: password for the dashboard.
+- `SESSION_SECRET`: long random string for login cookies.
+- `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
+- `CRON_SECRET`: random string used to secure cron/manual worker access.
+- `AUDIT_BATCH_SIZE`: matters per audit run. Start with `10`.
+- `CLIO_INITIAL_LOOKBACK_DAYS`: first-run discovery window. Start with `90`.
+- `CLIO_RATE_LIMIT_PER_MINUTE`: default `40`.
+
+## Notes
+
+The worker is intentionally chunked. Each cron/manual run audits a limited number of matters so Vercel functions stay reliable and Clio rate limits are respected.
+
