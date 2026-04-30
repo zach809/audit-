@@ -131,18 +131,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     "Evidence Links",
   ];
   const rows = matters.map((m) => {
-    const items = m.items as Array<{ stepCode: string; status: string; evidenceUrl?: string }>;
-    const get = (step: string) => items.find((i) => i.stepCode === step)?.status ?? "";
-    const setupStatuses = ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].map(get);
-    const worstSetup = setupStatuses.includes("Unknown")
-      ? "Unknown"
-      : setupStatuses.includes("Missing")
-        ? "Missing"
-        : setupStatuses.includes("Late")
-          ? "Late"
-          : setupStatuses.includes("Pending")
-            ? "Pending"
-            : "On Time";
+    const items = m.items as Array<{ stepCode: string; status: string; evidenceUrl?: string; reasonCode?: string }>;
     const labels = (status: string) => items.filter((i) => i.status === status).map((i) => i.stepCode).join(", ");
     const getWithReason = (step: string) => {
       const item = items.find((i) => i.stepCode === step);
