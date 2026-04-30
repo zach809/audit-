@@ -115,6 +115,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <select name="overall" defaultValue={filters.overall}>
               <option value="">All</option>
               <option>Pass</option>
+              <option>Pending</option>
               <option>Late</option>
               <option>Flag</option>
               <option>Review</option>

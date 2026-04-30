@@ -43,7 +43,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]}
     group by m.matter_id
     order by
-      case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 else 4 end,
+      case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
       m.matter_created_at desc
     limit 500
   `;

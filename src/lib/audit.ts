@@ -23,6 +23,31 @@ import type {
 import { appConfig } from "./config";
 
 type Evidence<T> = { item: T; at: Date; source: AuditItemResult["evidenceSource"]; url: string };
+type EvidenceErrors = {
+  communications?: string;
+  calendars?: string;
+  notes?: string;
+};
+type EvidenceBundle = {
+  communications: ClioCommunication[];
+  calendars: ClioCalendarEntry[];
+  notes: ClioNote[];
+  errors: EvidenceErrors;
+};
+
+function apiReason(error: unknown, label: string): string {
+  if (error instanceof ClioApiError) {
+    let detail = error.body;
+    try {
+      const parsed = JSON.parse(error.body);
+      detail = parsed?.error?.message ?? parsed?.message ?? error.body;
+    } catch {
+      // Keep original response body when it is not JSON.
+    }
+    return `${label.toUpperCase()}_${error.status}: ${detail}`.slice(0, 220);
+  }
+  return `${label.toUpperCase()}_ERROR: ${error instanceof Error ? error.message : String(error)}`.slice(0, 220);
+}
 
 function parseDate(value?: string | null): Date | null {
   if (!value) return null;
@@ -218,10 +243,10 @@ export async function discoverMatters(client = new ClioClient()): Promise<number
   return count;
 }
 
-async function fetchEvidence(client: ClioClient, matter: MatterRecord) {
+async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<EvidenceBundle> {
   const since = matter.effective_intake_at.toISOString();
   const to = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
-  const [communications, calendars, notes] = await Promise.all([
+  const [communicationsResult, calendarsResult, notesResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
       fields: "id,subject,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name},receivers{id,name}",
       matter_id: matter.matter_id,
@@ -239,13 +264,25 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord) {
       created_since: since,
     }),
   ]);
-  return { communications, calendars, notes };
+  const errors: EvidenceErrors = {};
+  if (communicationsResult.status === "rejected") errors.communications = apiReason(communicationsResult.reason, "communications");
+  if (calendarsResult.status === "rejected") errors.calendars = apiReason(calendarsResult.reason, "calendars");
+  if (notesResult.status === "rejected") errors.notes = apiReason(notesResult.reason, "notes");
+  return {
+    communications: communicationsResult.status === "fulfilled" ? communicationsResult.value : [],
+    calendars: calendarsResult.status === "fulfilled" ? calendarsResult.value : [],
+    notes: notesResult.status === "fulfilled" ? notesResult.value : [],
+    errors,
+  };
 }
 
-function auditMatter(record: MatterRecord, evidence: Awaited<ReturnType<typeof fetchEvidence>>, now = new Date()) {
+function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
   const setup = setupDeadlines(record.matter_created_at);
   const clientDeadline = addBusinessDaysDeadline(record.effective_intake_at, 1);
   const appearanceDeadline = addBusinessDaysDeadline(record.effective_intake_at, 2);
+  const commError = evidence.errors.communications;
+  const calendarError = evidence.errors.calendars;
+  const noteError = evidence.errors.notes;
 
   const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date) =>
     earliest(
@@ -351,39 +388,53 @@ function auditMatter(record: MatterRecord, evidence: Awaited<ReturnType<typeof f
     classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate), setup.onTime, {
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Welcome Packet",
+      unknown: Boolean(commError),
+      reasonCode: commError,
       now,
     }),
     classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Attorney Call",
+      unknown: Boolean(calendarError),
+      reasonCode: calendarError,
       now,
     }),
     classify("SETUP_COURT_DATE", courtAdded, setup.onTime, {
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Court Date",
+      unknown: Boolean(calendarError),
+      reasonCode: calendarError,
       now,
     }),
     classify("CLIENT_CONTACT", clientContact, clientDeadline, {
       operationalState: "Needs Client Contact",
-      unknown: !clientContact && unknownDirection,
-      reasonCode: "DIRECTION_UNCLEAR",
+      unknown: !clientContact && Boolean(commError || noteError || unknownDirection),
+      reasonCode: commError || noteError || "DIRECTION_UNCLEAR",
       now,
     }),
     classify("APPEARANCE_FILING", communicationEvidence(isAppearanceTemplate), appearanceDeadline, {
       operationalState: "Needs Appearance Filing",
+      unknown: Boolean(commError),
+      reasonCode: commError,
       now,
     }),
     classify("COURT_RESULTS", courtResult, courtResultDeadline, {
       required: Boolean(lastCourtEnd),
       operationalState: "Needs Court Results",
+      unknown: Boolean(lastCourtEnd && !courtResult && (commError || calendarError || noteError)),
+      reasonCode: commError || calendarError || noteError,
       now,
     }),
     classify("POST_COURT_CALL", postCourtCall, postCourtCallDeadline, {
       required: Boolean(lastCourtEnd && nextCourt),
       operationalState: "Needs Post-Court Call",
+      unknown: Boolean(lastCourtEnd && nextCourt && !postCourtCall && calendarError),
+      reasonCode: calendarError,
       now,
     }),
-    inboundStreak.max >= 3
+    commError
+      ? base("CLIENT_FOLLOWUP", "Unknown", "Unknown", null, null, commError)
+      : inboundStreak.max >= 3
       ? base("CLIENT_FOLLOWUP", "Missing", "Client Follow-Up Risk", null, null, "THREE_INBOUND_BEFORE_RESPONSE")
       : base("CLIENT_FOLLOWUP", unknownDirection ? "Unknown" : "On Time", unknownDirection ? "Unknown" : "No Risk", null, null, unknownDirection ? "DIRECTION_UNCLEAR" : null),
   ];
