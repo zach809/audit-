@@ -4,6 +4,7 @@ import { getDashboardData } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
+import { runAuditFromDashboard } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           ) : (
             <Link className="button primary" href="/api/auth/clio/start">Connect Clio</Link>
           )}
-          <form action="/api/audit/run" method="post">
+          <form action={runAuditFromDashboard}>
             <button className="primary" type="submit">Run Audit Now</button>
           </form>
           <Link className="button" href={`/api/export.csv?${exportParams}`}>Export CSV</Link>

@@ -2,10 +2,10 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { buildClioAuthorizeUrl } from "@/lib/clio";
 import { isValidSessionCookie } from "@/lib/session";
+import { NextRequest } from "next/server";
 
-export async function GET(request: Request) {
-  const cookie = request.headers.get("cookie") ?? "";
-  if (!isValidSessionCookie(cookie.match(/cwca_session=([^;]+)/)?.[1])) {
+export async function GET(request: NextRequest) {
+  if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
   const state = crypto.randomBytes(20).toString("hex");
