@@ -36,12 +36,12 @@ export function clioManageUrl(path: string): string {
   return `${appConfig().clioBaseUrl}${path}`;
 }
 
-export function buildClioAuthorizeUrl(state: string): string {
+export function buildClioAuthorizeUrl(state: string, redirectUri?: string): string {
   const config = appConfig();
   const params = new URLSearchParams({
     response_type: "code",
     client_id: config.clioClientId,
-    redirect_uri: config.clioRedirectUri,
+    redirect_uri: redirectUri ?? config.clioRedirectUri,
     state,
     redirect_on_decline: "true",
   });
@@ -64,7 +64,7 @@ async function postOAuth(params: URLSearchParams): Promise<{
   return JSON.parse(text);
 }
 
-export async function exchangeClioCode(code: string) {
+export async function exchangeClioCode(code: string, redirectUri?: string) {
   const config = appConfig();
   const result = await postOAuth(
     new URLSearchParams({
@@ -72,7 +72,7 @@ export async function exchangeClioCode(code: string) {
       client_secret: config.clioClientSecret,
       grant_type: "authorization_code",
       code,
-      redirect_uri: config.clioRedirectUri,
+      redirect_uri: redirectUri ?? config.clioRedirectUri,
     }),
   );
   await saveClioTokens({

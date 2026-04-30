@@ -5,6 +5,7 @@ import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
 import { runAuditFromDashboard } from "./actions";
+import { APP_VERSION } from "@/lib/version";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="title">
           <h1>Clio Workflow Compliance Auditor</h1>
           <p>Read-only dashboard grouped by responsible attorney.</p>
+          <p className="muted small">Version: {APP_VERSION}</p>
         </div>
         <div className="actions">
           {connected ? (
