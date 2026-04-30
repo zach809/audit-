@@ -6,7 +6,7 @@ import { isAuthorizedWorkerRequest } from "@/lib/session";
 export async function GET(request: NextRequest) {
   if (!isAuthorizedWorkerRequest(request)) {
     if (!request.headers.get("authorization")) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL("/login", request.url), 303);
     }
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -17,12 +17,12 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (request.cookies.get("cwca_session")) {
-      return NextResponse.redirect(new URL(`/?audit=failed&message=${encodeURIComponent(message.slice(0, 240))}`, request.url));
+      return NextResponse.redirect(new URL(`/?audit=failed&message=${encodeURIComponent(message.slice(0, 240))}`, request.url), 303);
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
   if (request.cookies.get("cwca_session")) {
-    return NextResponse.redirect(new URL(`/?audit=ran&message=${encodeURIComponent(result.message)}`, request.url));
+    return NextResponse.redirect(new URL(`/?audit=ran&message=${encodeURIComponent(result.message)}`, request.url), 303);
   }
   return NextResponse.json(result);
 }

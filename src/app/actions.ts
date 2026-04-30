@@ -8,11 +8,12 @@ export async function runAuditFromDashboard() {
   if (!hasDashboardSession()) {
     redirect("/login");
   }
+  let result;
   try {
-    const result = await auditNextBatch();
-    redirect(`/?audit=ran&message=${encodeURIComponent(result.message)}`);
+    result = await auditNextBatch();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     redirect(`/?audit=failed&message=${encodeURIComponent(message.slice(0, 240))}`);
   }
+  redirect(`/?audit=ran&message=${encodeURIComponent(result.message)}`);
 }
