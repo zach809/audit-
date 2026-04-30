@@ -59,6 +59,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     select
       count(*)::int as total,
       count(*) filter (where overall_status = 'Pass')::int as pass,
+      count(*) filter (where overall_status = 'Pending')::int as pending,
       count(*) filter (where overall_status = 'Late')::int as late,
       count(*) filter (where overall_status = 'Flag')::int as flag,
       count(*) filter (where overall_status = 'Review')::int as review
@@ -83,7 +84,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   return {
     matters,
     attorneys,
-    summary: summary[0] ?? { total: 0, pass: 0, late: 0, flag: 0, review: 0 },
+    summary: summary[0] ?? { total: 0, pass: 0, pending: 0, late: 0, flag: 0, review: 0 },
     lastRun: lastRun[0] ?? null,
     metrics,
   };

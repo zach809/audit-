@@ -31,6 +31,13 @@ function itemLabels(items: Array<{ stepCode: string; status: string }>, status: 
   return items.filter((i) => i.status === status).map((i) => i.stepCode.replaceAll("_", " ")).join(", ");
 }
 
+function itemLabelsWithReasons(items: Array<{ stepCode: string; status: string; reasonCode?: string }>, status: string) {
+  return items
+    .filter((i) => i.status === status)
+    .map((i) => `${i.stepCode.replaceAll("_", " ")}${i.reasonCode ? ` (${i.reasonCode})` : ""}`)
+    .join(", ");
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
@@ -86,6 +93,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="grid">
         <div className="stat"><span>Total</span><strong>{data.summary.total}</strong></div>
         <div className="stat"><span>Pass</span><strong>{data.summary.pass}</strong></div>
+        <div className="stat"><span>Pending</span><strong>{data.summary.pending}</strong></div>
         <div className="stat"><span>Late</span><strong>{data.summary.late}</strong></div>
         <div className="stat"><span>Flag</span><strong>{data.summary.flag}</strong></div>
         <div className="stat"><span>Review</span><strong>{data.summary.review}</strong></div>
@@ -152,7 +160,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </thead>
           <tbody>
             {data.matters.map((m) => {
-              const items = m.items as Array<{ stepCode: string; status: string; operationalState?: string; evidenceUrl?: string }>;
+              const items = m.items as Array<{ stepCode: string; status: string; operationalState?: string; evidenceUrl?: string; reasonCode?: string }>;
               return (
                 <tr key={m.matter_id}>
                   <td>{`${m.client_first_name} ${m.client_last_name}`.trim()}</td>
@@ -169,7 +177,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <td>{formatLocal(m.last_court_date)}</td>
                   <td>{itemLabels(items, "Late")}</td>
                   <td>{itemLabels(items, "Missing")}</td>
-                  <td>{itemLabels(items, "Unknown")}</td>
+                  <td>{itemLabelsWithReasons(items, "Unknown")}</td>
                   <td>
                     {items.filter((i) => i.evidenceUrl).map((i) => (
                       <div key={`${i.stepCode}-${i.evidenceUrl}`}>

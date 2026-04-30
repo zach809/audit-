@@ -1,5 +1,5 @@
 export type AuditStatus = "Pending" | "On Time" | "Late" | "Missing" | "N/A" | "Unknown";
-export type OverallStatus = "Pass" | "Late" | "Flag" | "Review";
+export type OverallStatus = "Pass" | "Pending" | "Late" | "Flag" | "Review";
 
 export type StepCode =
   | "SETUP_WELCOME"

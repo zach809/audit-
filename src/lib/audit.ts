@@ -116,6 +116,7 @@ function overall(items: AuditItemResult[]): OverallStatus {
   if (items.some((i) => i.status === "Unknown")) return "Review";
   if (items.some((i) => i.status === "Missing")) return "Flag";
   if (items.some((i) => i.status === "Late")) return "Late";
+  if (items.some((i) => i.status === "Pending")) return "Pending";
   return "Pass";
 }
 

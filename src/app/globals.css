@@ -57,7 +57,7 @@ button, .button {
   border-color: #fecdca;
   color: var(--red);
 }
-.grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat, .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -82,6 +82,7 @@ th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: le
 th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
 .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; white-space: nowrap; }
 .Pass, .On-Time { background: #e7f5ec; color: var(--green); }
+.Pending { background: #e8f1ff; color: var(--blue); }
 .Late { background: #fff3dc; color: var(--amber); }
 .Flag, .Missing, .Overdue { background: #fdecec; color: var(--red); }
 .Review, .Unknown { background: #efeafd; color: var(--purple); }

@@ -3,6 +3,8 @@ import { auditNextBatch } from "@/lib/audit";
 import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
 
+export const maxDuration = 300;
+
 export async function GET(request: NextRequest) {
   if (!isAuthorizedWorkerRequest(request)) {
     if (!request.headers.get("authorization")) {
