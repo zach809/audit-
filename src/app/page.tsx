@@ -44,6 +44,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   };
   const data = await getDashboardData(filters);
   const exportParams = new URLSearchParams(filters).toString();
+  const notice =
+    searchParams.audit === "ran"
+      ? searchParams.message || "Audit run completed."
+      : searchParams.audit === "failed"
+        ? searchParams.message || "Audit run failed."
+        : searchParams.clio === "connected"
+          ? "Clio connected successfully."
+          : searchParams.clio === "failed"
+            ? `Clio connection failed${searchParams.reason ? `: ${searchParams.reason}` : "."}`
+            : "";
 
   return (
     <main className="shell">
@@ -66,6 +76,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <Link className="button" href="/logout">Log Out</Link>
         </div>
       </div>
+
+      {notice ? (
+        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" ? "notice danger" : "notice"}>
+          {notice}
+        </section>
+      ) : null}
 
       <section className="grid">
         <div className="stat"><span>Total</span><strong>{data.summary.total}</strong></div>

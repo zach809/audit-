@@ -43,6 +43,20 @@ button, .button {
 }
 .primary { background: var(--blue); border-color: var(--blue); color: white; }
 .danger { color: var(--red); }
+.notice {
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+  border-radius: 8px;
+  color: #067647;
+  font-weight: 700;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+}
+.notice.danger {
+  background: #fef3f2;
+  border-color: #fecdca;
+  color: var(--red);
+}
 .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat, .panel {
   background: var(--panel);

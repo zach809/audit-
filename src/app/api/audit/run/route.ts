@@ -11,9 +11,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   await initDb();
-  const result = await auditNextBatch();
+  let result;
+  try {
+    result = await auditNextBatch();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (request.cookies.get("cwca_session")) {
+      return NextResponse.redirect(new URL(`/?audit=failed&message=${encodeURIComponent(message.slice(0, 240))}`, request.url));
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
   if (request.cookies.get("cwca_session")) {
-    return NextResponse.redirect(new URL("/?audit=ran", request.url));
+    return NextResponse.redirect(new URL(`/?audit=ran&message=${encodeURIComponent(result.message)}`, request.url));
   }
   return NextResponse.json(result);
 }
