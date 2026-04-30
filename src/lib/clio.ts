@@ -134,6 +134,16 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function pageTokenFromNext(next?: string | null): string | undefined {
+  if (!next) return undefined;
+  try {
+    const url = new URL(next);
+    return url.searchParams.get("page_token") ?? undefined;
+  } catch {
+    return next;
+  }
+}
+
 export class ClioClient {
   private lastRequestAt = 0;
   private minIntervalMs: number;
@@ -192,7 +202,7 @@ export class ClioClient {
         page_token: pageToken,
       });
       results.push(...(response.data ?? []));
-      pageToken = response.meta?.paging?.next ?? undefined;
+      pageToken = pageTokenFromNext(response.meta?.paging?.next);
     } while (pageToken);
     return results;
   }

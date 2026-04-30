@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-logout-safe-2026-04-30-1740";
+export const APP_VERSION = "cwca-clio-pagination-fix-2026-04-30-1745";
