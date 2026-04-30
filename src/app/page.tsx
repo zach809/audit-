@@ -71,7 +71,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <button className="primary" type="submit">Run Audit Now</button>
           </form>
           <a className="button" href={`/api/export.csv?${exportParams}`}>Export CSV</a>
-          <a className="button" href="/logout">Log Out</a>
+          <form action="/logout" method="post">
+            <button type="submit">Log Out</button>
+          </form>
         </div>
       </div>
 
