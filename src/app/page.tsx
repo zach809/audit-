@@ -40,6 +40,17 @@ type DashboardItem = {
   evidenceUrl?: string;
 };
 
+const STEP_COLUMNS: Array<[string, string]> = [
+  ["SETUP_WELCOME", "Welcome Packet"],
+  ["SETUP_ATTY_CALL", "Attorney Call"],
+  ["SETUP_COURT_DATE", "Court Date Added"],
+  ["CLIENT_CONTACT", "Client Contact"],
+  ["APPEARANCE_FILING", "Appearance Filed"],
+  ["COURT_RESULTS", "Court Results"],
+  ["POST_COURT_CALL", "Post-Court Call"],
+  ["CLIENT_FOLLOWUP", "Client Follow-Up"],
+];
+
 function evidencePath(item: DashboardItem): string {
   if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}`;
   if (item.evidenceRefId && item.evidenceSource === "Calendar") return `/evidence/calendar_entries/${item.evidenceRefId}`;
@@ -205,64 +216,64 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
       </section>
 
-      <section className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Client</th>
-              <th>Matter</th>
-              <th>Attorney</th>
-              <th>Overall</th>
-              <th>Welcome Packet</th>
-              <th>Attorney Call</th>
-              <th>Court Date Added</th>
-              <th>Client Contact</th>
-              <th>Appearance Filed</th>
-              <th>Court Results</th>
-              <th>Post-Court Call</th>
-              <th>Client Follow-Up</th>
-              <th>Created</th>
-              <th>Last Court</th>
-              <th>Problems</th>
-              <th>Evidence</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.matters.map((m) => {
-              const items = m.items as DashboardItem[];
-              return (
-                <tr key={m.matter_id}>
-                  <td>{`${m.client_first_name} ${m.client_last_name}`.trim()}</td>
-                  <td>{m.matter_number}</td>
-                  <td>{m.responsible_attorney_name}</td>
-                  <td>{badge(m.display_overall_status ?? m.overall_status)}</td>
-                  <td>{stepCell(items, "SETUP_WELCOME")}</td>
-                  <td>{stepCell(items, "SETUP_ATTY_CALL")}</td>
-                  <td>{stepCell(items, "SETUP_COURT_DATE")}</td>
-                  <td>{stepCell(items, "CLIENT_CONTACT")}</td>
-                  <td>{stepCell(items, "APPEARANCE_FILING")}</td>
-                  <td>{stepCell(items, "COURT_RESULTS")}</td>
-                  <td>{stepCell(items, "POST_COURT_CALL")}</td>
-                  <td>{stepCell(items, "CLIENT_FOLLOWUP")}</td>
-                  <td>{formatLocal(m.matter_created_at)}</td>
-                  <td>{formatLocal(m.last_court_date)}</td>
-                  <td>
-                    <div><strong>Late:</strong> {itemLabels(items, "Late") || "None"}</div>
-                    <div><strong>Missing:</strong> {itemLabels(items, "Missing") || "None"}</div>
-                    <div><strong>Unknown:</strong> {itemLabelsWithReasons(items, "Unknown") || "None"}</div>
-                  </td>
-                  <td>
-                    {items.filter((i) => evidencePath(i)).map((i) => (
-                      <div key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
+      <section className="matter-list">
+        {data.matters.map((m) => {
+          const items = m.items as DashboardItem[];
+          const evidenceItems = items.filter((i) => evidencePath(i));
+          return (
+            <article className="matter-card" key={m.matter_id}>
+              <div className="matter-head">
+                <div>
+                  <h3>{`${m.client_first_name} ${m.client_last_name}`.trim() || "Unnamed Client"}</h3>
+                  <p>{m.matter_number}</p>
+                </div>
+                <div>
+                  <span className="label">Attorney</span>
+                  <strong>{m.responsible_attorney_name || "Unassigned"}</strong>
+                </div>
+                <div>
+                  <span className="label">Created</span>
+                  <strong>{formatLocal(m.matter_created_at)}</strong>
+                </div>
+                <div>
+                  <span className="label">Last Court</span>
+                  <strong>{formatLocal(m.last_court_date) || "None"}</strong>
+                </div>
+                <div>{badge(m.display_overall_status ?? m.overall_status)}</div>
+              </div>
+
+              <div className="step-grid">
+                {STEP_COLUMNS.map(([code, label]) => (
+                  <div className="step-block" key={code}>
+                    <span className="step-label">{label}</span>
+                    {stepCell(items, code)}
+                  </div>
+                ))}
+              </div>
+
+              <div className="matter-foot">
+                <div>
+                  <span className="label">Problems</span>
+                  <p><strong>Late:</strong> {itemLabels(items, "Late") || "None"}</p>
+                  <p><strong>Missing:</strong> {itemLabels(items, "Missing") || "None"}</p>
+                  <p><strong>Unknown:</strong> {itemLabelsWithReasons(items, "Unknown") || "None"}</p>
+                </div>
+                <div>
+                  <span className="label">Evidence</span>
+                  {evidenceItems.length ? (
+                    evidenceItems.map((i) => (
+                      <p key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
                         <a href={evidencePath(i)}>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</a>
-                      </div>
-                    ))}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      </p>
+                    ))
+                  ) : (
+                    <p>None yet</p>
+                  )}
+                </div>
+              </div>
+            </article>
+          );
+        })}
       </section>
 
       <section className="panel">

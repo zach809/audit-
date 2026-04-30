@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-recent-filter-fix-2026-04-30-1955";
+export const APP_VERSION = "cwca-card-layout-2026-04-30-2005";
