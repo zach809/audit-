@@ -109,6 +109,8 @@ th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
 }
 .matter-head h3 { font-size: 16px; margin: 0 0 3px; }
 .matter-head p, .matter-foot p { margin: 3px 0; }
+.matter-actions { display: grid; gap: 8px; justify-items: end; }
+.matter-actions button { padding: 6px 9px; font-size: 12px; }
 .label, .step-label {
   color: var(--muted);
   display: block;

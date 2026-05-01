@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auditNextBatch } from "@/lib/audit";
+import { auditNextBatch, auditOneMatterById } from "@/lib/audit";
 import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
 import { appConfig } from "@/lib/config";
@@ -37,5 +37,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (request.cookies.get("cwca_session")) {
+    const form = await request.formData().catch(() => null);
+    const matterId = form?.get("matter_id")?.toString();
+    if (matterId) {
+      try {
+        const result = await auditOneMatterById(undefined, matterId);
+        return NextResponse.redirect(new URL(`/?audit=ran&message=${encodeURIComponent(result.message)}`, request.url), 303);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return NextResponse.redirect(new URL(`/?audit=failed&message=${encodeURIComponent(message.slice(0, 240))}`, request.url), 303);
+      }
+    }
+  }
   return GET(request);
 }

@@ -495,6 +495,43 @@ export async function auditNextBatch(
   }
 }
 
+export async function auditOneMatterById(client = new ClioClient(), matterId: string): Promise<{ audited: number; discovered: number; message: string }> {
+  await initDb();
+  const sql = db();
+  const rows = await sql<MatterRecord[]>`
+    select *
+    from audit_matter
+    where matter_id = ${matterId}
+    limit 1
+  `;
+  const matter = rows[0];
+  if (!matter) throw new Error("Matter was not found in the audit database. Run Refresh Recent first.");
+
+  try {
+    const evidence = await fetchEvidence(client, matter);
+    const result = auditMatter(matter, evidence);
+    await upsertItems(matter.matter_id, result.items, result.overallStatus, result.court);
+  } catch (error) {
+    const status = apiReason(error, "matter");
+    const items: AuditItemResult[] = [
+      "SETUP_WELCOME",
+      "SETUP_ATTY_CALL",
+      "SETUP_COURT_DATE",
+      "CLIENT_CONTACT",
+      "APPEARANCE_FILING",
+      "COURT_RESULTS",
+      "POST_COURT_CALL",
+      "CLIENT_FOLLOWUP",
+    ].map((step) => base(step as StepCode, "Unknown", "Unknown", null, null, status));
+    await upsertItems(matter.matter_id, items, "Review", { last: null, next: null });
+    throw error;
+  }
+
+  await rebuildMonthlySnapshots();
+  const name = `${matter.client_first_name} ${matter.client_last_name}`.trim() || matter.matter_number;
+  return { audited: 1, discovered: 0, message: `Rechecked ${name}.` };
+}
+
 export async function rebuildMonthlySnapshots() {
   const sql = db();
   await sql`delete from audit_metric_snapshot where period_type = 'month' and period_start = date_trunc('month', now())::date`;

@@ -109,13 +109,27 @@ function stepLabel(code: string): string {
   return STEP_INFO[code]?.label ?? code.replaceAll("_", " ");
 }
 
+function isInternalPlaceholder(reason?: string | null): boolean {
+  return !reason || reason === "NOT_FOUND" || reason === "UNKNOWN";
+}
+
+function isGenericApiError(reason?: string | null): boolean {
+  return reason === "API_ERROR" || reason === "MATTER_ERROR: API_ERROR";
+}
+
 function stepDetail(item: DashboardItem | undefined, status: string): string {
   if (!item) return "";
   if (status === "Pending") {
     return item.operationalState && item.operationalState !== "Pending" ? item.operationalState : "";
   }
-  if (status === "Missing" || status === "Late" || status === "Unknown") {
-    return item.reasonCode || item.operationalState || "";
+  if (status === "Missing") {
+    return "";
+  }
+  if (status === "Unknown") {
+    return isGenericApiError(item.reasonCode) ? "Needs re-audit" : isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
+  }
+  if (status === "Late") {
+    return isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
   }
   return "";
 }
@@ -144,7 +158,10 @@ function problemText(item: DashboardItem): string {
   if (item.status === "Missing") return `${info.missing} ${info.action}`;
   if (item.status === "Late") return info.late;
   if (item.status === "Unknown") {
-    const reason = item.reasonCode && item.reasonCode !== "UNKNOWN" ? ` ${item.reasonCode}` : "";
+    if (isGenericApiError(item.reasonCode)) {
+      return "This row came from an older incomplete audit result. Refresh this matter so the app can re-check the Clio communication and calendar evidence.";
+    }
+    const reason = !isInternalPlaceholder(item.reasonCode) ? ` ${item.reasonCode}` : "";
     return `Could not verify this from the Clio API.${reason}`;
   }
   return "";
@@ -153,9 +170,25 @@ function problemText(item: DashboardItem): string {
 function problemList(items: DashboardItem[]) {
   const problems = items.filter((i) => ["Missing", "Late", "Unknown"].includes(i.status));
   if (!problems.length) return <p>No problems found for this matter.</p>;
+
+  const genericApiProblems = problems.filter((item) => item.status === "Unknown" && isGenericApiError(item.reasonCode));
+  const visibleProblems =
+    genericApiProblems.length >= Math.max(3, problems.length - 1)
+      ? problems.filter((item) => !(item.status === "Unknown" && isGenericApiError(item.reasonCode)))
+      : problems;
+
   return (
     <div className="problem-list">
-      {problems.map((item) => {
+      {genericApiProblems.length >= Math.max(3, problems.length - 1) ? (
+        <div className="problem-item Unknown">
+          <div className="problem-title">
+            {badge("Review")}
+            <strong>Audit needs refresh</strong>
+          </div>
+          <p>This matter has an older generic API error saved for several steps. Use Recheck Matter on this card before trusting the missing-item result.</p>
+        </div>
+      ) : null}
+      {visibleProblems.map((item) => {
         const href = evidencePath(item);
         return (
           <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
@@ -340,7 +373,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <span className="label">Last Court</span>
                   <strong>{formatLocal(m.last_court_date) || "None"}</strong>
                 </div>
-                <div>{badge(m.display_overall_status ?? m.overall_status)}</div>
+                <div className="matter-actions">
+                  {badge(m.display_overall_status ?? m.overall_status)}
+                  <form action="/api/audit/run" method="post">
+                    <input type="hidden" name="matter_id" value={m.matter_id} />
+                    <button type="submit">Recheck Matter</button>
+                  </form>
+                </div>
               </div>
 
               <div className="step-grid">
