@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { formatLocal } from "@/lib/business-time";
-import { ClioApiError, ClioClient } from "@/lib/clio";
+import { ClioApiError, ClioClient, clioManageUrl } from "@/lib/clio";
 import { hasDashboardSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,13 @@ function dateText(value: unknown): string {
   return formatLocal(date);
 }
 
-async function loadEvidence(type: string, id: string): Promise<{ label: string; rows: Array<[string, string]> }> {
+function clioMatterUrl(type: string, matterId: unknown): string {
+  if (!matterId) return clioManageUrl("/");
+  const tab = type === "calendar_entries" ? "calendar" : "communications";
+  return clioManageUrl(`/n/#/matters/${matterId}/${tab}`);
+}
+
+async function loadEvidence(type: string, id: string): Promise<{ label: string; clioUrl: string; rows: Array<[string, string]> }> {
   const client = new ClioClient();
 
   if (type === "communications") {
@@ -39,8 +45,10 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
       fields: "id,subject,type,date,created_at,received_at,user{id,name},senders{id,name},receivers{id,name},matter{id,display_number}",
     });
     const data = response.data;
+    const matter = data.matter as Record<string, unknown> | undefined;
     return {
       label: `Communication #${id}`,
+      clioUrl: clioMatterUrl(type, matter?.id),
       rows: [
         ["Subject", text(data.subject)],
         ["Type", text(data.type)],
@@ -48,7 +56,7 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
         ["Firm User", person(data.user)],
         ["Senders", people(data.senders)],
         ["Receivers", people(data.receivers)],
-        ["Matter", text((data.matter as Record<string, unknown> | undefined)?.display_number ?? (data.matter as Record<string, unknown> | undefined)?.id)],
+        ["Matter", text(matter?.display_number ?? matter?.id)],
       ],
     };
   }
@@ -58,8 +66,10 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
       fields: "id,summary,description,start_at,end_at,created_at,all_day,matter{id,display_number},calendar_owner{id,name},calendar_entry_event_type{id,name}",
     });
     const data = response.data;
+    const matter = data.matter as Record<string, unknown> | undefined;
     return {
       label: `Calendar Entry #${id}`,
+      clioUrl: clioMatterUrl(type, matter?.id),
       rows: [
         ["Summary", text(data.summary)],
         ["Type", text((data.calendar_entry_event_type as Record<string, unknown> | undefined)?.name)],
@@ -67,7 +77,7 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
         ["Ends", dateText(data.end_at)],
         ["Created", dateText(data.created_at)],
         ["Owner", person(data.calendar_owner)],
-        ["Matter", text((data.matter as Record<string, unknown> | undefined)?.display_number ?? (data.matter as Record<string, unknown> | undefined)?.id)],
+        ["Matter", text(matter?.display_number ?? matter?.id)],
       ],
     };
   }
@@ -77,7 +87,7 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
 
 export default async function EvidencePage({ params }: { params: { type: string; id: string } }) {
   if (!hasDashboardSession()) redirect("/login");
-  let evidence: { label: string; rows: Array<[string, string]> } | null = null;
+  let evidence: { label: string; clioUrl: string; rows: Array<[string, string]> } | null = null;
   let error = "";
 
   try {
@@ -107,6 +117,9 @@ export default async function EvidencePage({ params }: { params: { type: string;
       {evidence ? (
         <section className="panel">
           <h2>{evidence.label}</h2>
+          <p>
+            <a className="button primary" href={evidence.clioUrl} target="_blank" rel="noreferrer">Open in Clio Manage</a>
+          </p>
           <table className="evidence-table">
             <tbody>
               {evidence.rows.map(([label, value]) => (

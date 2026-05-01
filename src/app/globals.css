@@ -167,6 +167,17 @@ th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
 .step-cell { min-width: 0; max-width: 100%; }
 .detail { color: var(--muted); font-size: 12px; line-height: 1.25; margin-top: 6px; max-width: 190px; max-height: 46px; overflow: hidden; word-break: break-word; }
 .evidence-link { display: inline-block; font-size: 12px; margin-top: 6px; }
+.evidence-links {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  line-height: 1.35;
+}
+.evidence-links span {
+  flex-basis: 100%;
+  font-weight: 700;
+}
 .evidence-table { min-width: 0; }
 .evidence-table th { width: 180px; }
 .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; white-space: nowrap; }

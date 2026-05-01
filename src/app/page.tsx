@@ -101,6 +101,12 @@ function evidencePath(item: DashboardItem): string {
   return item.evidenceUrl ?? "";
 }
 
+function clioEvidencePath(matterId: string, item: DashboardItem): string {
+  const baseUrl = process.env.CLIO_BASE_URL || "https://app.clio.com";
+  const tab = item.evidenceSource === "Calendar" ? "calendar" : "communications";
+  return `${baseUrl}/n/#/matters/${matterId}/${tab}`;
+}
+
 function evidenceLabel(item: DashboardItem): string {
   return item.evidenceSource && item.evidenceRefId ? `${item.evidenceSource} #${item.evidenceRefId}` : "Evidence";
 }
@@ -123,9 +129,11 @@ function needsMatterRefresh(items: DashboardItem[]): boolean {
 }
 
 function stepDetail(item: DashboardItem | undefined, status: string): string {
-  if (!item) return "";
+  if (!item) return status === "Pending" ? "Waiting for audit" : "";
   if (status === "Pending") {
-    return item.operationalState && item.operationalState !== "Pending" ? item.operationalState : "";
+    if (item.operationalState && item.operationalState !== "Pending") return item.operationalState;
+    if (item.deadlineAt) return `Due: ${formatLocal(item.deadlineAt)}`;
+    return "Not due yet";
   }
   if (status === "Missing") {
     return "";
@@ -174,8 +182,18 @@ function problemText(item: DashboardItem): string {
 }
 
 function problemList(items: DashboardItem[]) {
+  if (!items.length) {
+    return <p>Waiting for audit. Click Recheck Matter or Refresh Recent to pull fresh Clio evidence.</p>;
+  }
   const problems = items.filter((i) => ["Missing", "Late", "Unknown"].includes(i.status));
-  if (!problems.length) return <p>No problems found for this matter.</p>;
+  if (!problems.length) {
+    const pending = items.some((i) => i.status === "Pending");
+    return pending ? (
+      <p>No problem yet. These steps are still pending because the deadline has not passed or the matter has not needed that step yet.</p>
+    ) : (
+      <p>No problems found for this matter.</p>
+    );
+  }
 
   const refreshNeeded = needsMatterRefresh(items);
   const visibleProblems = refreshNeeded
@@ -413,8 +431,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <span className="label">Evidence</span>
                   {evidenceItems.length ? (
                     evidenceItems.map((i) => (
-                      <p key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
-                        <a href={evidencePath(i)}>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</a>
+                      <p className="evidence-links" key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
+                        <span>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</span>
+                        <a href={evidencePath(i)}>Proof Details</a>
+                        <a href={clioEvidencePath(m.matter_id, i)} target="_blank" rel="noreferrer">Open in Clio</a>
                       </p>
                     ))
                   ) : (

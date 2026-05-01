@@ -46,6 +46,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     select
       m.*,
       case
+        when count(i.*) = 0 then 'Pending'
         when count(*) filter (where (
           case
             when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -138,6 +139,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       select
         m.matter_id,
         case
+          when count(i.*) = 0 then 'Pending'
           when count(*) filter (where (
             case
               when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
