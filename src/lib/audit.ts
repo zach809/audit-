@@ -446,20 +446,36 @@ export async function auditNextBatch(
     const matters =
       options.selection === "recent"
         ? await sql<MatterRecord[]>`
-            select *
-            from audit_matter
-            where matter_status is distinct from 'Closed'
-            order by matter_created_at desc, last_audited_at nulls first
+            select m.*
+            from audit_matter m
+            where m.matter_status is distinct from 'Closed'
+            order by
+              case when exists (
+                select 1
+                from audit_item ai
+                where ai.matter_id = m.matter_id
+                  and ai.status = 'Unknown'
+                  and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+              ) then 0 else 1 end,
+              m.matter_created_at desc,
+              m.last_audited_at nulls first
             limit ${batchSize}
           `
         : await sql<MatterRecord[]>`
-            select *
-            from audit_matter
-            where matter_status is distinct from 'Closed'
+            select m.*
+            from audit_matter m
+            where m.matter_status is distinct from 'Closed'
             order by
-              case overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
-              last_audited_at nulls first,
-              matter_created_at desc
+              case when exists (
+                select 1
+                from audit_item ai
+                where ai.matter_id = m.matter_id
+                  and ai.status = 'Unknown'
+                  and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+              ) then 0 else 1 end,
+              case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
+              m.last_audited_at nulls first,
+              m.matter_created_at desc
             limit ${batchSize}
           `;
     for (const matter of matters) {
@@ -563,6 +579,15 @@ export async function rebuildMonthlySnapshots() {
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
     where m.matter_created_at >= date_trunc('month', now())
+      and not exists (
+        select 1
+        from audit_item stale
+        where stale.matter_id = m.matter_id
+          and stale.status = 'Unknown'
+          and stale.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+        group by stale.matter_id
+        having count(*) >= 3
+      )
     group by m.responsible_attorney_id, m.responsible_attorney_name
   `;
 }

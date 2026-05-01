@@ -133,6 +133,17 @@ th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
   min-height: 92px;
   padding: 10px;
 }
+.refresh-needed {
+  background: #f7f2ff;
+  border: 1px solid #ddd0ff;
+  border-radius: 6px;
+  color: var(--purple);
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 12px;
+}
+.refresh-needed span { color: #4d3a9b; font-size: 13px; }
 .matter-foot {
   border-top: 1px solid var(--line);
   display: grid;
@@ -164,6 +175,7 @@ th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
 .Late { background: #fff3dc; color: var(--amber); }
 .Flag, .Missing, .Overdue { background: #fdecec; color: var(--red); }
 .Review, .Unknown { background: #efeafd; color: var(--purple); }
+.Needs-Recheck { background: #efeafd; color: var(--purple); }
 .Pending { background: #e8f1ff; color: var(--blue); }
 .NA { background: #eef0f3; color: var(--muted); }
 .login { max-width: 420px; margin: 12vh auto; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 22px; }

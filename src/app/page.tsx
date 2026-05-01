@@ -117,6 +117,11 @@ function isGenericApiError(reason?: string | null): boolean {
   return reason === "API_ERROR" || reason === "MATTER_ERROR: API_ERROR";
 }
 
+function needsMatterRefresh(items: DashboardItem[]): boolean {
+  const genericApiProblems = items.filter((item) => item.status === "Unknown" && isGenericApiError(item.reasonCode));
+  return genericApiProblems.length >= Math.max(3, items.length - 1);
+}
+
 function stepDetail(item: DashboardItem | undefined, status: string): string {
   if (!item) return "";
   if (status === "Pending") {
@@ -126,7 +131,7 @@ function stepDetail(item: DashboardItem | undefined, status: string): string {
     return "";
   }
   if (status === "Unknown") {
-    return isGenericApiError(item.reasonCode) ? "Needs re-audit" : isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
+    return isGenericApiError(item.reasonCode) ? "Click Recheck Matter" : isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
   }
   if (status === "Late") {
     return isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
@@ -137,12 +142,13 @@ function stepDetail(item: DashboardItem | undefined, status: string): string {
 function stepCell(items: DashboardItem[], code: string) {
   const item = items.find((i) => i.stepCode === code);
   const status = item?.status ?? "Pending";
+  const displayStatus = status === "Unknown" && isGenericApiError(item?.reasonCode) ? "Needs Recheck" : status;
   const detail = stepDetail(item, status);
   const href = item ? evidencePath(item) : "";
   return (
     <div className="step-cell">
-      {badge(status)}
-      {detail && detail !== status ? <div className="detail">{detail}</div> : null}
+      {badge(displayStatus)}
+      {detail && detail !== displayStatus ? <div className="detail">{detail}</div> : null}
       {href ? <a className="evidence-link" href={href}>{evidenceLabel(item!)}</a> : null}
     </div>
   );
@@ -171,21 +177,20 @@ function problemList(items: DashboardItem[]) {
   const problems = items.filter((i) => ["Missing", "Late", "Unknown"].includes(i.status));
   if (!problems.length) return <p>No problems found for this matter.</p>;
 
-  const genericApiProblems = problems.filter((item) => item.status === "Unknown" && isGenericApiError(item.reasonCode));
-  const visibleProblems =
-    genericApiProblems.length >= Math.max(3, problems.length - 1)
-      ? problems.filter((item) => !(item.status === "Unknown" && isGenericApiError(item.reasonCode)))
-      : problems;
+  const refreshNeeded = needsMatterRefresh(items);
+  const visibleProblems = refreshNeeded
+    ? problems.filter((item) => !(item.status === "Unknown" && isGenericApiError(item.reasonCode)))
+    : problems;
 
   return (
     <div className="problem-list">
-      {genericApiProblems.length >= Math.max(3, problems.length - 1) ? (
+      {refreshNeeded ? (
         <div className="problem-item Unknown">
           <div className="problem-title">
             {badge("Review")}
-            <strong>Audit needs refresh</strong>
+            <strong>Fresh check needed</strong>
           </div>
-          <p>This matter has an older generic API error saved for several steps. Use Recheck Matter on this card before trusting the missing-item result.</p>
+          <p>This matter still has an older incomplete result saved. Use Recheck Matter, or keep pressing Refresh Recent and the app will work through these first.</p>
         </div>
       ) : null}
       {visibleProblems.map((item) => {
@@ -354,6 +359,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         {data.matters.map((m) => {
           const items = m.items as DashboardItem[];
           const evidenceItems = items.filter((i) => evidencePath(i));
+          const refreshNeeded = needsMatterRefresh(items);
           return (
             <article className="matter-card" key={m.matter_id}>
               <div className="matter-head">
@@ -382,14 +388,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 </div>
               </div>
 
-              <div className="step-grid">
-                {STEP_COLUMNS.map(([code, label]) => (
-                  <div className="step-block" key={code}>
-                    <span className="step-label">{label}</span>
-                    {stepCell(items, code)}
-                  </div>
-                ))}
-              </div>
+              {refreshNeeded ? (
+                <div className="refresh-needed">
+                  <strong>This matter needs one fresh Clio check.</strong>
+                  <span>The saved result is from an older failed API run, so it is not evidence of missing work yet.</span>
+                </div>
+              ) : (
+                <div className="step-grid">
+                  {STEP_COLUMNS.map(([code, label]) => (
+                    <div className="step-block" key={code}>
+                      <span className="step-label">{label}</span>
+                      {stepCell(items, code)}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="matter-foot">
                 <div>

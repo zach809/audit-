@@ -21,6 +21,17 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     filters.overall ? sql`m.overall_status = ${filters.overall}` : sql`true`,
     filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`,
     filters.to ? sql`m.matter_created_at < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`,
+    sql`
+      not exists (
+        select 1
+        from audit_item stale
+        where stale.matter_id = m.matter_id
+          and stale.status = 'Unknown'
+          and stale.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+        group by stale.matter_id
+        having count(*) >= 3
+      )
+    `,
   ];
 
   const matters = await sql`
@@ -88,7 +99,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       ) filter (where i.step_code is not null), '[]') as items
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
-    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]}
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]}
     group by m.matter_id
     order by
       case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
@@ -98,7 +109,8 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
 
   const attorneys = await sql`
     select responsible_attorney_id as id, responsible_attorney_name as name, count(*)::int as count
-    from audit_matter
+    from audit_matter m
+    where ${conditions[5]}
     group by responsible_attorney_id, responsible_attorney_name
     order by responsible_attorney_name
   `;
@@ -147,7 +159,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         end as display_overall_status
       from audit_matter m
       left join audit_item i on i.matter_id = m.matter_id
-      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]}
+      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]}
       group by m.matter_id, m.overall_status
     ) s
   `;

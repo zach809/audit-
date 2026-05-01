@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   const password = String(form.get("password") ?? "");
   const expected = appConfig().dashboardPassword;
   if (!expected || safeEqual(password, expected)) {
-    const response = NextResponse.redirect(new URL("/", request.url));
+    const response = NextResponse.redirect(new URL("/api/audit/run?source=login", request.url));
     setSessionCookie(response);
     return response;
   }
