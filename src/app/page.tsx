@@ -344,6 +344,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const exportParams = new URLSearchParams(filters).toString();
   const actionExportParams = new URLSearchParams(filters);
   actionExportParams.set("type", "actions");
+  const caseManagerTextParams = new URLSearchParams(filters);
+  caseManagerTextParams.set("type", "case-manager-text");
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
@@ -380,7 +382,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <button type="submit">Export CSV</button>
           </form>
           <form action={`/api/export.csv?${actionExportParams.toString()}`} method="post">
-            <button type="submit">Export Attorney Assistant Report</button>
+            <button type="submit">Export Case Manager CSV</button>
+          </form>
+          <form action={`/api/export.csv?${caseManagerTextParams.toString()}`} method="post">
+            <button type="submit">Export Case Manager Notepad List</button>
           </form>
           <form action="/logout" method="post">
             <button type="submit">Log Out</button>
@@ -506,7 +511,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
         </p>
         <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
-        <p className="muted small">Export Attorney Assistant Report downloads the exact late, missing, and review items to send to assistants, with the timeliness goal, improvement action, proof link, and Clio matter link.</p>
+        <p className="muted small">Export Case Manager CSV downloads the exact late, missing, and review items with the timeliness goal, improvement action, proof link, and Clio matter link. Export Case Manager Notepad List creates a plain text to-do list grouped by attorney.</p>
       </section>
 
       <section className="matter-list">

@@ -368,10 +368,15 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
 
   const metrics = await sql`
     select *
-    from audit_metric_snapshot
-    where period_type = 'month'
-    order by created_at desc, responsible_attorney_name
-    limit 50
+    from (
+      select distinct on (coalesce(responsible_attorney_id, ''), responsible_attorney_name)
+        *
+      from audit_metric_snapshot
+      where period_type = 'month'
+        and period_start = date_trunc('month', now())::date
+      order by coalesce(responsible_attorney_id, ''), responsible_attorney_name, created_at desc, snapshot_id desc
+    ) current_month
+    order by responsible_attorney_name
   `;
 
   return {
@@ -435,7 +440,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
-export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""): Promise<string> {
+async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvRow[]> {
   await initDb();
   const sql = db();
   const overallCondition =
@@ -491,7 +496,11 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
       client_first_name,
       step_code
   `;
+  return rows;
+}
 
+export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""): Promise<string> {
+  const rows = await getActionRows(filters);
   const headers = [
     "Attorney",
     "Priority",
@@ -500,7 +509,7 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
     "Overall",
     "Improvement Area",
     "Status",
-    "What The Assistant Should Do In Clio",
+    "What The Case Manager Should Do In Clio",
     "Timeliness Goal",
     "Due",
     "Found",
@@ -538,4 +547,78 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
   });
 
   return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function textLine(label: string, value: unknown): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  return text ? `${label}: ${text}` : "";
+}
+
+export async function caseManagerTodoText(filters: DashboardFilters = {}, origin = ""): Promise<string> {
+  const rows = await getActionRows(filters);
+  const generated = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date());
+  const grouped = new Map<string, ActionCsvRow[]>();
+  for (const row of rows) {
+    const key = row.responsible_attorney_name || "Unassigned";
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
+  }
+
+  const lines = [
+    "CWCA Case Manager To-Do List",
+    `Generated: ${generated}`,
+    "Use this for internal workflow follow-up only. Open Clio, complete or verify the item, and keep any case details in Clio.",
+    "",
+  ];
+
+  if (!rows.length) {
+    lines.push("No missing, late, or review items matched this view.");
+    return lines.join("\r\n");
+  }
+
+  for (const [attorney, items] of grouped) {
+    lines.push("============================================================");
+    lines.push(`Attorney: ${attorney}`);
+    lines.push(`Items: ${items.length}`);
+    lines.push("============================================================");
+    lines.push("");
+
+    items.forEach((row, index) => {
+      const status = String(row.item_status ?? "");
+      const evidence =
+        row.evidence_source && row.evidence_ref_id
+          ? `${row.evidence_source} #${row.evidence_ref_id}`
+          : "";
+      const proof = proofPath(origin, row.evidence_source, row.evidence_ref_id);
+      const details = [
+        textLine("Priority", priorityFor(status)),
+        textLine("Client", `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim()),
+        textLine("Matter", row.matter_number),
+        textLine("Overall", row.overall_status),
+        textLine("Improvement Area", stepLabel(row.step_code)),
+        textLine("Status", humanStatus(status)),
+        textLine("What The Case Manager Should Do In Clio", actionFor(row.step_code, status, row.reason_code)),
+        textLine("Timeliness Goal", timingGoalFor(row.step_code)),
+        textLine("Due", formatCsvDate(row.deadline_at)),
+        textLine("Found", formatCsvDate(row.evidence_at)),
+        textLine("Open Matter In Clio", clioMatterLink(String(row.matter_id))),
+        textLine("Proof Saved In Auditor", proof),
+        textLine("Evidence Found", evidence),
+        textLine("Matter Created", formatCsvDate(row.matter_created_at)),
+        textLine("Why This Was Flagged", whyFlagged(row.step_code, status, row.reason_code)),
+      ].filter(Boolean);
+
+      lines.push(`${index + 1}. ${stepLabel(row.step_code)} - ${humanStatus(status)}`);
+      lines.push(...details.map((detail) => `   ${detail}`));
+      lines.push("");
+    });
+  }
+
+  return lines.join("\r\n");
 }

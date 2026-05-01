@@ -11,7 +11,8 @@ Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA 
 - Tracks setup, client contact, appearance filing, court results, post-court calls, and client follow-up risks.
 - Stores minimal local audit data and evidence references only.
 - Provides manual refresh, Vercel Cron refresh, filters, historical metrics, and CSV export.
-- Provides an Attorney Assistant action report named `cwca-attorney-assistant-action-report.csv`.
+- Provides a Case Manager action CSV named `cwca-case-manager-action-report.csv`.
+- Provides a Notepad-friendly Case Manager to-do list named `cwca-case-manager-to-do-list.txt`.
 
 No AI is used.
 

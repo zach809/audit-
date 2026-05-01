@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { actionItemsCsv, dashboardCsv } from "@/lib/dashboard-data";
+import { actionItemsCsv, caseManagerTodoText, dashboardCsv } from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
@@ -17,12 +17,23 @@ export async function POST(request: NextRequest) {
     from: url.searchParams.get("from") ?? "",
     to: url.searchParams.get("to") ?? "",
   };
-  const actionList = url.searchParams.get("type") === "actions";
-  const csv = actionList ? await actionItemsCsv(filters, url.origin) : await dashboardCsv(filters);
-  return new NextResponse(csv, {
+  const exportType = url.searchParams.get("type") ?? "";
+  const isActionList = exportType === "actions";
+  const isCaseManagerText = exportType === "case-manager-text";
+  const body = isCaseManagerText
+    ? await caseManagerTodoText(filters, url.origin)
+    : isActionList
+      ? await actionItemsCsv(filters, url.origin)
+      : await dashboardCsv(filters);
+  const filename = isCaseManagerText
+    ? "cwca-case-manager-to-do-list.txt"
+    : isActionList
+      ? "cwca-case-manager-action-report.csv"
+      : "cwca-audit.csv";
+  return new NextResponse(body, {
     headers: {
-      "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${actionList ? "cwca-attorney-assistant-action-report.csv" : "cwca-audit.csv"}"`,
+      "content-type": `${isCaseManagerText ? "text/plain" : "text/csv"}; charset=utf-8`,
+      "content-disposition": `attachment; filename="${filename}"`,
     },
   });
 }
