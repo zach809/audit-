@@ -114,7 +114,7 @@ function isInternalPlaceholder(reason?: string | null): boolean {
 }
 
 function isGenericApiError(reason?: string | null): boolean {
-  return reason === "API_ERROR" || reason === "MATTER_ERROR: API_ERROR";
+  return reason === "API_ERROR" || reason === "MATTER_ERROR: API_ERROR" || Boolean(reason?.startsWith("NOTES_400:"));
 }
 
 function needsMatterRefresh(items: DashboardItem[]): boolean {
@@ -298,12 +298,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       ) : null}
 
       <section className="grid">
-        <div className="stat"><span>Total</span><strong>{data.summary.total}</strong></div>
-        <div className="stat"><span>Pass</span><strong>{data.summary.pass}</strong></div>
-        <div className="stat"><span>Pending</span><strong>{data.summary.pending}</strong></div>
-        <div className="stat"><span>Late</span><strong>{data.summary.late}</strong></div>
-        <div className="stat"><span>Flag</span><strong>{data.summary.flag}</strong></div>
-        <div className="stat"><span>Review</span><strong>{data.summary.review}</strong></div>
+        <div className="stat"><span>Matters Checked</span><strong>{data.summary.total}</strong></div>
+        <div className="stat"><span>Passing Matters</span><strong>{data.summary.pass}</strong></div>
+        <div className="stat"><span>Needs Action</span><strong>{data.summary.flag}</strong></div>
+        <div className="stat"><span>Needs Review</span><strong>{data.summary.review}</strong></div>
+        <div className="stat"><span>Missing Steps</span><strong>{data.summary.missing_items}</strong></div>
+        <div className="stat"><span>Late Steps</span><strong>{data.summary.late_items}</strong></div>
       </section>
 
       <section className="panel">

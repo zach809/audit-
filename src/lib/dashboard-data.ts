@@ -32,6 +32,14 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         having count(*) >= 3
       )
     `,
+    sql`
+      not exists (
+        select 1
+        from audit_item stale_notes
+        where stale_notes.matter_id = m.matter_id
+          and stale_notes.reason_code like 'NOTES_400:%'
+      )
+    `,
   ];
 
   const matters = await sql`
@@ -99,7 +107,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       ) filter (where i.step_code is not null), '[]') as items
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
-    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]}
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
     group by m.matter_id
     order by
       case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
@@ -110,7 +118,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const attorneys = await sql`
     select responsible_attorney_id as id, responsible_attorney_name as name, count(*)::int as count
     from audit_matter m
-    where ${conditions[5]}
+    where ${conditions[5]} and ${conditions[6]}
     group by responsible_attorney_id, responsible_attorney_name
     order by responsible_attorney_name
   `;
@@ -122,7 +130,10 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       count(*) filter (where display_overall_status = 'Pending')::int as pending,
       count(*) filter (where display_overall_status = 'Late')::int as late,
       count(*) filter (where display_overall_status = 'Flag')::int as flag,
-      count(*) filter (where display_overall_status = 'Review')::int as review
+      count(*) filter (where display_overall_status = 'Review')::int as review,
+      coalesce(sum(missing_items), 0)::int as missing_items,
+      coalesce(sum(late_items), 0)::int as late_items,
+      coalesce(sum(unknown_items), 0)::int as unknown_items
     from (
       select
         m.matter_id,
@@ -156,10 +167,31 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
             end
           ) = 'Pending') > 0 then 'Pending'
           else m.overall_status
-        end as display_overall_status
+        end as display_overall_status,
+        count(i.*) filter (where (
+          case
+            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+            else i.status
+          end
+        ) = 'Missing')::int as missing_items,
+        count(i.*) filter (where (
+          case
+            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+            else i.status
+          end
+        ) = 'Late')::int as late_items,
+        count(i.*) filter (where (
+          case
+            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+            else i.status
+          end
+        ) = 'Unknown')::int as unknown_items
       from audit_matter m
       left join audit_item i on i.matter_id = m.matter_id
-      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]}
+      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       group by m.matter_id, m.overall_status
     ) s
   `;
@@ -182,7 +214,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   return {
     matters,
     attorneys,
-    summary: summary[0] ?? { total: 0, pass: 0, pending: 0, late: 0, flag: 0, review: 0 },
+    summary: summary[0] ?? { total: 0, pass: 0, pending: 0, late: 0, flag: 0, review: 0, missing_items: 0, late_items: 0, unknown_items: 0 },
     lastRun: lastRun[0] ?? null,
     metrics,
   };

@@ -454,8 +454,10 @@ export async function auditNextBatch(
                 select 1
                 from audit_item ai
                 where ai.matter_id = m.matter_id
-                  and ai.status = 'Unknown'
-                  and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+                  and (
+                    ai.reason_code like 'NOTES_400:%'
+                    or (ai.status = 'Unknown' and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR'))
+                  )
               ) then 0 else 1 end,
               m.matter_created_at desc,
               m.last_audited_at nulls first
@@ -470,8 +472,10 @@ export async function auditNextBatch(
                 select 1
                 from audit_item ai
                 where ai.matter_id = m.matter_id
-                  and ai.status = 'Unknown'
-                  and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+                  and (
+                    ai.reason_code like 'NOTES_400:%'
+                    or (ai.status = 'Unknown' and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR'))
+                  )
               ) then 0 else 1 end,
               case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
               m.last_audited_at nulls first,
@@ -587,6 +591,12 @@ export async function rebuildMonthlySnapshots() {
           and stale.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
         group by stale.matter_id
         having count(*) >= 3
+      )
+      and not exists (
+        select 1
+        from audit_item stale_notes
+        where stale_notes.matter_id = m.matter_id
+          and stale_notes.reason_code like 'NOTES_400:%'
       )
     group by m.responsible_attorney_id, m.responsible_attorney_name
   `;
