@@ -6,6 +6,22 @@ import { appConfig } from "@/lib/config";
 
 export const maxDuration = 300;
 
+function redirectBack(request: NextRequest, params: Record<string, string>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  return NextResponse.redirect(new URL(`/?${search.toString()}`, request.url), 303);
+}
+
+function lookbackFromDate(from?: string) {
+  if (!from) return 7;
+  const parsed = new Date(from);
+  if (Number.isNaN(parsed.getTime())) return 7;
+  const days = Math.ceil((Date.now() - parsed.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  return Math.max(7, days);
+}
+
 export async function GET(request: NextRequest) {
   if (!isAuthorizedWorkerRequest(request)) {
     if (!request.headers.get("authorization")) {
@@ -20,7 +36,7 @@ export async function GET(request: NextRequest) {
     result = await auditNextBatch(undefined, {
       discover: true,
       discoverLookbackDays: isManualDashboardRun ? 7 : undefined,
-      batchSize: isManualDashboardRun ? 3 : appConfig().auditBatchSize,
+      batchSize: appConfig().auditBatchSize,
       selection: isManualDashboardRun ? "recent" : "priority",
     });
   } catch (error) {
@@ -40,14 +56,33 @@ export async function POST(request: NextRequest) {
   if (request.cookies.get("cwca_session")) {
     const form = await request.formData().catch(() => null);
     const matterId = form?.get("matter_id")?.toString();
+    const filters = {
+      attorney: form?.get("attorney")?.toString() ?? "",
+      overall: form?.get("overall")?.toString() ?? "",
+      from: form?.get("from")?.toString() ?? "",
+      to: form?.get("to")?.toString() ?? "",
+    };
     if (matterId) {
       try {
         const result = await auditOneMatterById(undefined, matterId);
-        return NextResponse.redirect(new URL(`/?audit=ran&message=${encodeURIComponent(result.message)}`, request.url), 303);
+        return redirectBack(request, { ...filters, audit: "ran", message: result.message });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return NextResponse.redirect(new URL(`/?audit=failed&message=${encodeURIComponent(message.slice(0, 240))}`, request.url), 303);
+        return redirectBack(request, { ...filters, audit: "failed", message: message.slice(0, 240) });
       }
+    }
+    try {
+      const result = await auditNextBatch(undefined, {
+        discover: true,
+        discoverLookbackDays: lookbackFromDate(filters.from),
+        batchSize: appConfig().auditBatchSize,
+        selection: "recent",
+        filters,
+      });
+      return redirectBack(request, { ...filters, audit: "ran", message: result.message });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return redirectBack(request, { ...filters, audit: "failed", message: message.slice(0, 240) });
     }
   }
   return GET(request);

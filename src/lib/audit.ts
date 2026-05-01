@@ -31,6 +31,11 @@ type EvidenceBundle = {
   calendars: ClioCalendarEntry[];
   errors: EvidenceErrors;
 };
+type AuditBatchFilters = {
+  attorney?: string;
+  from?: string;
+  to?: string;
+};
 
 function apiReason(error: unknown, label: string): string {
   if (error instanceof ClioApiError) {
@@ -428,8 +433,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
 
 export async function auditNextBatch(
   client = new ClioClient(),
-  options: { discover?: boolean; batchSize?: number; discoverLookbackDays?: number; selection?: "priority" | "recent" } = {},
-): Promise<{ audited: number; discovered: number; message: string }> {
+  options: { discover?: boolean; batchSize?: number; discoverLookbackDays?: number; selection?: "priority" | "recent"; filters?: AuditBatchFilters } = {},
+): Promise<{ audited: number; discovered: number; remainingUnchecked: number; message: string }> {
   await initDb();
   const sql = db();
   const runRows = await sql`insert into audit_run(status) values ('running') returning id`;
@@ -443,40 +448,64 @@ export async function auditNextBatch(
       discovered = await discoverMatters(client, options.discoverLookbackDays);
     }
     const batchSize = options.batchSize ?? appConfig().auditBatchSize;
+    const fromDate = parseDate(options.filters?.from);
+    const toDate = parseDate(options.filters?.to ? `${options.filters.to}T23:59:59` : undefined);
+    const batchConditions = [
+      sql`m.matter_status is distinct from 'Closed'`,
+      options.filters?.attorney ? sql`m.responsible_attorney_id = ${options.filters.attorney}` : sql`true`,
+      fromDate ? sql`m.matter_created_at >= ${fromDate}` : sql`true`,
+      toDate ? sql`m.matter_created_at < ${toDate}` : sql`true`,
+    ];
     const matters =
       options.selection === "recent"
         ? await sql<MatterRecord[]>`
             select m.*
             from audit_matter m
-            where m.matter_status is distinct from 'Closed'
+            where ${batchConditions[0]} and ${batchConditions[1]} and ${batchConditions[2]} and ${batchConditions[3]}
             order by
-              case when exists (
-                select 1
-                from audit_item ai
-                where ai.matter_id = m.matter_id
-                  and (
-                    ai.reason_code like 'NOTES_400:%'
-                    or (ai.status = 'Unknown' and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR'))
-                  )
-              ) then 0 else 1 end,
-              m.matter_created_at desc,
-              m.last_audited_at nulls first
+              case
+                when not exists (
+                  select 1
+                  from audit_item ai_unchecked
+                  where ai_unchecked.matter_id = m.matter_id
+                ) then 0
+                when exists (
+                  select 1
+                  from audit_item ai
+                  where ai.matter_id = m.matter_id
+                    and (
+                      ai.reason_code like 'NOTES_400:%'
+                      or (ai.status = 'Unknown' and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR'))
+                    )
+                ) then 1
+                else 2
+              end,
+              m.last_audited_at nulls first,
+              m.matter_created_at desc
             limit ${batchSize}
           `
         : await sql<MatterRecord[]>`
             select m.*
             from audit_matter m
-            where m.matter_status is distinct from 'Closed'
+            where ${batchConditions[0]} and ${batchConditions[1]} and ${batchConditions[2]} and ${batchConditions[3]}
             order by
-              case when exists (
-                select 1
-                from audit_item ai
-                where ai.matter_id = m.matter_id
-                  and (
-                    ai.reason_code like 'NOTES_400:%'
-                    or (ai.status = 'Unknown' and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR'))
-                  )
-              ) then 0 else 1 end,
+              case
+                when not exists (
+                  select 1
+                  from audit_item ai_unchecked
+                  where ai_unchecked.matter_id = m.matter_id
+                ) then 0
+                when exists (
+                  select 1
+                  from audit_item ai
+                  where ai.matter_id = m.matter_id
+                    and (
+                      ai.reason_code like 'NOTES_400:%'
+                      or (ai.status = 'Unknown' and ai.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR'))
+                    )
+                ) then 1
+                else 2
+              end,
               case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Pending' then 3 else 4 end,
               m.last_audited_at nulls first,
               m.matter_created_at desc
@@ -505,9 +534,23 @@ export async function auditNextBatch(
       }
     }
     await rebuildMonthlySnapshots();
-    const message = `Audited ${audited} matters. Discovered/updated ${discovered} open or pending matters.`;
+    const remainingRows = await sql`
+      select count(*)::int as count
+      from audit_matter m
+      where ${batchConditions[0]} and ${batchConditions[1]} and ${batchConditions[2]} and ${batchConditions[3]}
+        and not exists (
+          select 1
+          from audit_item i
+          where i.matter_id = m.matter_id
+        )
+    `;
+    const remainingUnchecked = Number(remainingRows[0]?.count ?? 0);
+    const batchesLeft = Math.ceil(remainingUnchecked / Math.max(1, batchSize));
+    const batchLabel = batchesLeft === 1 ? "batch" : "batches";
+    const matterLabel = remainingUnchecked === 1 ? "matter" : "matters";
+    const message = `Batch checked ${audited} matters. ${remainingUnchecked} ${matterLabel} still waiting (${batchesLeft} ${batchLabel} left at ${batchSize}/batch). Discovered/updated ${discovered} open or pending matters.`;
     await sql`update audit_run set finished_at = now(), status = 'completed', matters_discovered = ${discovered}, matters_audited = ${audited}, message = ${message} where id = ${runId}`;
-    return { audited, discovered, message };
+    return { audited, discovered, remainingUnchecked, message };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await sql`update audit_run set finished_at = now(), status = 'failed', matters_discovered = ${discovered}, matters_audited = ${audited}, message = ${message} where id = ${runId}`;
@@ -515,7 +558,7 @@ export async function auditNextBatch(
   }
 }
 
-export async function auditOneMatterById(client = new ClioClient(), matterId: string): Promise<{ audited: number; discovered: number; message: string }> {
+export async function auditOneMatterById(client = new ClioClient(), matterId: string): Promise<{ audited: number; discovered: number; remainingUnchecked: number; message: string }> {
   await initDb();
   const sql = db();
   const rows = await sql<MatterRecord[]>`
@@ -525,7 +568,7 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
     limit 1
   `;
   const matter = rows[0];
-  if (!matter) throw new Error("Matter was not found in the audit database. Run Refresh Recent first.");
+  if (!matter) throw new Error("Matter was not found in the audit database. Run Audit Batch first.");
 
   try {
     const evidence = await fetchEvidence(client, matter);
@@ -548,8 +591,18 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
   }
 
   await rebuildMonthlySnapshots();
+  const remainingRows = await sql`
+    select count(*)::int as count
+    from audit_matter m
+    where m.matter_status is distinct from 'Closed'
+      and not exists (
+        select 1
+        from audit_item i
+        where i.matter_id = m.matter_id
+      )
+  `;
   const name = `${matter.client_first_name} ${matter.client_last_name}`.trim() || matter.matter_number;
-  return { audited: 1, discovered: 0, message: `Rechecked ${name}.` };
+  return { audited: 1, discovered: 0, remainingUnchecked: Number(remainingRows[0]?.count ?? 0), message: `Rechecked ${name}.` };
 }
 
 export async function rebuildMonthlySnapshots() {
@@ -568,11 +621,11 @@ export async function rebuildMonthlySnapshots() {
       'month',
       m.responsible_attorney_id,
       m.responsible_attorney_name,
-      count(distinct m.matter_id)::int,
-      count(distinct m.matter_id) filter (where m.overall_status = 'Pass')::int,
-      count(distinct m.matter_id) filter (where m.overall_status = 'Late')::int,
-      count(distinct m.matter_id) filter (where m.overall_status = 'Flag')::int,
-      count(distinct m.matter_id) filter (where m.overall_status = 'Review')::int,
+      count(distinct m.matter_id) filter (where exists (select 1 from audit_item checked where checked.matter_id = m.matter_id))::int,
+      count(distinct m.matter_id) filter (where m.overall_status = 'Pass' and exists (select 1 from audit_item checked where checked.matter_id = m.matter_id))::int,
+      count(distinct m.matter_id) filter (where m.overall_status = 'Late' and exists (select 1 from audit_item checked where checked.matter_id = m.matter_id))::int,
+      count(distinct m.matter_id) filter (where m.overall_status = 'Flag' and exists (select 1 from audit_item checked where checked.matter_id = m.matter_id))::int,
+      count(distinct m.matter_id) filter (where m.overall_status = 'Review' and exists (select 1 from audit_item checked where checked.matter_id = m.matter_id))::int,
       count(i.*) filter (where i.status = 'Missing')::int,
       count(i.*) filter (where i.status = 'Late')::int,
       count(i.*) filter (where i.status = 'Unknown')::int,

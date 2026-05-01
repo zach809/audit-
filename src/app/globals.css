@@ -89,10 +89,12 @@ input, select {
   min-height: 36px;
 }
 .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: white; }
-table { width: 100%; border-collapse: collapse; min-width: 1200px; }
+table { width: 100%; border-collapse: collapse; min-width: 1320px; }
 th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; font-size: 13px; }
 th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
 .matter-list { display: grid; gap: 12px; }
+.empty-state { color: var(--muted); }
+.empty-state strong { color: var(--ink); }
 .matter-card {
   background: white;
   border: 1px solid var(--line);
@@ -187,6 +189,12 @@ th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
 .Flag, .Missing, .Overdue { background: #fdecec; color: var(--red); }
 .Review, .Unknown { background: #efeafd; color: var(--purple); }
 .Needs-Recheck { background: #efeafd; color: var(--purple); }
+.Unchecked { background: #eef0f3; color: var(--muted); }
+.Not-Checked { background: #eef0f3; color: var(--muted); }
+.Strong { background: #e7f5ec; color: var(--green); }
+.Watch { background: #fff3dc; color: var(--amber); }
+.Needs-Focus { background: #fdecec; color: var(--red); }
+.No-Data { background: #eef0f3; color: var(--muted); }
 .Pending { background: #e8f1ff; color: var(--blue); }
 .NA { background: #eef0f3; color: var(--muted); }
 .login { max-width: 420px; margin: 12vh auto; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 22px; }

@@ -15,10 +15,19 @@ function csvCell(value: unknown): string {
 export async function getDashboardData(filters: DashboardFilters = {}) {
   await initDb();
   const sql = db();
+  const overallCondition =
+    filters.overall === "Unchecked"
+      ? sql`not exists (select 1 from audit_item filter_item where filter_item.matter_id = m.matter_id)`
+      : filters.overall
+        ? sql`
+            m.overall_status = ${filters.overall}
+            and exists (select 1 from audit_item filter_item where filter_item.matter_id = m.matter_id)
+          `
+        : sql`true`;
   const conditions = [
     sql`true`,
     filters.attorney ? sql`m.responsible_attorney_id = ${filters.attorney}` : sql`true`,
-    filters.overall ? sql`m.overall_status = ${filters.overall}` : sql`true`,
+    overallCondition,
     filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`,
     filters.to ? sql`m.matter_created_at < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`,
     sql`
@@ -46,7 +55,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     select
       m.*,
       case
-        when count(i.*) = 0 then 'Pending'
+        when count(i.*) = 0 then 'Unchecked'
         when count(*) filter (where (
           case
             when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -109,6 +118,11 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
     where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
+      and exists (
+        select 1
+        from audit_item visible_item
+        where visible_item.matter_id = m.matter_id
+      )
     group by m.matter_id
     order by
       case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
@@ -127,6 +141,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const summary = await sql`
     select
       count(*)::int as total,
+      count(*) filter (where display_overall_status = 'Unchecked')::int as unchecked,
       count(*) filter (where display_overall_status = 'Pass')::int as pass,
       count(*) filter (where display_overall_status = 'Pending')::int as pending,
       count(*) filter (where display_overall_status = 'Late')::int as late,
@@ -139,7 +154,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       select
         m.matter_id,
         case
-          when count(i.*) = 0 then 'Pending'
+          when count(i.*) = 0 then 'Unchecked'
           when count(*) filter (where (
             case
               when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -216,7 +231,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   return {
     matters,
     attorneys,
-    summary: summary[0] ?? { total: 0, pass: 0, pending: 0, late: 0, flag: 0, review: 0, missing_items: 0, late_items: 0, unknown_items: 0 },
+    summary: summary[0] ?? { total: 0, unchecked: 0, pass: 0, pending: 0, late: 0, flag: 0, review: 0, missing_items: 0, late_items: 0, unknown_items: 0 },
     lastRun: lastRun[0] ?? null,
     metrics,
   };

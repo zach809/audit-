@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-expanded-court-keywords-2026-04-30-2155";
+export const APP_VERSION = "cwca-filtered-batch-queue-2026-04-30-2245";

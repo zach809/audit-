@@ -148,6 +148,14 @@ function stepDetail(item: DashboardItem | undefined, status: string): string {
 
 function stepCell(items: DashboardItem[], code: string) {
   const item = items.find((i) => i.stepCode === code);
+  if (!item) {
+    return (
+      <div className="step-cell">
+        {badge("Not Checked")}
+        <div className="detail">Queued for next batch</div>
+      </div>
+    );
+  }
   const status = item?.status ?? "Pending";
   const displayStatus = status === "Unknown" && isGenericApiError(item?.reasonCode) ? "Needs Recheck" : status;
   const detail = stepDetail(item, status);
@@ -182,7 +190,7 @@ function problemText(item: DashboardItem): string {
 
 function problemList(items: DashboardItem[]) {
   if (!items.length) {
-    return <p>Waiting for audit. Click Recheck Matter or Refresh Recent to pull fresh Clio evidence.</p>;
+    return <p>Not checked yet. Click Recheck Matter for this one case, or Run Audit Batch to continue safely through the queue.</p>;
   }
   const problems = items.filter((i) => ["Missing", "Late", "Unknown"].includes(i.status));
   if (!problems.length) {
@@ -207,7 +215,7 @@ function problemList(items: DashboardItem[]) {
             {badge("Review")}
             <strong>Fresh check needed</strong>
           </div>
-          <p>This matter still has an older incomplete result saved. Use Recheck Matter, or keep pressing Refresh Recent and the app will work through these first.</p>
+          <p>This matter still has an older incomplete result saved. Use Recheck Matter, or keep pressing Run Audit Batch and the app will work through these first.</p>
         </div>
       ) : null}
       {visibleProblems.map((item) => {
@@ -257,6 +265,58 @@ function filterLink(filters: Record<string, string>, next: Record<string, string
   return query ? `/?${query}` : "/";
 }
 
+type MetricRow = {
+  matters_checked?: number | string;
+  pass_count?: number | string;
+  flag_count?: number | string;
+  review_count?: number | string;
+  missing_item_count?: number | string;
+  late_item_count?: number | string;
+  unknown_item_count?: number | string;
+};
+
+function num(value: number | string | undefined): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function pct(part: number, total: number): string {
+  if (!total) return "0%";
+  return `${Math.round((part / total) * 100)}%`;
+}
+
+function metricHealth(row: MetricRow): string {
+  const checked = num(row.matters_checked);
+  const passRate = checked ? num(row.pass_count) / checked : 0;
+  const problemMatters = num(row.flag_count) + num(row.review_count);
+  if (!checked) return "No Data";
+  if (problemMatters === 0) return "Strong";
+  if (passRate >= 0.75) return "Watch";
+  return "Needs Focus";
+}
+
+function metricFocus(row: MetricRow): { area: string; action: string } {
+  const missing = num(row.missing_item_count);
+  const late = num(row.late_item_count);
+  const unknown = num(row.unknown_item_count);
+  const flag = num(row.flag_count);
+  const review = num(row.review_count);
+
+  if (missing === 0 && late === 0 && unknown === 0 && flag === 0 && review === 0) {
+    return { area: "Maintain", action: "Keep using the current Clio workflow and evidence habits." };
+  }
+  if (unknown >= missing && unknown >= late && unknown > 0) {
+    return { area: "Audit visibility", action: "Recheck matters and confirm emails/events are linked to the matter." };
+  }
+  if (missing >= late && missing > 0) {
+    return { area: "Missing evidence", action: "Focus on completing or logging required workflow steps in Clio." };
+  }
+  if (late > 0) {
+    return { area: "Timeliness", action: "Review intake handoff timing and same-day setup deadlines." };
+  }
+  return { area: "Review", action: "Open the flagged matters and verify the proof links." };
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
@@ -270,6 +330,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const monthStart = monthStartInput(new Date());
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   const data = await getDashboardData(filters);
+  const auditBatchSize = Math.max(1, Number(process.env.AUDIT_BATCH_SIZE ?? "10") || 10);
+  const uncheckedCount = num(data.summary.unchecked);
+  const checkedCount = Math.max(0, num(data.summary.total) - uncheckedCount);
+  const batchesLeft = Math.ceil(uncheckedCount / auditBatchSize);
+  const waitingLabel = uncheckedCount === 1 ? "matter" : "matters";
+  const batchLabel = batchesLeft === 1 ? "batch" : "batches";
   const exportParams = new URLSearchParams(filters).toString();
   const notice =
     searchParams.audit === "ran"
@@ -297,7 +363,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>
           )}
           <form action="/api/audit/run" method="post">
-            <button className="primary" type="submit">Refresh Recent</button>
+            <input type="hidden" name="attorney" value={filters.attorney} />
+            <input type="hidden" name="overall" value={filters.overall} />
+            <input type="hidden" name="from" value={filters.from} />
+            <input type="hidden" name="to" value={filters.to} />
+            <button className="primary" type="submit">Run Audit Batch</button>
           </form>
           <form action={`/api/export.csv?${exportParams}`} method="post">
             <button type="submit">Export CSV</button>
@@ -315,12 +385,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       ) : null}
 
       <section className="grid">
-        <div className="stat"><span>Matters Checked</span><strong>{data.summary.total}</strong></div>
+        <div className="stat"><span>Matters Found</span><strong>{data.summary.total}</strong></div>
+        <div className="stat"><span>Checked</span><strong>{checkedCount}</strong></div>
+        <div className="stat"><span>Waiting for Batch</span><strong>{uncheckedCount}</strong></div>
+        <div className="stat"><span>Batches Left</span><strong>{batchesLeft}</strong></div>
         <div className="stat"><span>Passing Matters</span><strong>{data.summary.pass}</strong></div>
         <div className="stat"><span>Needs Action</span><strong>{data.summary.flag}</strong></div>
-        <div className="stat"><span>Needs Review</span><strong>{data.summary.review}</strong></div>
-        <div className="stat"><span>Missing Steps</span><strong>{data.summary.missing_items}</strong></div>
-        <div className="stat"><span>Late Steps</span><strong>{data.summary.late_items}</strong></div>
       </section>
 
       <section className="panel">
@@ -367,13 +437,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </p>
         ) : null}
         <p className="muted small">
+          Run Audit Batch checks up to {auditBatchSize} matters at a time. {uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} waiting, about ${batchesLeft} ${batchLabel} left.` : "Everything discovered has been checked."}
+        </p>
+        <p className="muted small">
           Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
         </p>
         <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
       </section>
 
       <section className="matter-list">
-        {data.matters.map((m) => {
+        {data.matters.length ? data.matters.map((m) => {
           const items = m.items as DashboardItem[];
           const evidenceItems = items.filter((i) => evidencePath(i));
           const refreshNeeded = needsMatterRefresh(items);
@@ -400,6 +473,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   {badge(m.display_overall_status ?? m.overall_status)}
                   <form action="/api/audit/run" method="post">
                     <input type="hidden" name="matter_id" value={m.matter_id} />
+                    <input type="hidden" name="attorney" value={filters.attorney} />
+                    <input type="hidden" name="overall" value={filters.overall} />
+                    <input type="hidden" name="from" value={filters.from} />
+                    <input type="hidden" name="to" value={filters.to} />
                     <button type="submit">Recheck Matter</button>
                   </form>
                 </div>
@@ -443,41 +520,60 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               </div>
             </article>
           );
-        })}
+        }) : (
+          <section className="panel empty-state">
+            <strong>No checked matter cards match this view yet.</strong>
+            <p>{uncheckedCount > 0 ? "Click Run Audit Batch to pull the next safe batch from Clio." : "Try clearing filters or running a fresh batch."}</p>
+          </section>
+        )}
       </section>
 
       <section className="panel">
-        <h2>Current Month Attorney Metrics</h2>
-        <p className="muted small">This summary covers the current month across the firm. Use the table filters above for matter-level review.</p>
+        <h2>Current Month Attorney Coaching Summary</h2>
+        <p className="muted small">This turns the monthly counts into coaching areas. It is based only on Clio-visible workflow evidence.</p>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Attorney</th>
                 <th>Checked</th>
-                <th>Pass</th>
-                <th>Late</th>
-                <th>Flag</th>
-                <th>Review</th>
-                <th>Missing Items</th>
-                <th>Late Items</th>
-                <th>Unknown Items</th>
+                <th>Health</th>
+                <th>Pass Rate</th>
+                <th>Needs Action</th>
+                <th>Needs Review</th>
+                <th>Missing Steps</th>
+                <th>Late Steps</th>
+                <th>Unknown Checks</th>
+                <th>Main Area</th>
+                <th>Suggested Coaching</th>
               </tr>
             </thead>
             <tbody>
-              {data.metrics.map((m) => (
-                <tr key={m.snapshot_id}>
-                  <td>{m.responsible_attorney_name || "Unassigned"}</td>
-                  <td>{m.matters_checked}</td>
-                  <td>{m.pass_count}</td>
-                  <td>{m.late_count}</td>
-                  <td>{m.flag_count}</td>
-                  <td>{m.review_count}</td>
-                  <td>{m.missing_item_count}</td>
-                  <td>{m.late_item_count}</td>
-                  <td>{m.unknown_item_count}</td>
-                </tr>
-              ))}
+              {data.metrics.map((m) => {
+                const focus = metricFocus(m);
+                const checked = num(m.matters_checked);
+                const pass = num(m.pass_count);
+                const action = num(m.flag_count);
+                const review = num(m.review_count);
+                const missing = num(m.missing_item_count);
+                const late = num(m.late_item_count);
+                const unknown = num(m.unknown_item_count);
+                return (
+                  <tr key={m.snapshot_id}>
+                    <td><strong>{m.responsible_attorney_name || "Unassigned"}</strong></td>
+                    <td>{checked}</td>
+                    <td>{badge(metricHealth(m))}</td>
+                    <td><strong>{pct(pass, checked)}</strong> <span className="muted small">({pass}/{checked})</span></td>
+                    <td>{action}</td>
+                    <td>{review}</td>
+                    <td>{missing}</td>
+                    <td>{late}</td>
+                    <td>{unknown}</td>
+                    <td><strong>{focus.area}</strong></td>
+                    <td>{focus.action}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
