@@ -546,9 +546,12 @@ export async function auditNextBatch(
     `;
     const remainingUnchecked = Number(remainingRows[0]?.count ?? 0);
     const batchesLeft = Math.ceil(remainingUnchecked / Math.max(1, batchSize));
-    const batchLabel = batchesLeft === 1 ? "batch" : "batches";
+    const batchLabel = batchesLeft === 1 ? "time" : "times";
     const matterLabel = remainingUnchecked === 1 ? "matter" : "matters";
-    const message = `Batch checked ${audited} matters. ${remainingUnchecked} ${matterLabel} still waiting (${batchesLeft} ${batchLabel} left at ${batchSize}/batch). Discovered/updated ${discovered} open or pending matters.`;
+    const nextStep = remainingUnchecked > 0
+      ? `${remainingUnchecked} ${matterLabel} still need an audit. Click Run Audit Batch about ${batchesLeft} more ${batchLabel}.`
+      : "All discovered matters in this view have been audited.";
+    const message = `Audited ${audited} more matters. ${nextStep} Found/updated ${discovered} Clio matters.`;
     await sql`update audit_run set finished_at = now(), status = 'completed', matters_discovered = ${discovered}, matters_audited = ${audited}, message = ${message} where id = ${runId}`;
     return { audited, discovered, remainingUnchecked, message };
   } catch (error) {

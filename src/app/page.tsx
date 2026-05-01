@@ -331,11 +331,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   const data = await getDashboardData(filters);
   const auditBatchSize = Math.max(1, Number(process.env.AUDIT_BATCH_SIZE ?? "10") || 10);
+  const totalCount = num(data.summary.total);
   const uncheckedCount = num(data.summary.unchecked);
-  const checkedCount = Math.max(0, num(data.summary.total) - uncheckedCount);
+  const checkedCount = Math.max(0, totalCount - uncheckedCount);
   const batchesLeft = Math.ceil(uncheckedCount / auditBatchSize);
+  const progressPct = totalCount ? Math.round((checkedCount / totalCount) * 100) : 0;
+  const nextBatchCount = Math.min(auditBatchSize, uncheckedCount);
   const waitingLabel = uncheckedCount === 1 ? "matter" : "matters";
-  const batchLabel = batchesLeft === 1 ? "batch" : "batches";
+  const batchLabel = batchesLeft === 1 ? "click" : "clicks";
+  const nextBatchLabel = nextBatchCount === 1 ? "matter" : "matters";
   const exportParams = new URLSearchParams(filters).toString();
   const notice =
     searchParams.audit === "ran"
@@ -384,13 +388,34 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </section>
       ) : null}
 
+      <section className="queue-panel">
+        <div className="queue-copy">
+          <span className="label">Audit Progress</span>
+          <strong>{checkedCount} of {totalCount} matters audited</strong>
+          <p>
+            {uncheckedCount > 0
+              ? `${uncheckedCount} ${waitingLabel} still need checking. Click Run Audit Batch to audit the next ${nextBatchCount} ${nextBatchLabel}.`
+              : "Everything discovered in this view has been checked."}
+          </p>
+          <p className="muted small">Matter cards below only show audited results. Waiting matters stay hidden until their batch finishes.</p>
+        </div>
+        <div className="queue-meter" aria-label={`${progressPct}% audited`}>
+          <div className="queue-meter-bar" style={{ width: `${progressPct}%` }} />
+        </div>
+        <div className="queue-next">
+          <span>{progressPct}% done</span>
+          <strong>{batchesLeft}</strong>
+          <span>{batchLabel} left</span>
+        </div>
+      </section>
+
       <section className="grid">
-        <div className="stat"><span>Matters Found</span><strong>{data.summary.total}</strong></div>
-        <div className="stat"><span>Checked</span><strong>{checkedCount}</strong></div>
-        <div className="stat"><span>Waiting for Batch</span><strong>{uncheckedCount}</strong></div>
-        <div className="stat"><span>Batches Left</span><strong>{batchesLeft}</strong></div>
-        <div className="stat"><span>Passing Matters</span><strong>{data.summary.pass}</strong></div>
-        <div className="stat"><span>Needs Action</span><strong>{data.summary.flag}</strong></div>
+        <div className="stat"><span>Clio Matters</span><strong>{totalCount}</strong></div>
+        <div className="stat"><span>Audited</span><strong>{checkedCount}</strong></div>
+        <div className="stat"><span>Left To Audit</span><strong>{uncheckedCount}</strong></div>
+        <div className="stat"><span>Clicks Left</span><strong>{batchesLeft}</strong></div>
+        <div className="stat"><span>Passing</span><strong>{data.summary.pass}</strong></div>
+        <div className="stat"><span>Need Attention</span><strong>{data.summary.flag}</strong></div>
       </section>
 
       <section className="panel">
@@ -437,7 +462,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </p>
         ) : null}
         <p className="muted small">
-          Run Audit Batch checks up to {auditBatchSize} matters at a time. {uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} waiting, about ${batchesLeft} ${batchLabel} left.` : "Everything discovered has been checked."}
+          Run Audit Batch checks up to {auditBatchSize} matters at a time. {uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left, about ${batchesLeft} ${batchLabel} to finish this view.` : "Everything discovered has been checked."}
         </p>
         <p className="muted small">
           Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
