@@ -578,7 +578,8 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
   ];
 
   if (!rows.length) {
-    lines.push("No missing, late, or review items matched this view.");
+    lines.push("No open-matter missing, late, or review items were found for the case manager list.");
+    lines.push("If the dashboard still shows older monthly coaching counts, click Run Audit Batch once and export again so the to-do list uses the latest open-matter checks.");
     return lines.join("\r\n");
   }
 

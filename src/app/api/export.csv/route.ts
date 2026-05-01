@@ -20,8 +20,16 @@ export async function POST(request: NextRequest) {
   const exportType = url.searchParams.get("type") ?? "";
   const isActionList = exportType === "actions";
   const isCaseManagerText = exportType === "case-manager-text";
+  const caseManagerFilters = isCaseManagerText
+    ? {
+        attorney: "",
+        overall: "",
+        from: "",
+        to: "",
+      }
+    : filters;
   const body = isCaseManagerText
-    ? await caseManagerTodoText(filters, url.origin)
+    ? await caseManagerTodoText(caseManagerFilters, url.origin)
     : isActionList
       ? await actionItemsCsv(filters, url.origin)
       : await dashboardCsv(filters);
