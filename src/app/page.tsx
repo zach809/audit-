@@ -334,6 +334,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const totalCount = num(data.summary.total);
   const uncheckedCount = num(data.summary.unchecked);
   const checkedCount = Math.max(0, totalCount - uncheckedCount);
+  const needsFollowUpCount = num(data.summary.flag) + num(data.summary.late) + num(data.summary.review);
   const batchesLeft = Math.ceil(uncheckedCount / auditBatchSize);
   const progressPct = totalCount ? Math.round((checkedCount / totalCount) * 100) : 0;
   const nextBatchCount = Math.min(auditBatchSize, uncheckedCount);
@@ -415,12 +416,44 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       <section className="grid">
-        <div className="stat"><span>Clio Matters</span><strong>{totalCount}</strong></div>
-        <div className="stat"><span>Audited</span><strong>{checkedCount}</strong></div>
-        <div className="stat"><span>Left To Audit</span><strong>{uncheckedCount}</strong></div>
-        <div className="stat"><span>Clicks Left</span><strong>{batchesLeft}</strong></div>
-        <div className="stat"><span>Passing</span><strong>{data.summary.pass}</strong></div>
-        <div className="stat"><span>Need Attention</span><strong>{data.summary.flag}</strong></div>
+        <div className="stat focus-stat"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Missing, late, or review items.</p></div>
+        <div className="stat"><span>On Track</span><strong>{data.summary.pass}</strong><p>No current workflow problems found.</p></div>
+        <div className="stat"><span>Not Due Yet</span><strong>{data.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
+        <div className="stat"><span>Needs Review</span><strong>{data.summary.review}</strong><p>Check visibility before coaching.</p></div>
+        <div className="stat"><span>Late Timing</span><strong>{data.summary.late}</strong><p>Evidence was found after the goal.</p></div>
+        <div className="stat"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
+      </section>
+
+      <section className="panel compliance-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Compliance And Data Handling</h2>
+            <p className="muted small">Built for internal workflow coaching with read-only Clio access and minimal local storage.</p>
+          </div>
+          <span className="badge Pass">Read-Only Only</span>
+        </div>
+        <div className="compliance-grid">
+          <div>
+            <h3>What This Stores</h3>
+            <p>Matter IDs and numbers, client names, responsible attorney, timestamps, workflow statuses, evidence IDs or links, audit-run history, and encrypted OAuth tokens.</p>
+          </div>
+          <div>
+            <h3>What This Does Not Store</h3>
+            <p>No communication bodies, note text, document contents, billing data, payment data, or Clio write actions are saved here.</p>
+          </div>
+          <div>
+            <h3>Retention</h3>
+            <p>By default, audit runs are kept 90 days, monthly snapshots 365 days, and closed-matter audit rows 30 days. Expired stored access tokens are cleared.</p>
+          </div>
+        </div>
+        <div className="guardrail-list">
+          <span>Internal use only.</span>
+          <span>Limit dashboard access to approved staff.</span>
+          <span>Use MFA for Clio, Vercel, and database access.</span>
+          <span>Review vendors and hosting settings.</span>
+          <span>Rotate secrets on a schedule and after staff changes.</span>
+          <span>This is workflow coaching, not legal advice.</span>
+        </div>
       </section>
 
       <section className="panel">

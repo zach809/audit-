@@ -1,18 +1,58 @@
 # Clio Workflow Compliance Auditor
 
-Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres.
+Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA is for internal compliance checking and workflow coaching only.
 
 ## What It Does
 
-- Pulls Clio matters, communications, calendar entries, notes, and optional activity metrics.
+- Pulls Clio matters, communications, and calendar entries through read-only API calls.
 - Excludes Closed matters.
 - Groups the dashboard by the matter's responsible attorney.
 - Applies Monday-Friday, 8 AM-5 PM America/Chicago deadline rules.
 - Tracks setup, client contact, appearance filing, court results, post-court calls, and client follow-up risks.
 - Stores minimal local audit data and evidence references only.
 - Provides manual refresh, Vercel Cron refresh, filters, historical metrics, and CSV export.
+- Provides an Attorney Assistant action report named `cwca-attorney-assistant-action-report.csv`.
 
 No AI is used.
+
+## Compliance And Data Handling
+
+CWCA must stay read-only against Clio. Do not add create, update, delete, webhook, billing, payment, or document-content behavior.
+
+Stored locally:
+
+- Matter IDs and matter numbers.
+- Client names.
+- Responsible attorney.
+- Workflow timestamps and statuses.
+- Evidence IDs and proof links.
+- Audit-run history.
+- Encrypted OAuth tokens.
+
+Not stored locally:
+
+- Communication bodies.
+- Note text.
+- Document contents.
+- Billing data.
+- Payment data.
+
+Retention defaults:
+
+- `AUDIT_RUN_RETENTION_DAYS`: `90`.
+- `AUDIT_METRIC_RETENTION_DAYS`: `365`.
+- `CLOSED_MATTER_RETENTION_DAYS`: `30`.
+
+Expired stored access tokens are cleared automatically. Refresh tokens remain encrypted so the read-only connection can continue working.
+
+## Illinois-Focused Operational Guardrails
+
+- Use this internally for workflow coaching and compliance review only.
+- Limit dashboard access to approved staff.
+- Require MFA for Clio, Vercel, database, and repository access.
+- Review vendors, hosting, and access logs on a regular schedule.
+- Rotate secrets on a schedule and after staff changes.
+- Treat dashboard findings as operational signals, not legal advice.
 
 ## Deploy On Vercel
 
@@ -26,7 +66,7 @@ No AI is used.
 
 6. Deploy.
 7. Open the app, log in with `DASHBOARD_PASSWORD`, and click **Connect Clio**.
-8. After Clio OAuth succeeds, click **Run Audit Now**.
+8. After Clio OAuth succeeds, click **Run Audit Batch**.
 
 ## Required Clio Permissions
 
@@ -54,10 +94,13 @@ Do not enable write permissions.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.
 - `AUDIT_BATCH_SIZE`: matters per audit run. Start with `10`.
+- `AUDIT_COOLDOWN_SECONDS`: pause between audit batches. Default `30`.
 - `CLIO_INITIAL_LOOKBACK_DAYS`: first-run discovery window. Start with `90`.
 - `CLIO_RATE_LIMIT_PER_MINUTE`: default `40`.
+- `AUDIT_RUN_RETENTION_DAYS`: audit-run history retention. Default `90`.
+- `AUDIT_METRIC_RETENTION_DAYS`: monthly snapshot retention. Default `365`.
+- `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
 
 ## Notes
 
 The worker is intentionally chunked. Each cron/manual run audits a limited number of matters so Vercel functions stay reliable and Clio rate limits are respected.
-

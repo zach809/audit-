@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   return new NextResponse(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${actionList ? "cwca-attorney-assistant-timeliness-report.csv" : "cwca-audit.csv"}"`,
+      "content-disposition": `attachment; filename="${actionList ? "cwca-attorney-assistant-action-report.csv" : "cwca-audit.csv"}"`,
     },
   });
 }

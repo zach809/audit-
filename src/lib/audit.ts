@@ -1,6 +1,6 @@
 import { addBusinessDaysDeadline, effectiveIntake, setupDeadlines } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
-import { db, initDb } from "./db";
+import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
   haystack,
   isAppearanceTemplate,
@@ -155,6 +155,10 @@ function evidenceUrl(type: "communications" | "calendar_entries", id: number): s
   return `/evidence/${type}/${id}`;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
   const created = new Date(matter.created_at);
   const effective = effectiveIntake(created);
@@ -238,8 +242,8 @@ export async function discoverMatters(client = new ClioClient(), lookbackDays = 
   const matters = await client.list<ClioMatter>("/matters.json", { fields, created_since: since.toISOString() });
   let count = 0;
   for (const matter of matters) {
-    if ((matter.status ?? "").toLowerCase() === "closed") continue;
     await saveMatter(matter);
+    if ((matter.status ?? "").toLowerCase() === "closed") continue;
     count += 1;
   }
   return count;
@@ -436,7 +440,23 @@ export async function auditNextBatch(
   options: { discover?: boolean; batchSize?: number; discoverLookbackDays?: number; selection?: "priority" | "recent"; filters?: AuditBatchFilters; maxRunMs?: number } = {},
 ): Promise<{ audited: number; discovered: number; remainingUnchecked: number; message: string }> {
   await initDb();
+  await pruneExpiredStoredData();
   const sql = db();
+  const config = appConfig();
+  if (config.auditCooldownSeconds > 0) {
+    const cooldownRows = await sql`
+      select greatest(
+        0,
+        ceil(extract(epoch from (max(started_at) + (${config.auditCooldownSeconds}::int * interval '1 second') - now())))
+      )::int as wait_seconds
+      from audit_run
+      where started_at > now() - (${config.auditCooldownSeconds}::int * interval '1 second')
+    `;
+    const waitSeconds = Number(cooldownRows[0]?.wait_seconds ?? 0);
+    if (waitSeconds > 0) {
+      await sleep(waitSeconds * 1000);
+    }
+  }
   const runRows = await sql`insert into audit_run(status) values ('running') returning id`;
   const runId = runRows[0].id;
   let discovered = 0;
@@ -448,11 +468,11 @@ export async function auditNextBatch(
     if (options.discover ?? needsDiscovery) {
       discovered = await discoverMatters(client, options.discoverLookbackDays);
     }
-    const batchSize = options.batchSize ?? appConfig().auditBatchSize;
+    const batchSize = options.batchSize ?? config.auditBatchSize;
     const fromDate = parseDate(options.filters?.from);
     const toDate = parseDate(options.filters?.to ? `${options.filters.to}T23:59:59` : undefined);
     const batchConditions = [
-      sql`m.matter_status is distinct from 'Closed'`,
+      sql`lower(coalesce(m.matter_status, '')) <> 'closed'`,
       options.filters?.attorney ? sql`m.responsible_attorney_id = ${options.filters.attorney}` : sql`true`,
       fromDate ? sql`m.matter_created_at >= ${fromDate}` : sql`true`,
       toDate ? sql`m.matter_created_at < ${toDate}` : sql`true`,
@@ -538,6 +558,7 @@ export async function auditNextBatch(
       }
     }
     await rebuildMonthlySnapshots();
+    await pruneExpiredStoredData();
     const remainingRows = await sql`
       select count(*)::int as count
       from audit_matter m
@@ -567,6 +588,7 @@ export async function auditNextBatch(
 
 export async function auditOneMatterById(client = new ClioClient(), matterId: string): Promise<{ audited: number; discovered: number; remainingUnchecked: number; message: string }> {
   await initDb();
+  await pruneExpiredStoredData();
   const sql = db();
   const rows = await sql<MatterRecord[]>`
     select *
@@ -598,10 +620,11 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
   }
 
   await rebuildMonthlySnapshots();
+  await pruneExpiredStoredData();
   const remainingRows = await sql`
     select count(*)::int as count
     from audit_matter m
-    where m.matter_status is distinct from 'Closed'
+    where lower(coalesce(m.matter_status, '')) <> 'closed'
       and not exists (
         select 1
         from audit_item i
@@ -643,6 +666,7 @@ export async function rebuildMonthlySnapshots() {
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
     where m.matter_created_at >= date_trunc('month', now())
+      and lower(coalesce(m.matter_status, '')) <> 'closed'
       and not exists (
         select 1
         from audit_item stale

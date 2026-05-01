@@ -118,6 +118,16 @@ function priorityFor(status: string): string {
   return "Review";
 }
 
+function whyFlagged(stepCode: string, status: string, reasonCode?: string | null): string {
+  if (status === "Missing") return `${stepLabel(stepCode)} was not found from the allowed read-only Clio evidence.`;
+  if (status === "Late") return `${stepLabel(stepCode)} was found, but after the expected timeliness goal.`;
+  if (status === "Unknown") {
+    if (reasonCode && reasonCode !== "NOT_FOUND") return `The auditor could not confirm this item from Clio: ${reasonCode}`;
+    return "The auditor could not confirm this item from Clio-visible evidence.";
+  }
+  return "";
+}
+
 function timingGoalFor(stepCode: string): string {
   return STEP_ACTIONS[stepCode]?.goal ?? "Review the expected workflow timing.";
 }
@@ -161,7 +171,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
           `
         : sql`true`;
   const conditions = [
-    sql`true`,
+    sql`lower(coalesce(m.matter_status, '')) <> 'closed'`,
     filters.attorney ? sql`m.responsible_attorney_id = ${filters.attorney}` : sql`true`,
     overallCondition,
     filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`,
@@ -269,7 +279,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const attorneys = await sql`
     select responsible_attorney_id as id, responsible_attorney_name as name, count(*)::int as count
     from audit_matter m
-    where ${conditions[5]} and ${conditions[6]}
+    where ${conditions[0]} and ${conditions[5]} and ${conditions[6]}
     group by responsible_attorney_id, responsible_attorney_name
     order by responsible_attorney_name
   `;
@@ -462,7 +472,7 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
         end as reason_code
       from audit_matter m
       join audit_item i on i.matter_id = m.matter_id
-      where m.matter_status is distinct from 'Closed'
+      where lower(coalesce(m.matter_status, '')) <> 'closed'
         and ${filters.attorney ? sql`m.responsible_attorney_id = ${filters.attorney}` : sql`true`}
         and ${overallCondition}
         and ${filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`}
@@ -490,15 +500,15 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
     "Overall",
     "Improvement Area",
     "Status",
-    "Action To Report To Attorney Assistant",
+    "What The Assistant Should Do In Clio",
     "Timeliness Goal",
     "Due",
     "Found",
-    "Evidence",
-    "Proof Details Link",
     "Open Matter In Clio",
+    "Proof Saved In Auditor",
+    "Evidence Found",
     "Matter Created",
-    "Audit Note",
+    "Why This Was Flagged",
   ];
 
   const csvRows = rows.map((row) => {
@@ -519,11 +529,11 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
       timingGoalFor(row.step_code),
       formatCsvDate(row.deadline_at),
       formatCsvDate(row.evidence_at),
-      evidence,
-      proofPath(origin, row.evidence_source, row.evidence_ref_id),
       clioMatterLink(String(row.matter_id)),
+      proofPath(origin, row.evidence_source, row.evidence_ref_id),
+      evidence,
       formatCsvDate(row.matter_created_at),
-      row.reason_code && row.reason_code !== "NOT_FOUND" ? row.reason_code : "",
+      whyFlagged(row.step_code, status, row.reason_code),
     ];
   });
 

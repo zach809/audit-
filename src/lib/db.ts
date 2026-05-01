@@ -113,3 +113,34 @@ export async function initDb(): Promise<void> {
   return global.cwcaDbReady;
 }
 
+export async function pruneExpiredStoredData(): Promise<void> {
+  await initDb();
+  const sql = db();
+  const config = appConfig();
+
+  await sql`
+    update oauth_tokens
+    set encrypted_access_token = null,
+        access_token_expires_at = null,
+        updated_at = now()
+    where encrypted_access_token is not null
+      and access_token_expires_at is not null
+      and access_token_expires_at < now()
+  `;
+
+  await sql`
+    delete from audit_run
+    where coalesce(finished_at, started_at) < now() - (${config.auditRunRetentionDays}::int * interval '1 day')
+  `;
+
+  await sql`
+    delete from audit_metric_snapshot
+    where created_at < now() - (${config.auditMetricRetentionDays}::int * interval '1 day')
+  `;
+
+  await sql`
+    delete from audit_matter
+    where lower(matter_status) = 'closed'
+      and coalesce(last_audited_at, matter_created_at) < now() - (${config.closedMatterRetentionDays}::int * interval '1 day')
+  `;
+}
