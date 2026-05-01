@@ -31,10 +31,9 @@ function dateText(value: unknown): string {
   return formatLocal(date);
 }
 
-function clioMatterUrl(type: string, matterId: unknown): string {
-  if (!matterId) return clioManageUrl("/");
-  const tab = type === "calendar_entries" ? "calendar" : "communications";
-  return clioManageUrl(`/n/#/matters/${matterId}/${tab}`);
+function clioMatterUrl(matterId: unknown): string {
+  if (!matterId) return clioManageUrl("/nc/");
+  return clioManageUrl(`/nc/#/matters/${encodeURIComponent(String(matterId))}`);
 }
 
 async function loadEvidence(type: string, id: string): Promise<{ label: string; clioUrl: string; rows: Array<[string, string]> }> {
@@ -48,7 +47,7 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
     const matter = data.matter as Record<string, unknown> | undefined;
     return {
       label: `Communication #${id}`,
-      clioUrl: clioMatterUrl(type, matter?.id),
+      clioUrl: clioMatterUrl(matter?.id),
       rows: [
         ["Subject", text(data.subject)],
         ["Type", text(data.type)],
@@ -69,7 +68,7 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
     const matter = data.matter as Record<string, unknown> | undefined;
     return {
       label: `Calendar Entry #${id}`,
-      clioUrl: clioMatterUrl(type, matter?.id),
+      clioUrl: clioMatterUrl(matter?.id),
       rows: [
         ["Summary", text(data.summary)],
         ["Type", text((data.calendar_entry_event_type as Record<string, unknown> | undefined)?.name)],
@@ -118,7 +117,7 @@ export default async function EvidencePage({ params }: { params: { type: string;
         <section className="panel">
           <h2>{evidence.label}</h2>
           <p>
-            <a className="button primary" href={evidence.clioUrl} target="_blank" rel="noreferrer">Open in Clio Manage</a>
+            <a className="button primary" href={evidence.clioUrl} target="_blank" rel="noreferrer">Open Matter in Clio Manage</a>
           </p>
           <table className="evidence-table">
             <tbody>

@@ -101,10 +101,9 @@ function evidencePath(item: DashboardItem): string {
   return item.evidenceUrl ?? "";
 }
 
-function clioEvidencePath(matterId: string, item: DashboardItem): string {
+function clioMatterPath(matterId: string): string {
   const baseUrl = process.env.CLIO_BASE_URL || "https://app.clio.com";
-  const tab = item.evidenceSource === "Calendar" ? "calendar" : "communications";
-  return `${baseUrl}/n/#/matters/${matterId}/${tab}`;
+  return `${baseUrl}/nc/#/matters/${encodeURIComponent(matterId)}`;
 }
 
 function evidenceLabel(item: DashboardItem): string {
@@ -434,7 +433,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                       <p className="evidence-links" key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
                         <span>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</span>
                         <a href={evidencePath(i)}>Proof Details</a>
-                        <a href={clioEvidencePath(m.matter_id, i)} target="_blank" rel="noreferrer">Open in Clio</a>
+                        <a href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open Matter in Clio</a>
                       </p>
                     ))
                   ) : (
