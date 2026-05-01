@@ -13,6 +13,7 @@ export function normalizeText(value: string | null | undefined): string {
   for (const [pattern, replacement] of normalizeMap) {
     text = text.replace(pattern, replacement);
   }
+  text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return text.replace(/\s+/g, " ").trim();
 }
 
@@ -76,14 +77,47 @@ export const CALENDAR_PATTERNS = {
     "court",
     "hearing",
     "arraignment",
+    "arraign",
     "pretrial",
+    "pre-trial",
     "trial",
+    "bench trial",
+    "jury trial",
     "status",
+    "status conference",
+    "plea",
+    "plea hearing",
+    "plea setting",
+    "continuance",
+    "continued",
+    "reset",
+    "sentencing",
+    "sentence",
+    "disposition",
+    "docket",
+    "docket call",
+    "calendar call",
+    "motion",
+    "motion hearing",
+    "bond",
+    "bond hearing",
+    "detention",
+    "revocation",
+    "probation",
+    "compliance",
+    "case management",
+    "cmc",
+    "conference",
+    "setting",
     "zoom",
     "courtroom",
     "jail",
     "audiencia",
     "corte",
+    "declaracion",
+    "continuacion",
+    "sentencia",
+    "mocion",
   ],
 };
 

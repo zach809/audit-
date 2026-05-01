@@ -58,7 +58,7 @@ const STEP_INFO: Record<string, { label: string; missing: string; action: string
   SETUP_COURT_DATE: {
     label: "Court Date Added",
     missing: "Court date calendar event was not found.",
-    action: "Add or verify the court/hearing/Zoom/jail calendar event on the matter.",
+    action: "Add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
     late: "Court date was added after the setup deadline.",
   },
   CLIENT_CONTACT: {
