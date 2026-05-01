@@ -1,3 +1,4 @@
+import { APP_TZ } from "./config";
 import { initDb, db } from "./db";
 
 export type DashboardFilters = {
@@ -7,9 +8,144 @@ export type DashboardFilters = {
   to?: string;
 };
 
+type ActionCsvRow = {
+  matter_id: string;
+  matter_number: string;
+  client_first_name: string | null;
+  client_last_name: string | null;
+  responsible_attorney_name: string | null;
+  matter_created_at: string | Date | null;
+  overall_status: string;
+  step_code: string;
+  item_status: string;
+  deadline_at: string | Date | null;
+  evidence_at: string | Date | null;
+  evidence_source: string | null;
+  evidence_ref_id: string | null;
+  reason_code: string | null;
+};
+
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+const STEP_ACTIONS: Record<string, { label: string; goal: string; missing: string; late: string; unknown: string }> = {
+  SETUP_WELCOME: {
+    label: "Welcome Packet",
+    goal: "Complete within 15 business minutes of intake.",
+    missing: "Please send or verify the Welcome Letter / Carta de bienvenida template in Clio.",
+    late: "Welcome packet was found, but after the setup deadline. Please review intake handoff timing and tighten same-day setup.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the welcome packet from Clio.",
+  },
+  SETUP_ATTY_CALL: {
+    label: "Attorney Call",
+    goal: "Schedule within 15 business minutes of intake.",
+    missing: "Please add or verify the attorney/client phone call calendar event on the matter.",
+    late: "Attorney/client call was scheduled, but after the setup deadline. Please review setup timing and scheduling habits.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the attorney call from Clio.",
+  },
+  SETUP_COURT_DATE: {
+    label: "Court Date Added",
+    goal: "Add within 15 business minutes of intake when known.",
+    missing: "Please add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
+    late: "Court date was added, but after the setup deadline. Please confirm why it was delayed and improve setup timing.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the court date from Clio.",
+  },
+  CLIENT_CONTACT: {
+    label: "Client Contact",
+    goal: "Complete by next business day at 5:00 PM.",
+    missing: "Please send or log outgoing client contact communication on the matter.",
+    late: "Client contact was found, but after the deadline. Please improve next-business-day follow-up timing.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm client contact from Clio.",
+  },
+  APPEARANCE_FILING: {
+    label: "Appearance Filed",
+    goal: "Complete by the second business day at 5:00 PM.",
+    missing: "Please send or verify the appearance filing notification/template in Clio.",
+    late: "Appearance filing communication was found, but after the deadline. Please review the filing workflow timing.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm appearance filing from Clio.",
+  },
+  COURT_RESULTS: {
+    label: "Court Results",
+    goal: "Complete by next business day at 5:00 PM after court.",
+    missing: "Please send or verify the Court Result / Resultado communication after the last court date.",
+    late: "Court result communication was found, but after the deadline. Please improve post-court communication timing.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm court results from Clio.",
+  },
+  POST_COURT_CALL: {
+    label: "Post-Court Call",
+    goal: "Schedule by next business day at 5:00 PM after court when the case continues.",
+    missing: "Please schedule or verify the post-court attorney/client call if the case continues.",
+    late: "Post-court call was scheduled, but after the deadline. Please improve post-court follow-up timing.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the post-court call from Clio.",
+  },
+  CLIENT_FOLLOWUP: {
+    label: "Client Follow-Up",
+    goal: "Respond before three inbound client messages accumulate without a firm response.",
+    missing: "Please review the communication thread and respond or coach on unanswered client follow-up.",
+    late: "Client follow-up was handled late. Please review response timing and prevent repeat delays.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm follow-up risk from Clio.",
+  },
+};
+
+function stepLabel(stepCode: string): string {
+  return STEP_ACTIONS[stepCode]?.label ?? stepCode.replaceAll("_", " ");
+}
+
+function actionFor(stepCode: string, status: string, reasonCode?: string | null): string {
+  const info = STEP_ACTIONS[stepCode];
+  if (status === "Missing") return info?.missing ?? "Complete or verify this missing workflow step in Clio.";
+  if (status === "Late") return info?.late ?? "Review timing. Evidence was found after the deadline.";
+  if (status === "Unknown") {
+    if (reasonCode?.includes("API") || reasonCode?.startsWith("NOTES_400:")) {
+      return "Recheck the matter before coaching. This is an audit visibility issue, not proof that work was missed.";
+    }
+    return info?.unknown ?? "Review this item in Clio. The app could not verify it from API-visible evidence.";
+  }
+  return "Review this item in Clio.";
+}
+
+function humanStatus(status: string): string {
+  if (status === "Unknown") return "Needs Review";
+  return status;
+}
+
+function priorityFor(status: string): string {
+  if (status === "Missing") return "Action Needed";
+  if (status === "Late") return "Timing Improvement";
+  if (status === "Unknown") return "Review First";
+  return "Review";
+}
+
+function timingGoalFor(stepCode: string): string {
+  return STEP_ACTIONS[stepCode]?.goal ?? "Review the expected workflow timing.";
+}
+
+function formatCsvDate(value: unknown): string {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function proofPath(origin: string, source?: string | null, refId?: string | null): string {
+  if (!refId || !source) return "";
+  if (source === "Communication") return `${origin}/evidence/communications/${refId}`;
+  if (source === "Calendar") return `${origin}/evidence/calendar_entries/${refId}`;
+  return "";
+}
+
+function clioMatterLink(matterId: string): string {
+  const baseUrl = process.env.CLIO_BASE_URL || "https://app.clio.com";
+  return `${baseUrl.replace(/\/$/, "")}/nc/#/matters/${encodeURIComponent(matterId)}`;
 }
 
 export async function getDashboardData(filters: DashboardFilters = {}) {
@@ -287,4 +423,109 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     ];
   });
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""): Promise<string> {
+  await initDb();
+  const sql = db();
+  const overallCondition =
+    filters.overall === "Unchecked"
+      ? sql`false`
+      : filters.overall
+        ? sql`m.overall_status = ${filters.overall}`
+        : sql`true`;
+  const rows = await sql<ActionCsvRow[]>`
+    select *
+    from (
+      select
+        m.matter_id,
+        m.matter_number,
+        m.client_first_name,
+        m.client_last_name,
+        m.responsible_attorney_name,
+        m.matter_created_at,
+        m.overall_status,
+        i.step_code,
+        case
+          when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+            then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+          else i.status
+        end as item_status,
+        i.deadline_at,
+        i.evidence_at,
+        i.evidence_source,
+        i.evidence_ref_id,
+        case
+          when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+            then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
+          else i.reason_code
+        end as reason_code
+      from audit_matter m
+      join audit_item i on i.matter_id = m.matter_id
+      where m.matter_status is distinct from 'Closed'
+        and ${filters.attorney ? sql`m.responsible_attorney_id = ${filters.attorney}` : sql`true`}
+        and ${overallCondition}
+        and ${filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`}
+        and ${filters.to ? sql`m.matter_created_at < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`}
+        and not (
+          i.status = 'Unknown'
+          and coalesce(i.reason_code, '') in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+        )
+        and coalesce(i.reason_code, '') not like 'NOTES_400:%'
+    ) action_rows
+    where item_status in ('Missing', 'Late', 'Unknown')
+    order by
+      responsible_attorney_name,
+      case item_status when 'Missing' then 1 when 'Unknown' then 2 when 'Late' then 3 else 4 end,
+      client_last_name,
+      client_first_name,
+      step_code
+  `;
+
+  const headers = [
+    "Attorney",
+    "Priority",
+    "Client",
+    "Matter",
+    "Overall",
+    "Improvement Area",
+    "Status",
+    "Action To Report To Attorney Assistant",
+    "Timeliness Goal",
+    "Due",
+    "Found",
+    "Evidence",
+    "Proof Details Link",
+    "Open Matter In Clio",
+    "Matter Created",
+    "Audit Note",
+  ];
+
+  const csvRows = rows.map((row) => {
+    const status = String(row.item_status ?? "");
+    const evidence =
+      row.evidence_source && row.evidence_ref_id
+        ? `${row.evidence_source} #${row.evidence_ref_id}`
+        : "";
+    return [
+      row.responsible_attorney_name || "Unassigned",
+      priorityFor(status),
+      `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim(),
+      row.matter_number,
+      row.overall_status,
+      stepLabel(row.step_code),
+      humanStatus(status),
+      actionFor(row.step_code, status, row.reason_code),
+      timingGoalFor(row.step_code),
+      formatCsvDate(row.deadline_at),
+      formatCsvDate(row.evidence_at),
+      evidence,
+      proofPath(origin, row.evidence_source, row.evidence_ref_id),
+      clioMatterLink(String(row.matter_id)),
+      formatCsvDate(row.matter_created_at),
+      row.reason_code && row.reason_code !== "NOT_FOUND" ? row.reason_code : "",
+    ];
+  });
+
+  return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
 }

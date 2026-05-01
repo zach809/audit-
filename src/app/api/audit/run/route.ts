@@ -14,14 +14,6 @@ function redirectBack(request: NextRequest, params: Record<string, string>) {
   return NextResponse.redirect(new URL(`/?${search.toString()}`, request.url), 303);
 }
 
-function lookbackFromDate(from?: string) {
-  if (!from) return 7;
-  const parsed = new Date(from);
-  if (Number.isNaN(parsed.getTime())) return 7;
-  const days = Math.ceil((Date.now() - parsed.getTime()) / (24 * 60 * 60 * 1000)) + 1;
-  return Math.max(7, days);
-}
-
 export async function GET(request: NextRequest) {
   if (!isAuthorizedWorkerRequest(request)) {
     if (!request.headers.get("authorization")) {
@@ -73,9 +65,8 @@ export async function POST(request: NextRequest) {
     }
     try {
       const result = await auditNextBatch(undefined, {
-        discover: true,
-        discoverLookbackDays: lookbackFromDate(filters.from),
         batchSize: appConfig().auditBatchSize,
+        maxRunMs: 25000,
         selection: "recent",
         filters,
       });

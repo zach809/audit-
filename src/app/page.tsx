@@ -103,7 +103,7 @@ function evidencePath(item: DashboardItem): string {
 
 function clioMatterPath(matterId: string): string {
   const baseUrl = process.env.CLIO_BASE_URL || "https://app.clio.com";
-  return `${baseUrl}/nc/#/matters/${encodeURIComponent(matterId)}`;
+  return `${baseUrl.replace(/\/$/, "")}/nc/#/matters/${encodeURIComponent(matterId)}`;
 }
 
 function evidenceLabel(item: DashboardItem): string {
@@ -330,7 +330,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const monthStart = monthStartInput(new Date());
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   const data = await getDashboardData(filters);
-  const auditBatchSize = Math.max(1, Number(process.env.AUDIT_BATCH_SIZE ?? "10") || 10);
+  const auditBatchSize = Math.max(1, Number(process.env.AUDIT_BATCH_SIZE ?? "5") || 5);
   const totalCount = num(data.summary.total);
   const uncheckedCount = num(data.summary.unchecked);
   const checkedCount = Math.max(0, totalCount - uncheckedCount);
@@ -341,6 +341,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const batchLabel = batchesLeft === 1 ? "click" : "clicks";
   const nextBatchLabel = nextBatchCount === 1 ? "matter" : "matters";
   const exportParams = new URLSearchParams(filters).toString();
+  const actionExportParams = new URLSearchParams(filters);
+  actionExportParams.set("type", "actions");
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
@@ -375,6 +377,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </form>
           <form action={`/api/export.csv?${exportParams}`} method="post">
             <button type="submit">Export CSV</button>
+          </form>
+          <form action={`/api/export.csv?${actionExportParams.toString()}`} method="post">
+            <button type="submit">Export Attorney Assistant Report</button>
           </form>
           <form action="/logout" method="post">
             <button type="submit">Log Out</button>
@@ -462,12 +467,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </p>
         ) : null}
         <p className="muted small">
-          Run Audit Batch checks up to {auditBatchSize} matters at a time. {uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left, about ${batchesLeft} ${batchLabel} to finish this view.` : "Everything discovered has been checked."}
+          Run Audit Batch checks up to {auditBatchSize} matters at a time and returns after about 25 seconds if Clio is slow. {uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left, about ${batchesLeft} ${batchLabel} to finish this view.` : "Everything discovered has been checked."}
         </p>
         <p className="muted small">
           Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
         </p>
         <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
+        <p className="muted small">Export Attorney Assistant Report downloads the exact late, missing, and review items to send to assistants, with the timeliness goal, improvement action, proof link, and Clio matter link.</p>
       </section>
 
       <section className="matter-list">
@@ -496,6 +502,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 </div>
                 <div className="matter-actions">
                   {badge(m.display_overall_status ?? m.overall_status)}
+                  <a className="button compact" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
                   <form action="/api/audit/run" method="post">
                     <input type="hidden" name="matter_id" value={m.matter_id} />
                     <input type="hidden" name="attorney" value={filters.attorney} />
@@ -530,12 +537,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 </div>
                 <div>
                   <span className="label">Evidence</span>
+                  <p className="evidence-links">
+                    <span>Matter: {m.matter_number}</span>
+                    <a href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open Matter in Clio</a>
+                  </p>
                   {evidenceItems.length ? (
                     evidenceItems.map((i) => (
                       <p className="evidence-links" key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
                         <span>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</span>
                         <a href={evidencePath(i)}>Proof Details</a>
-                        <a href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open Matter in Clio</a>
                       </p>
                     ))
                   ) : (

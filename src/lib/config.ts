@@ -23,7 +23,7 @@ export function appConfig() {
     sessionSecret: optionalEnv("SESSION_SECRET", optionalEnv("TOKEN_ENCRYPTION_KEY", "dev-session-secret")),
     cronSecret: optionalEnv("CRON_SECRET"),
     tokenEncryptionKey: env("TOKEN_ENCRYPTION_KEY"),
-    auditBatchSize: Number(optionalEnv("AUDIT_BATCH_SIZE", "10")),
+    auditBatchSize: Number(optionalEnv("AUDIT_BATCH_SIZE", "5")),
     initialLookbackDays: Number(optionalEnv("CLIO_INITIAL_LOOKBACK_DAYS", "90")),
     rateLimitPerMinute: Number(optionalEnv("CLIO_RATE_LIMIT_PER_MINUTE", "40")),
   };

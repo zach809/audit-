@@ -433,7 +433,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
 
 export async function auditNextBatch(
   client = new ClioClient(),
-  options: { discover?: boolean; batchSize?: number; discoverLookbackDays?: number; selection?: "priority" | "recent"; filters?: AuditBatchFilters } = {},
+  options: { discover?: boolean; batchSize?: number; discoverLookbackDays?: number; selection?: "priority" | "recent"; filters?: AuditBatchFilters; maxRunMs?: number } = {},
 ): Promise<{ audited: number; discovered: number; remainingUnchecked: number; message: string }> {
   await initDb();
   const sql = db();
@@ -441,6 +441,7 @@ export async function auditNextBatch(
   const runId = runRows[0].id;
   let discovered = 0;
   let audited = 0;
+  const startedAt = Date.now();
   try {
     const existingRows = await sql`select count(*)::int as count from audit_matter`;
     const needsDiscovery = Number(existingRows[0]?.count ?? 0) === 0;
@@ -512,6 +513,9 @@ export async function auditNextBatch(
             limit ${batchSize}
           `;
     for (const matter of matters) {
+      if (options.maxRunMs && audited > 0 && Date.now() - startedAt > options.maxRunMs) {
+        break;
+      }
       try {
         const evidence = await fetchEvidence(client, matter);
         const result = auditMatter(matter, evidence);

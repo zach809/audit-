@@ -41,6 +41,7 @@ button, .button {
   text-decoration: none;
   font-size: 14px;
 }
+.compact { padding: 6px 9px; font-size: 12px; }
 .primary { background: var(--blue); border-color: var(--blue); color: white; }
 .danger { color: var(--red); }
 .notice {

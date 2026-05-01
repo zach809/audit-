@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dashboardCsv } from "@/lib/dashboard-data";
+import { actionItemsCsv, dashboardCsv } from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
@@ -11,16 +11,18 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const url = new URL(request.url);
-  const csv = await dashboardCsv({
+  const filters = {
     attorney: url.searchParams.get("attorney") ?? "",
     overall: url.searchParams.get("overall") ?? "",
     from: url.searchParams.get("from") ?? "",
     to: url.searchParams.get("to") ?? "",
-  });
+  };
+  const actionList = url.searchParams.get("type") === "actions";
+  const csv = actionList ? await actionItemsCsv(filters, url.origin) : await dashboardCsv(filters);
   return new NextResponse(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="cwca-audit.csv"`,
+      "content-disposition": `attachment; filename="${actionList ? "cwca-attorney-assistant-timeliness-report.csv" : "cwca-audit.csv"}"`,
     },
   });
 }
