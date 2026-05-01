@@ -79,7 +79,8 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
           'evidenceUrl', i.evidence_url,
           'reasonCode',
             case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%' then 'NOT_FOUND'
+              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+                then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
               else i.reason_code
             end
         )

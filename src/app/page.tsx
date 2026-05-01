@@ -35,21 +35,65 @@ type DashboardItem = {
   status: string;
   operationalState?: string;
   reasonCode?: string;
+  deadlineAt?: string | null;
+  evidenceAt?: string | null;
   evidenceSource?: string;
   evidenceRefId?: string;
   evidenceUrl?: string;
 };
 
-const STEP_COLUMNS: Array<[string, string]> = [
-  ["SETUP_WELCOME", "Welcome Packet"],
-  ["SETUP_ATTY_CALL", "Attorney Call"],
-  ["SETUP_COURT_DATE", "Court Date Added"],
-  ["CLIENT_CONTACT", "Client Contact"],
-  ["APPEARANCE_FILING", "Appearance Filed"],
-  ["COURT_RESULTS", "Court Results"],
-  ["POST_COURT_CALL", "Post-Court Call"],
-  ["CLIENT_FOLLOWUP", "Client Follow-Up"],
-];
+const STEP_INFO: Record<string, { label: string; missing: string; action: string; late: string }> = {
+  SETUP_WELCOME: {
+    label: "Welcome Packet",
+    missing: "Welcome packet email/template was not found in Clio communications.",
+    action: "Check or send the Welcome Letter / Carta de bienvenida template.",
+    late: "Welcome packet was found, but after the setup deadline.",
+  },
+  SETUP_ATTY_CALL: {
+    label: "Attorney Call",
+    missing: "Attorney/client phone call calendar event was not found.",
+    action: "Add or verify a Phone Call / Client Call calendar event on the matter.",
+    late: "Attorney/client call was scheduled after the setup deadline.",
+  },
+  SETUP_COURT_DATE: {
+    label: "Court Date Added",
+    missing: "Court date calendar event was not found.",
+    action: "Add or verify the court/hearing/Zoom/jail calendar event on the matter.",
+    late: "Court date was added after the setup deadline.",
+  },
+  CLIENT_CONTACT: {
+    label: "Client Contact",
+    missing: "Outgoing client contact communication was not found.",
+    action: "Check or send an email/log communication to the client.",
+    late: "Client contact was found, but after the next-business-day deadline.",
+  },
+  APPEARANCE_FILING: {
+    label: "Appearance Filed",
+    missing: "Appearance filing communication/template was not found.",
+    action: "Check or send the appearance filing notification template.",
+    late: "Appearance filing was found, but after the second-business-day deadline.",
+  },
+  COURT_RESULTS: {
+    label: "Court Results",
+    missing: "Court result communication/template was not found after the last court date.",
+    action: "Check or send the Court Result / Resultado template.",
+    late: "Court result was found, but after the court-results deadline.",
+  },
+  POST_COURT_CALL: {
+    label: "Post-Court Call",
+    missing: "Post-court attorney/client call calendar event was not found.",
+    action: "Schedule or verify the post-court attorney call if the case continues.",
+    late: "Post-court call was scheduled after the post-court deadline.",
+  },
+  CLIENT_FOLLOWUP: {
+    label: "Client Follow-Up",
+    missing: "Client follow-up risk detected: three or more inbound client communications before a firm response.",
+    action: "Review the communication thread and respond or coach as needed.",
+    late: "Client follow-up was handled late.",
+  },
+};
+
+const STEP_COLUMNS = Object.entries(STEP_INFO).map(([code, info]) => [code, info.label] as [string, string]);
 
 function evidencePath(item: DashboardItem): string {
   if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}`;
@@ -61,16 +105,73 @@ function evidenceLabel(item: DashboardItem): string {
   return item.evidenceSource && item.evidenceRefId ? `${item.evidenceSource} #${item.evidenceRefId}` : "Evidence";
 }
 
+function stepLabel(code: string): string {
+  return STEP_INFO[code]?.label ?? code.replaceAll("_", " ");
+}
+
+function stepDetail(item: DashboardItem | undefined, status: string): string {
+  if (!item) return "";
+  if (status === "Pending") {
+    return item.operationalState && item.operationalState !== "Pending" ? item.operationalState : "";
+  }
+  if (status === "Missing" || status === "Late" || status === "Unknown") {
+    return item.reasonCode || item.operationalState || "";
+  }
+  return "";
+}
+
 function stepCell(items: DashboardItem[], code: string) {
   const item = items.find((i) => i.stepCode === code);
   const status = item?.status ?? "Pending";
-  const detail = item?.reasonCode || item?.operationalState || "";
+  const detail = stepDetail(item, status);
   const href = item ? evidencePath(item) : "";
   return (
     <div className="step-cell">
       {badge(status)}
       {detail && detail !== status ? <div className="detail">{detail}</div> : null}
       {href ? <a className="evidence-link" href={href}>{evidenceLabel(item!)}</a> : null}
+    </div>
+  );
+}
+
+function problemText(item: DashboardItem): string {
+  const info = STEP_INFO[item.stepCode] ?? {
+    label: stepLabel(item.stepCode),
+    missing: "Required evidence was not found.",
+    action: "Review this item in Clio.",
+    late: "Evidence was found late.",
+  };
+  if (item.status === "Missing") return `${info.missing} ${info.action}`;
+  if (item.status === "Late") return info.late;
+  if (item.status === "Unknown") {
+    const reason = item.reasonCode && item.reasonCode !== "UNKNOWN" ? ` ${item.reasonCode}` : "";
+    return `Could not verify this from the Clio API.${reason}`;
+  }
+  return "";
+}
+
+function problemList(items: DashboardItem[]) {
+  const problems = items.filter((i) => ["Missing", "Late", "Unknown"].includes(i.status));
+  if (!problems.length) return <p>No problems found for this matter.</p>;
+  return (
+    <div className="problem-list">
+      {problems.map((item) => {
+        const href = evidencePath(item);
+        return (
+          <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
+            <div className="problem-title">
+              {badge(item.status)}
+              <strong>{stepLabel(item.stepCode)}</strong>
+            </div>
+            <p>{problemText(item)}</p>
+            <div className="problem-meta">
+              {item.deadlineAt ? <span>Due: {formatLocal(item.deadlineAt)}</span> : null}
+              {item.evidenceAt ? <span>Found: {formatLocal(item.evidenceAt)}</span> : null}
+              {href ? <a href={href}>{evidenceLabel(item)}</a> : null}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -254,9 +355,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <div className="matter-foot">
                 <div>
                   <span className="label">Problems</span>
-                  <p><strong>Late:</strong> {itemLabels(items, "Late") || "None"}</p>
-                  <p><strong>Missing:</strong> {itemLabels(items, "Missing") || "None"}</p>
-                  <p><strong>Unknown:</strong> {itemLabelsWithReasons(items, "Unknown") || "None"}</p>
+                  {problemList(items)}
                 </div>
                 <div>
                   <span className="label">Evidence</span>

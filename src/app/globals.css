@@ -134,10 +134,23 @@ th { background: #eef2f7; position: sticky; top: 0; z-index: 1; }
 .matter-foot {
   border-top: 1px solid var(--line);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   gap: 14px;
   padding-top: 12px;
 }
+.problem-list { display: grid; gap: 8px; }
+.problem-item {
+  border: 1px solid #e4e9f1;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 9px;
+}
+.problem-item.Missing { background: #fff7f6; border-color: #fecdca; }
+.problem-item.Late { background: #fffaf0; border-color: #ffd99a; }
+.problem-item.Unknown { background: #f7f2ff; border-color: #ddd0ff; }
+.problem-title { align-items: center; display: flex; gap: 8px; margin-bottom: 5px; }
+.problem-item p { margin: 0; line-height: 1.35; }
+.problem-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 12px; margin-top: 6px; }
 .step-cell { min-width: 0; max-width: 100%; }
 .detail { color: var(--muted); font-size: 12px; line-height: 1.25; margin-top: 6px; max-width: 190px; max-height: 46px; overflow: hidden; word-break: break-word; }
 .evidence-link { display: inline-block; font-size: 12px; margin-top: 6px; }
