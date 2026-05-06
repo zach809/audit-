@@ -344,6 +344,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const exportParams = new URLSearchParams(filters).toString();
   const actionExportParams = new URLSearchParams(filters);
   actionExportParams.set("type", "actions");
+  const lastRunText = data.lastRun
+    ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)}`
+    : "No audit has run yet";
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
@@ -357,13 +360,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
 
   return (
     <main className="shell">
-      <div className="topbar">
+      <div className="topbar app-header">
         <div className="title">
+          <div className="eyebrow-row">
+            <span className="eyebrow">Internal Workflow Coaching</span>
+            <span className="badge Pass">Read-Only Clio</span>
+          </div>
           <h1>Clio Workflow Compliance Auditor</h1>
-          <p>Read-only dashboard grouped by responsible attorney.</p>
-          <p className="muted small">Version: {APP_VERSION}</p>
+          <p>Open-matter workflow checks, proof links, and case-manager follow-up in one place.</p>
+          <div className="header-meta">
+            <span>Last run: {lastRunText}</span>
+            <span>Version: {APP_VERSION}</span>
+          </div>
         </div>
-        <div className="actions">
+        <div className="actions header-actions">
           {connected ? (
             <span className="badge Pass">Clio Connected</span>
           ) : (
@@ -375,15 +385,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <input type="hidden" name="from" value={filters.from} />
             <input type="hidden" name="to" value={filters.to} />
             <button className="primary" type="submit">Run Audit Batch</button>
-          </form>
-          <form action={`/api/export.csv?${exportParams}`} method="post">
-            <button type="submit">Export CSV</button>
-          </form>
-          <form action={`/api/export.csv?${actionExportParams.toString()}`} method="post">
-            <button type="submit">Export Case Manager CSV</button>
-          </form>
-          <form action="/api/export.csv?type=case-manager-text" method="post">
-            <button type="submit">Export Case Manager Notepad List</button>
           </form>
           <form action="/logout" method="post">
             <button type="submit">Log Out</button>
@@ -397,7 +398,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </section>
       ) : null}
 
-      <section className="queue-panel">
+      <section className="queue-panel overview-panel">
         <div className="queue-copy">
           <span className="label">Audit Progress</span>
           <strong>{checkedCount} of {totalCount} matters audited</strong>
@@ -459,7 +460,48 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel report-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Reports</h2>
+            <p className="muted small">Download clean follow-up lists without changing anything in Clio.</p>
+          </div>
+        </div>
+        <div className="report-grid">
+          <form className="report-card" action="/api/export.csv?type=case-manager-text" method="post">
+            <div>
+              <span className="label">For Case Managers</span>
+              <strong>Notepad To-Do List</strong>
+              <p>Plain text list grouped by attorney, ready to send for follow-up.</p>
+            </div>
+            <button className="primary" type="submit">Download List</button>
+          </form>
+          <form className="report-card" action={`/api/export.csv?${actionExportParams.toString()}`} method="post">
+            <div>
+              <span className="label">For Tracking</span>
+              <strong>Case Manager CSV</strong>
+              <p>Filtered action report with Clio links, proof links, and timing goals.</p>
+            </div>
+            <button type="submit">Download CSV</button>
+          </form>
+          <form className="report-card" action={`/api/export.csv?${exportParams}`} method="post">
+            <div>
+              <span className="label">Full Detail</span>
+              <strong>Audit CSV</strong>
+              <p>Full dashboard export for deeper review or recordkeeping.</p>
+            </div>
+            <button type="submit">Download Audit</button>
+          </form>
+        </div>
+      </section>
+
+      <section className="panel filter-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Review Matters</h2>
+            <p className="muted small">Filter the active dashboard view by attorney, status, or created date.</p>
+          </div>
+        </div>
         <form className="filters">
           <label>
             Responsible Attorney
@@ -505,11 +547,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <p className="muted small">
           Run Audit Batch checks up to {auditBatchSize} matters at a time and returns after about 25 seconds if Clio is slow. {uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left, about ${batchesLeft} ${batchLabel} to finish this view.` : "Everything discovered has been checked."}
         </p>
-        <p className="muted small">
-          Last run: {data.lastRun ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)} - ${data.lastRun.message ?? ""}` : "No audit has run yet."}
-        </p>
+        {data.lastRun?.message ? <p className="muted small">Last run note: {data.lastRun.message}</p> : null}
         <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
-        <p className="muted small">Export Case Manager CSV downloads the exact late, missing, and review items for the current filters. Export Case Manager Notepad List creates the full open-matter to-do list grouped by attorney, so it is ready to send to case managers.</p>
       </section>
 
       <section className="matter-list">
@@ -599,9 +638,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         )}
       </section>
 
-      <section className="panel">
-        <h2>Current Month Attorney Coaching Summary</h2>
-        <p className="muted small">This turns the monthly counts into coaching areas. It is based only on Clio-visible workflow evidence.</p>
+      <section className="panel coaching-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Current Month Attorney Coaching Summary</h2>
+            <p className="muted small">Monthly coaching areas based only on Clio-visible workflow evidence.</p>
+          </div>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
