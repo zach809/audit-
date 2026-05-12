@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-priority-collapsible-workspace-2026-05-12";
+export const APP_VERSION = "cwca-shared-status-cleanup-2026-05-12";

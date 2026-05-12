@@ -6,12 +6,23 @@ import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
 import { APP_TZ } from "@/lib/config";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
+import {
+  auditItemPriority,
+  displayAuditStatus,
+  isFollowUpStatus,
+  isGenericApiError,
+  isInternalPlaceholder,
+  statusClass,
+  workspaceFilterMatches,
+  workspaceStatus,
+  REVIEW_STATUSES,
+} from "@/lib/audit-display";
 
 export const dynamic = "force-dynamic";
 
 function badge(value: string | null | undefined) {
   const label = value || "";
-  const cls = label.replace(/\s+/g, "-").replace("/", "A");
+  const cls = statusClass(label);
   return <span className={`badge ${cls}`}>{label || "N/A"}</span>;
 }
 
@@ -55,18 +66,6 @@ function evidenceLabel(item: DashboardItem): string {
   return item.evidenceSource && item.evidenceRefId ? `${item.evidenceSource} #${item.evidenceRefId}` : "Evidence";
 }
 
-function stepLabel(code: string): string {
-  return workflowLabel(code);
-}
-
-function isInternalPlaceholder(reason?: string | null): boolean {
-  return !reason || reason === "NOT_FOUND" || reason === "UNKNOWN";
-}
-
-function isGenericApiError(reason?: string | null): boolean {
-  return reason === "API_ERROR" || reason === "MATTER_ERROR: API_ERROR" || Boolean(reason?.startsWith("NOTES_400:"));
-}
-
 function needsMatterRefresh(items: DashboardItem[]): boolean {
   const genericApiProblems = items.filter((item) => item.status === "Unknown" && isGenericApiError(item.reasonCode));
   return genericApiProblems.length >= Math.max(3, items.length - 1);
@@ -102,7 +101,7 @@ function stepCell(items: DashboardItem[], code: string) {
     );
   }
   const status = item?.status ?? "Pending";
-  const displayStatus = status === "Unknown" && isGenericApiError(item?.reasonCode) ? "Needs Recheck" : status;
+  const displayStatus = displayAuditStatus(status, item?.reasonCode);
   const detail = stepDetail(item, status);
   const href = item ? evidencePath(item) : "";
   return (
@@ -116,7 +115,7 @@ function stepCell(items: DashboardItem[], code: string) {
 
 function problemText(item: DashboardItem): string {
   const info = WORKFLOW_RULES[item.stepCode] ?? {
-    label: stepLabel(item.stepCode),
+    label: workflowLabel(item.stepCode),
     missing: "Required evidence was not found.",
     action: "Review this item in Clio.",
     late: "Evidence was found late.",
@@ -169,7 +168,7 @@ function problemList(items: DashboardItem[]) {
           <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
             <div className="problem-title">
               {badge(item.status)}
-              <strong>{stepLabel(item.stepCode)}</strong>
+              <strong>{workflowLabel(item.stepCode)}</strong>
             </div>
             <p>{problemText(item)}</p>
             <div className="problem-meta">
@@ -262,28 +261,14 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-function auditItemPriority(status: string): number {
-  if (status === "Missing") return 1;
-  if (status === "Unknown" || status === "Needs Recheck") return 2;
-  if (status === "Late") return 3;
-  if (status === "Pending") return 4;
-  if (status === "On Time" || status === "On Track") return 5;
-  return 6;
-}
-
-function workspaceStatus(item: DashboardItem): string {
-  if (item.status === "Unknown" && isGenericApiError(item.reasonCode)) return "Needs Recheck";
-  if (item.status === "On Time") return "On Track";
-  return item.status;
-}
-
-type DashboardTab = "overview" | "workspace" | "matters" | "reports" | "compliance";
+type DashboardTab = "overview" | "workspace" | "matters" | "reports" | "guide" | "compliance";
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "overview", label: "Overview", description: "Executive summary and audit progress" },
   { id: "workspace", label: "Attorney Workspace", description: "Grouped audit items by attorney" },
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
+  { id: "guide", label: "Guide", description: "How to read the results" },
   { id: "compliance", label: "Compliance", description: "Read-only and data-handling rules" },
 ];
 
@@ -296,30 +281,45 @@ const WORKSPACE_STATUS_FILTERS = [
   { id: "all", label: "All Items" },
 ];
 
+const GUIDE_STATUS_CARDS = [
+  {
+    color: "red",
+    title: "Needs Follow-Up",
+    text: "Start here. These are missing, late, or review items that a case manager or attorney should check in Clio.",
+  },
+  {
+    color: "green",
+    title: "On Track",
+    text: "CWCA found the expected workflow evidence and no current problem is showing for that item.",
+  },
+  {
+    color: "blue",
+    title: "Not Due Yet",
+    text: "The deadline has not passed. No action is needed unless staff already know the step should be done.",
+  },
+  {
+    color: "purple",
+    title: "Needs Review",
+    text: "CWCA could not confirm the answer from Clio. Recheck the matter before coaching anyone.",
+  },
+  {
+    color: "amber",
+    title: "Late Timing",
+    text: "Evidence was found, but it appears after the workflow goal. Use this for timing coaching, not blame.",
+  },
+  {
+    color: "slate",
+    title: "Still To Audit",
+    text: "These matters are waiting for a safe audit batch. Click Run Audit Batch until the queue is complete.",
+  },
+];
+
 function dashboardTab(value?: string): DashboardTab {
   return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "overview";
 }
 
 function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
-  const params = new URLSearchParams({ ...filters, tab });
-  for (const [key, value] of Array.from(params.entries())) {
-    if (!value) params.delete(key);
-  }
-  return `/?${params.toString()}`;
-}
-
-function isFollowUpStatus(status: string): boolean {
-  return ["Missing", "Late", "Unknown", "Needs Recheck"].includes(status);
-}
-
-function workspaceFilterMatches(status: string, filter: string): boolean {
-  if (filter === "all") return true;
-  if (filter === "followup") return isFollowUpStatus(status);
-  if (filter === "missing") return status === "Missing";
-  if (filter === "review") return status === "Unknown" || status === "Needs Recheck";
-  if (filter === "late") return status === "Late";
-  if (filter === "pending") return status === "Pending";
-  return isFollowUpStatus(status);
+  return filterLink(filters, { tab });
 }
 
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
@@ -361,11 +361,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       matterNumber: item.matter_number,
       clientName: `${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`.trim() || "Unnamed Client",
       stepCode: item.step_code,
-      status: workspaceStatus({
-        stepCode: item.step_code,
-        status: item.item_status,
-        reasonCode: item.reason_code ?? undefined,
-      }),
+      status: workspaceStatus(item.item_status, item.reason_code),
       deadlineAt: item.deadline_at ? String(item.deadline_at) : null,
       evidenceAt: item.evidence_at ? String(item.evidence_at) : null,
       evidenceSource: item.evidence_source ?? undefined,
@@ -399,7 +395,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       const onTrack = rows.filter((row) => row.status === "On Track").length;
       const missing = rows.filter((row) => row.status === "Missing").length;
       const late = rows.filter((row) => row.status === "Late").length;
-      const review = rows.filter((row) => row.status === "Unknown" || row.status === "Needs Recheck").length;
+      const review = rows.filter((row) => REVIEW_STATUSES.has(row.status)).length;
       const mainArea = review >= missing && review >= late && review > 0 ? "Review" : missing >= late && missing > 0 ? "Missing" : late > 0 ? "Late" : "On Track";
       return { attorney, checked, followUp, onTrack, missing, late, review, mainArea };
     })
@@ -507,12 +503,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       <section className="grid">
-        <div className="stat focus-stat"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Missing, late, or review items.</p></div>
-        <div className="stat"><span>On Track</span><strong>{data.summary.pass}</strong><p>No current workflow problems found.</p></div>
-        <div className="stat"><span>Not Due Yet</span><strong>{data.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
-        <div className="stat"><span>Needs Review</span><strong>{data.summary.review}</strong><p>Check visibility before coaching.</p></div>
-        <div className="stat"><span>Late Timing</span><strong>{data.summary.late}</strong><p>Evidence was found after the goal.</p></div>
-        <div className="stat"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
+        <div className="stat focus-stat stat-red"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Missing, late, or review items.</p></div>
+        <div className="stat stat-green"><span>On Track</span><strong>{data.summary.pass}</strong><p>No current workflow problems found.</p></div>
+        <div className="stat stat-blue"><span>Not Due Yet</span><strong>{data.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
+        <div className="stat stat-purple"><span>Needs Review</span><strong>{data.summary.review}</strong><p>Check visibility before coaching.</p></div>
+        <div className="stat stat-amber"><span>Late Timing</span><strong>{data.summary.late}</strong><p>Evidence was found after the goal.</p></div>
+        <div className="stat stat-slate"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
       </section>
 
       <section className="panel priority-panel">
@@ -528,11 +524,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             {todaysPriorities.map((item) => {
               const href = evidencePath(item.row as DashboardItem);
               return (
-                <div className="priority-row" key={`${item.attorney}-${item.row.matterId}-${item.row.stepCode}`}>
+                <div className={`priority-row status-row-${statusClass(item.row.status)}`} key={`${item.attorney}-${item.row.matterId}-${item.row.stepCode}`}>
                   <span>{badge(item.row.status)}</span>
                   <div>
                     <strong>{item.row.clientName}</strong>
-                    <small>{item.attorney} · {item.row.matterNumber} · {stepLabel(item.row.stepCode)}</small>
+                    <small>{item.attorney} - {item.row.matterNumber} - {workflowLabel(item.row.stepCode)}</small>
                   </div>
                   <div className="priority-links">
                     <a href={clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Clio</a>
@@ -607,6 +603,66 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
       </section>
         </>
+      ) : null}
+
+      {activeTab === "guide" ? (
+      <section className="guide-layout">
+        <section className="panel guide-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>How To Read CWCA</h2>
+              <p className="muted small">Use this as an internal workflow coaching guide. CWCA points you to items that may need follow-up; Clio remains the official source.</p>
+            </div>
+            <span className="badge Pass">Plain-English Guide</span>
+          </div>
+          <div className="guide-grid">
+            {GUIDE_STATUS_CARDS.map((card) => (
+              <div className={`guide-card guide-${card.color}`} key={card.title}>
+                <span className="guide-kicker">{card.color === "slate" ? "Gray" : card.color}</span>
+                <h3>{card.title}</h3>
+                <p>{card.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel guide-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>What Each Area Checks</h2>
+              <p className="muted small">These are the workflow areas CWCA checks on open matters.</p>
+            </div>
+          </div>
+          <div className="rule-list">
+            {Object.entries(WORKFLOW_RULES).map(([code, rule]) => (
+              <div className="rule-row" key={code}>
+                <div>
+                  <span className="label">Audit Area</span>
+                  <strong>{rule.label}</strong>
+                </div>
+                <p>{rule.goal}</p>
+                <p><b>If flagged:</b> {rule.action}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel guide-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Best Way To Use It</h2>
+              <p className="muted small">A simple daily rhythm for interpreting the dashboard.</p>
+            </div>
+          </div>
+          <div className="playbook-list">
+            <div><strong>1. Start with Overview.</strong><span>Check Needs Follow-Up and Today's Priorities first.</span></div>
+            <div><strong>2. Open Attorney Workspace.</strong><span>Use the colored filters to group work by attorney and status.</span></div>
+            <div><strong>3. Verify in Clio.</strong><span>Open the Clio link and proof link before deciding whether coaching is needed.</span></div>
+            <div><strong>4. Send the case-manager list.</strong><span>Use Reports to download a plain to-do list for follow-up.</span></div>
+            <div><strong>5. Keep it coaching-focused.</strong><span>Use CWCA as a visibility tool, not as discipline by itself.</span></div>
+          </div>
+        </section>
+      </section>
       ) : null}
 
       {activeTab === "compliance" ? (
@@ -798,12 +854,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   {section.rows.map((row) => {
                     const href = evidencePath(row as DashboardItem);
                     return (
-                      <div className="workspace-row" key={`${section.attorney}-${row.matterId}-${row.stepCode}`}>
+                      <div className={`workspace-row status-row-${statusClass(row.status)}`} key={`${section.attorney}-${row.matterId}-${row.stepCode}`}>
                         <span>
                           <strong>{row.clientName}</strong>
                           <small>{row.matterNumber}</small>
                         </span>
-                        <span>{stepLabel(row.stepCode)}</span>
+                        <span>{workflowLabel(row.stepCode)}</span>
                         <span>{badge(row.status)}</span>
                         <span>
                           {row.deadlineAt ? <small>Due: {formatLocal(row.deadlineAt)}</small> : null}

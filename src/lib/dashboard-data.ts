@@ -1,6 +1,7 @@
 import { APP_TZ } from "./config";
 import { initDb, db } from "./db";
-import { WORKFLOW_RULES, workflowLabel } from "./workflow-rules";
+import { workflowLabel } from "./workflow-rules";
+import { actionFor, displayAuditStatus, priorityFor, timingGoalFor, whyFlagged } from "./audit-display";
 
 export type DashboardFilters = {
   attorney?: string;
@@ -48,47 +49,8 @@ function csvCell(value: unknown): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function stepLabel(stepCode: string): string {
-  return workflowLabel(stepCode);
-}
-
-function actionFor(stepCode: string, status: string, reasonCode?: string | null): string {
-  const info = WORKFLOW_RULES[stepCode];
-  if (status === "Missing") return info ? `${info.missing} ${info.action}` : "Complete or verify this missing workflow step in Clio.";
-  if (status === "Late") return info?.late ?? "Review timing. Evidence was found after the deadline.";
-  if (status === "Unknown") {
-    if (reasonCode?.includes("API") || reasonCode?.startsWith("NOTES_400:")) {
-      return "Recheck the matter before coaching. This is an audit visibility issue, not proof that work was missed.";
-    }
-    return info?.unknown ?? "Review this item in Clio. The app could not verify it from API-visible evidence.";
-  }
-  return "Review this item in Clio.";
-}
-
 function humanStatus(status: string): string {
-  if (status === "Unknown") return "Needs Review";
-  return status;
-}
-
-function priorityFor(status: string): string {
-  if (status === "Missing") return "Action Needed";
-  if (status === "Late") return "Timing Improvement";
-  if (status === "Unknown") return "Review First";
-  return "Review";
-}
-
-function whyFlagged(stepCode: string, status: string, reasonCode?: string | null): string {
-  if (status === "Missing") return `${stepLabel(stepCode)} was not found from the allowed read-only Clio evidence.`;
-  if (status === "Late") return `${stepLabel(stepCode)} was found, but after the expected timeliness goal.`;
-  if (status === "Unknown") {
-    if (reasonCode && reasonCode !== "NOT_FOUND") return `The auditor could not confirm this item from Clio: ${reasonCode}`;
-    return "The auditor could not confirm this item from Clio-visible evidence.";
-  }
-  return "";
-}
-
-function timingGoalFor(stepCode: string): string {
-  return WORKFLOW_RULES[stepCode]?.goal ?? "Review the expected workflow timing.";
+  return displayAuditStatus(status);
 }
 
 function formatCsvDate(value: unknown): string {
@@ -535,7 +497,7 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
       `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim(),
       row.matter_number,
       row.overall_status,
-      stepLabel(row.step_code),
+      workflowLabel(row.step_code),
       humanStatus(status),
       actionFor(row.step_code, status, row.reason_code),
       timingGoalFor(row.step_code),
@@ -605,7 +567,7 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
         textLine("Client", `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim()),
         textLine("Matter", row.matter_number),
         textLine("Overall", row.overall_status),
-        textLine("Improvement Area", stepLabel(row.step_code)),
+        textLine("Improvement Area", workflowLabel(row.step_code)),
         textLine("Status", humanStatus(status)),
         textLine("What The Case Manager Should Do In Clio", actionFor(row.step_code, status, row.reason_code)),
         textLine("Timeliness Goal", timingGoalFor(row.step_code)),
@@ -618,7 +580,7 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
         textLine("Why This Was Flagged", whyFlagged(row.step_code, status, row.reason_code)),
       ].filter(Boolean);
 
-      lines.push(`${index + 1}. ${stepLabel(row.step_code)} - ${humanStatus(status)}`);
+      lines.push(`${index + 1}. ${workflowLabel(row.step_code)} - ${humanStatus(status)}`);
       lines.push(...details.map((detail) => `   ${detail}`));
       lines.push("");
     });
