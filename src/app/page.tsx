@@ -27,6 +27,19 @@ type DashboardItem = {
   evidenceUrl?: string;
 };
 
+type WorkspaceRow = {
+  matterId: string;
+  matterNumber: string;
+  clientName: string;
+  stepCode: string;
+  status: string;
+  deadlineAt?: string | null;
+  evidenceAt?: string | null;
+  evidenceSource?: string;
+  evidenceRefId?: string;
+  evidenceUrl?: string;
+};
+
 function evidencePath(item: DashboardItem): string {
   if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}`;
   if (item.evidenceRefId && item.evidenceSource === "Calendar") return `/evidence/calendar_entries/${item.evidenceRefId}`;
@@ -274,6 +287,15 @@ const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: stri
   { id: "compliance", label: "Compliance", description: "Read-only and data-handling rules" },
 ];
 
+const WORKSPACE_STATUS_FILTERS = [
+  { id: "followup", label: "Needs Follow-Up" },
+  { id: "missing", label: "Missing" },
+  { id: "review", label: "Needs Review" },
+  { id: "late", label: "Late" },
+  { id: "pending", label: "Pending" },
+  { id: "all", label: "All Items" },
+];
+
 function dashboardTab(value?: string): DashboardTab {
   return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "overview";
 }
@@ -286,10 +308,25 @@ function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
   return `/?${params.toString()}`;
 }
 
+function isFollowUpStatus(status: string): boolean {
+  return ["Missing", "Late", "Unknown", "Needs Recheck"].includes(status);
+}
+
+function workspaceFilterMatches(status: string, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "followup") return isFollowUpStatus(status);
+  if (filter === "missing") return status === "Missing";
+  if (filter === "review") return status === "Unknown" || status === "Needs Recheck";
+  if (filter === "late") return status === "Late";
+  if (filter === "pending") return status === "Pending";
+  return isFollowUpStatus(status);
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
   const activeTab = dashboardTab(searchParams.tab);
+  const workspaceStatusFilter = searchParams.wstatus ?? "followup";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -317,26 +354,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const lastRunText = data.lastRun
     ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)}`
     : "No audit has run yet";
-  const workspaceGroups = new Map<string, Array<{
-    matterId: string;
-    matterNumber: string;
-    clientName: string;
-    stepCode: string;
-    status: string;
-    deadlineAt?: string | null;
-    evidenceAt?: string | null;
-    evidenceSource?: string;
-    evidenceRefId?: string;
-    evidenceUrl?: string;
-  }>>();
-  for (const item of data.workspaceItems as WorkspaceAuditItem[]) {
-    const attorney = item.responsible_attorney_name || "Unassigned";
-    const clientName = `${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`.trim() || "Unnamed Client";
-    const rows = workspaceGroups.get(attorney) ?? [];
-    rows.push({
+  const allWorkspaceRows = (data.workspaceItems as WorkspaceAuditItem[]).map((item) => ({
+    attorney: item.responsible_attorney_name || "Unassigned",
+    row: {
       matterId: item.matter_id,
       matterNumber: item.matter_number,
-      clientName,
+      clientName: `${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`.trim() || "Unnamed Client",
       stepCode: item.step_code,
       status: workspaceStatus({
         stepCode: item.step_code,
@@ -348,16 +371,44 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       evidenceSource: item.evidence_source ?? undefined,
       evidenceRefId: item.evidence_ref_id ?? undefined,
       evidenceUrl: item.evidence_url ?? undefined,
-    });
-    workspaceGroups.set(attorney, rows);
+    } satisfies WorkspaceRow,
+  }));
+  const workspaceGroups = new Map<string, WorkspaceRow[]>();
+  for (const item of allWorkspaceRows.filter((item) => workspaceFilterMatches(item.row.status, workspaceStatusFilter))) {
+    const rows = workspaceGroups.get(item.attorney) ?? [];
+    rows.push(item.row);
+    workspaceGroups.set(item.attorney, rows);
+  }
+  const allWorkspaceGroups = new Map<string, WorkspaceRow[]>();
+  for (const item of allWorkspaceRows) {
+    const rows = allWorkspaceGroups.get(item.attorney) ?? [];
+    rows.push(item.row);
+    allWorkspaceGroups.set(item.attorney, rows);
   }
   const workspaceSections = Array.from(workspaceGroups.entries())
     .map(([attorney, rows]) => ({
       attorney,
       rows: rows.sort((a, b) => auditItemPriority(a.status) - auditItemPriority(b.status) || a.clientName.localeCompare(b.clientName)),
-      needsFollowUp: rows.filter((row) => ["Missing", "Late", "Unknown", "Needs Recheck"].includes(row.status)).length,
+      needsFollowUp: rows.filter((row) => isFollowUpStatus(row.status)).length,
     }))
     .sort((a, b) => b.needsFollowUp - a.needsFollowUp || a.attorney.localeCompare(b.attorney));
+  const attorneyHealth = Array.from(allWorkspaceGroups.entries())
+    .map(([attorney, rows]) => {
+      const checked = rows.length;
+      const followUp = rows.filter((row) => isFollowUpStatus(row.status)).length;
+      const onTrack = rows.filter((row) => row.status === "On Track").length;
+      const missing = rows.filter((row) => row.status === "Missing").length;
+      const late = rows.filter((row) => row.status === "Late").length;
+      const review = rows.filter((row) => row.status === "Unknown" || row.status === "Needs Recheck").length;
+      const mainArea = review >= missing && review >= late && review > 0 ? "Review" : missing >= late && missing > 0 ? "Missing" : late > 0 ? "Late" : "On Track";
+      return { attorney, checked, followUp, onTrack, missing, late, review, mainArea };
+    })
+    .sort((a, b) => b.followUp - a.followUp || a.attorney.localeCompare(b.attorney))
+    .slice(0, 12);
+  const todaysPriorities = allWorkspaceRows
+    .filter((item) => isFollowUpStatus(item.row.status))
+    .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
+    .slice(0, 8);
   const statusChart = [
     { label: "Needs Follow-Up", value: needsFollowUpCount, className: "followup" },
     { label: "On Track", value: num(data.summary.pass), className: "ontrack" },
@@ -462,6 +513,41 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="stat"><span>Needs Review</span><strong>{data.summary.review}</strong><p>Check visibility before coaching.</p></div>
         <div className="stat"><span>Late Timing</span><strong>{data.summary.late}</strong><p>Evidence was found after the goal.</p></div>
         <div className="stat"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
+      </section>
+
+      <section className="panel priority-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Today's Priorities</h2>
+            <p className="muted small">Start here: highest-priority follow-up items from open matters.</p>
+          </div>
+          <a className="button compact" href={tabLink(filters, "workspace")}>Open Workspace</a>
+        </div>
+        {todaysPriorities.length ? (
+          <div className="priority-list">
+            {todaysPriorities.map((item) => {
+              const href = evidencePath(item.row as DashboardItem);
+              return (
+                <div className="priority-row" key={`${item.attorney}-${item.row.matterId}-${item.row.stepCode}`}>
+                  <span>{badge(item.row.status)}</span>
+                  <div>
+                    <strong>{item.row.clientName}</strong>
+                    <small>{item.attorney} · {item.row.matterNumber} · {stepLabel(item.row.stepCode)}</small>
+                  </div>
+                  <div className="priority-links">
+                    <a href={clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Clio</a>
+                    {href ? <a href={href}>Proof</a> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="chart-empty">
+            <strong>No priority follow-up items found.</strong>
+            <p>When missing, late, or review items appear, the top priorities will show here.</p>
+          </div>
+        )}
       </section>
 
       <section className="overview-visuals">
@@ -662,11 +748,36 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
           <span className="badge Unchecked">{workspaceSections.length} groups</span>
         </div>
+        <div className="workspace-filter-tabs">
+          {WORKSPACE_STATUS_FILTERS.map((filter) => (
+            <a
+              className={workspaceStatusFilter === filter.id ? "workspace-filter active" : "workspace-filter"}
+              href={filterLink({ ...filters, tab: "workspace", wstatus: filter.id }, {})}
+              key={filter.id}
+            >
+              {filter.label}
+            </a>
+          ))}
+        </div>
+        <div className="attorney-health-grid">
+          {attorneyHealth.map((attorney) => (
+            <div className="attorney-health-card" key={attorney.attorney}>
+              <span className="label">Attorney Health</span>
+              <strong>{attorney.attorney}</strong>
+              <div className="health-stats">
+                <span><b>{attorney.followUp}</b> follow-up</span>
+                <span><b>{attorney.onTrack}</b> on track</span>
+                <span><b>{attorney.checked}</b> items</span>
+              </div>
+              <p>Main area: {attorney.mainArea}</p>
+            </div>
+          ))}
+        </div>
         {workspaceSections.length ? (
           <div className="workspace-board">
             {workspaceSections.map((section) => (
-              <article className="workspace-group" key={section.attorney}>
-                <div className="workspace-group-head">
+              <details className="workspace-group" key={section.attorney} open={section.needsFollowUp > 0}>
+                <summary className="workspace-group-head">
                   <div>
                     <span className="label">Attorney</span>
                     <h3>{section.attorney}</h3>
@@ -675,7 +786,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     <strong>{section.needsFollowUp}</strong>
                     <span>Needs Follow-Up</span>
                   </div>
-                </div>
+                </summary>
                 <div className="workspace-table">
                   <div className="workspace-row workspace-row-head">
                     <span>Client / Matter</span>
@@ -707,7 +818,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     );
                   })}
                 </div>
-              </article>
+              </details>
             ))}
           </div>
         ) : (

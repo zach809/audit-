@@ -274,6 +274,49 @@ button:active, .button:active { transform: translateY(1px); }
   box-shadow: inset 4px 0 0 var(--blue);
 }
 
+.priority-panel {
+  margin-bottom: 16px;
+}
+.priority-list {
+  display: grid;
+  gap: 8px;
+}
+.priority-row {
+  align-items: center;
+  background: var(--panel-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 10px;
+}
+.priority-row strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.priority-row small {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
+}
+.priority-links {
+  display: flex;
+  gap: 8px;
+}
+.priority-links a {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 8px;
+  text-decoration: none;
+}
+
 .overview-visuals {
   display: grid;
   gap: 16px;
@@ -498,6 +541,75 @@ input:focus, select:focus, button:focus, .button:focus {
 .workspace-panel {
   background: #fff;
 }
+.workspace-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.workspace-filter {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 10px;
+  text-decoration: none;
+}
+.workspace-filter:hover {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+.workspace-filter.active {
+  background: var(--blue-soft);
+  border-color: #c7ddff;
+  color: var(--blue);
+}
+.attorney-health-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+.attorney-health-card {
+  background: var(--panel-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 12px;
+}
+.attorney-health-card strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.25;
+  margin-bottom: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.health-stats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.health-stats span {
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 7px;
+}
+.health-stats b {
+  color: var(--text);
+  display: block;
+  font-size: 16px;
+}
+.attorney-health-card p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 10px 0 0;
+}
 .workspace-board {
   display: grid;
   gap: 14px;
@@ -508,14 +620,24 @@ input:focus, select:focus, button:focus, .button:focus {
   border-radius: 8px;
   overflow: hidden;
 }
+.workspace-group[open] {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
 .workspace-group-head {
   align-items: center;
   background: #fff;
   border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
   display: flex;
   gap: 14px;
   justify-content: space-between;
   padding: 14px;
+}
+.workspace-group:not([open]) .workspace-group-head {
+  border-bottom: 0;
+}
+.workspace-group-head::marker {
+  color: var(--muted);
 }
 .workspace-group h3 {
   font-size: 17px;
@@ -794,6 +916,7 @@ tbody tr:hover { background: #fbfcfe; }
 @media (max-width: 1100px) {
   .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .overview-visuals { grid-template-columns: 1fr; }
+  .attorney-health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .report-grid { grid-template-columns: 1fr; }
   .report-card { grid-template-columns: 1fr; }
@@ -830,6 +953,8 @@ tbody tr:hover { background: #fbfcfe; }
   .title h1 { font-size: 24px; }
   .grid { grid-template-columns: 1fr; }
   .chart-legend, .bar-row { grid-template-columns: 1fr; }
+  .priority-row { grid-template-columns: 1fr; }
+  .attorney-health-grid, .health-stats { grid-template-columns: 1fr; }
   .bar-row strong { text-align: left; }
   .matter-head { grid-template-columns: 1fr; }
   .filters { align-items: stretch; display: grid; }
