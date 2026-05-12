@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-production-polish-2026-05-06";
+export const APP_VERSION = "cwca-attorney-workspace-2026-05-12";

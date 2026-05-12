@@ -131,7 +131,7 @@ export function addBusinessDaysDeadline(anchor: Date, businessDaysAfter: number)
 
 export function setupDeadlines(createdAt: Date) {
   const effective = effectiveIntake(createdAt);
-  const onTime = addBusinessMinutes(effective, 15);
+  const onTime = addBusinessMinutes(effective, 60);
   return {
     effective,
     onTime,

@@ -47,19 +47,19 @@ const STEP_INFO: Record<string, { label: string; missing: string; action: string
     label: "Welcome Packet",
     missing: "Welcome packet email/template was not found in Clio communications.",
     action: "Check or send the Welcome Letter / Carta de bienvenida template.",
-    late: "Welcome packet was found, but after the setup deadline.",
+    late: "Welcome packet was found, but after the 1-business-hour setup goal.",
   },
   SETUP_ATTY_CALL: {
     label: "Attorney Call",
     missing: "Attorney/client phone call calendar event was not found.",
     action: "Add or verify a Phone Call / Client Call calendar event on the matter.",
-    late: "Attorney/client call was scheduled after the setup deadline.",
+    late: "Attorney/client call was scheduled after the 1-business-hour setup goal.",
   },
   SETUP_COURT_DATE: {
     label: "Court Date Added",
     missing: "Court date calendar event was not found.",
     action: "Add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
-    late: "Court date was added after the setup deadline.",
+    late: "Court date was added after the 1-business-hour setup goal.",
   },
   CLIENT_CONTACT: {
     label: "Client Contact",
@@ -87,7 +87,7 @@ const STEP_INFO: Record<string, { label: string; missing: string; action: string
   },
   CLIENT_FOLLOWUP: {
     label: "Client Follow-Up",
-    missing: "Client follow-up risk detected: three or more inbound client communications before a firm response.",
+    missing: "Client follow-up risk detected: 2 or more inbound client communications before a firm response.",
     action: "Review the communication thread and respond or coach as needed.",
     late: "Client follow-up was handled late.",
   },
@@ -317,6 +317,21 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
+function auditItemPriority(status: string): number {
+  if (status === "Missing") return 1;
+  if (status === "Unknown") return 2;
+  if (status === "Late") return 3;
+  if (status === "Pending") return 4;
+  if (status === "On Time") return 5;
+  return 6;
+}
+
+function workspaceStatus(item: DashboardItem): string {
+  if (item.status === "Unknown" && isGenericApiError(item.reasonCode)) return "Needs Recheck";
+  if (item.status === "On Time") return "On Track";
+  return item.status;
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
@@ -347,6 +362,45 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const lastRunText = data.lastRun
     ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)}`
     : "No audit has run yet";
+  const workspaceGroups = new Map<string, Array<{
+    matterId: string;
+    matterNumber: string;
+    clientName: string;
+    stepCode: string;
+    status: string;
+    deadlineAt?: string | null;
+    evidenceAt?: string | null;
+    evidenceSource?: string;
+    evidenceRefId?: string;
+    evidenceUrl?: string;
+  }>>();
+  for (const matter of data.matters) {
+    const attorney = matter.responsible_attorney_name || "Unassigned";
+    const clientName = `${matter.client_first_name} ${matter.client_last_name}`.trim() || "Unnamed Client";
+    const rows = workspaceGroups.get(attorney) ?? [];
+    for (const item of matter.items as DashboardItem[]) {
+      rows.push({
+        matterId: matter.matter_id,
+        matterNumber: matter.matter_number,
+        clientName,
+        stepCode: item.stepCode,
+        status: workspaceStatus(item),
+        deadlineAt: item.deadlineAt,
+        evidenceAt: item.evidenceAt,
+        evidenceSource: item.evidenceSource,
+        evidenceRefId: item.evidenceRefId,
+        evidenceUrl: item.evidenceUrl,
+      });
+    }
+    workspaceGroups.set(attorney, rows);
+  }
+  const workspaceSections = Array.from(workspaceGroups.entries())
+    .map(([attorney, rows]) => ({
+      attorney,
+      rows: rows.sort((a, b) => auditItemPriority(a.status) - auditItemPriority(b.status) || a.clientName.localeCompare(b.clientName)),
+      needsFollowUp: rows.filter((row) => ["Missing", "Late", "Unknown", "Needs Recheck"].includes(row.status)).length,
+    }))
+    .sort((a, b) => b.needsFollowUp - a.needsFollowUp || a.attorney.localeCompare(b.attorney));
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
@@ -367,7 +421,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <span className="badge Pass">Read-Only Clio</span>
           </div>
           <h1>Clio Workflow Compliance Auditor</h1>
-          <p>Open-matter workflow checks, proof links, and case-manager follow-up in one place.</p>
+          <p>Open-matter workflow checks, proof links, and case-manager follow-up in one place, using Illinois business time.</p>
           <div className="header-meta">
             <span>Last run: {lastRunText}</span>
             <span>Version: {APP_VERSION}</span>
@@ -432,7 +486,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="panel-heading">
           <div>
             <h2>Compliance And Data Handling</h2>
-            <p className="muted small">Built for internal workflow coaching with read-only Clio access and minimal local storage.</p>
+            <p className="muted small">Built for internal workflow coaching with read-only Clio access, minimal local storage, and less-strict business-time deadlines.</p>
           </div>
           <span className="badge Pass">Read-Only Only</span>
         </div>
@@ -549,6 +603,70 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </p>
         {data.lastRun?.message ? <p className="muted small">Last run note: {data.lastRun.message}</p> : null}
         <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
+      </section>
+
+      <section className="panel workspace-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Attorney Audit Workspace</h2>
+            <p className="muted small">A clean grouped view of audit items by attorney. Use filters above to narrow the workspace.</p>
+          </div>
+          <span className="badge Unchecked">{workspaceSections.length} groups</span>
+        </div>
+        {workspaceSections.length ? (
+          <div className="workspace-board">
+            {workspaceSections.map((section) => (
+              <article className="workspace-group" key={section.attorney}>
+                <div className="workspace-group-head">
+                  <div>
+                    <span className="label">Attorney</span>
+                    <h3>{section.attorney}</h3>
+                  </div>
+                  <div className="workspace-counts">
+                    <strong>{section.needsFollowUp}</strong>
+                    <span>Needs Follow-Up</span>
+                  </div>
+                </div>
+                <div className="workspace-table">
+                  <div className="workspace-row workspace-row-head">
+                    <span>Client / Matter</span>
+                    <span>Audit Item</span>
+                    <span>Status</span>
+                    <span>Timing</span>
+                    <span>Links</span>
+                  </div>
+                  {section.rows.map((row) => {
+                    const href = evidencePath(row as DashboardItem);
+                    return (
+                      <div className="workspace-row" key={`${section.attorney}-${row.matterId}-${row.stepCode}`}>
+                        <span>
+                          <strong>{row.clientName}</strong>
+                          <small>{row.matterNumber}</small>
+                        </span>
+                        <span>{stepLabel(row.stepCode)}</span>
+                        <span>{badge(row.status)}</span>
+                        <span>
+                          {row.deadlineAt ? <small>Due: {formatLocal(row.deadlineAt)}</small> : null}
+                          {row.evidenceAt ? <small>Found: {formatLocal(row.evidenceAt)}</small> : null}
+                          {!row.deadlineAt && !row.evidenceAt ? <small>No timing note</small> : null}
+                        </span>
+                        <span className="workspace-links">
+                          <a href={clioMatterPath(row.matterId)} target="_blank" rel="noreferrer">Clio</a>
+                          {href ? <a href={href}>Proof</a> : null}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="workspace-empty">
+            <strong>No audit items in this view yet.</strong>
+            <p>Run Audit Batch, or clear filters, to populate the workspace.</p>
+          </div>
+        )}
       </section>
 
       <section className="matter-list">

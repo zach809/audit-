@@ -16,6 +16,19 @@ Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA 
 
 No AI is used.
 
+## Current Workflow Rules
+
+CWCA checks open matters using Illinois business time: Monday-Friday, 8:00 AM-5:00 PM America/Chicago. After-hours and weekend items roll into business-time handling so the audit is less strict than a plain clock timer.
+
+- Welcome Packet: welcome letter / bienvenida communication sent within 1 business hour of a new matter being created.
+- Attorney Call: attorney/client call calendar event scheduled within 1 business hour of a new matter being created.
+- Court Date Added: court, hearing, status, or continuance calendar event added within 1 business hour when the court date is known.
+- Client Contact: outgoing client contact completed by the next business day at 5:00 PM.
+- Appearance Filed: appearance filing notification or template evidence completed by the second business day at 5:00 PM.
+- Court Results: court result communication sent by the next business day at 5:00 PM after court.
+- Post-Court Call: post-court attorney/client call scheduled by the next business day at 5:00 PM after court when the case continues.
+- Client Follow-Up: flags when 2 or more inbound client messages appear before a firm response.
+
 ## Compliance And Data Handling
 
 CWCA must stay read-only against Clio. Do not add create, update, delete, webhook, billing, payment, or document-content behavior.

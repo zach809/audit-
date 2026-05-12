@@ -80,7 +80,7 @@ Effective matter intake time:
 
 Setup on-time deadline:
 
-- 15 business minutes after effective matter intake time.
+- 1 business hour after effective matter intake time.
 
 Setup same-day corrective deadline:
 
@@ -88,8 +88,8 @@ Setup same-day corrective deadline:
 
 Setup grading:
 
-- Evidence at or before the 15-business-minute deadline: On Time.
-- Evidence after 15 business minutes but before 5:00 PM same business day: Late, coaching-worthy but completed.
+- Evidence at or before the 1-business-hour deadline: On Time.
+- Evidence after 1 business hour but before 5:00 PM same business day: Late, coaching-worthy but completed.
 - No evidence before 5:00 PM same business day: Missing.
 - Before 5:00 PM, the dashboard should show an operational state such as Needs Welcome Packet, Needs Attorney Call, or Needs Court Date.
 
@@ -297,7 +297,7 @@ Evidence source:
 
 Risk rule:
 
-- Three or more inbound communications from the client before a firm response creates a high-risk follow-up flag.
+- Two or more inbound communications from the client before a firm response creates a high-risk follow-up flag.
 
 If inbound/outbound direction cannot be proven from Clio data, mark Unknown.
 
@@ -333,12 +333,12 @@ When Missing and Unknown coexist, Review wins because the audit cannot be truste
 Matter created Saturday:
 
 - Effective intake: Monday 8:00 AM.
-- Setup on-time deadline: Monday 8:15 AM.
+- Setup on-time deadline: Monday 9:00 AM.
 - Corrective deadline: Monday 5:00 PM.
 
 Welcome packet examples:
 
-- Sent Monday 8:10 AM: On Time.
+- Sent Monday 8:50 AM: On Time.
 - Sent Monday 10:00 AM: Late.
 - Not sent by Monday 3:00 PM: operational state Needs Welcome Packet.
 - Not sent by Monday 5:01 PM: Missing.

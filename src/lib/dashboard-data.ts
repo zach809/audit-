@@ -33,23 +33,23 @@ function csvCell(value: unknown): string {
 const STEP_ACTIONS: Record<string, { label: string; goal: string; missing: string; late: string; unknown: string }> = {
   SETUP_WELCOME: {
     label: "Welcome Packet",
-    goal: "Complete within 15 business minutes of intake.",
+    goal: "Send within 1 business hour of a new matter being created.",
     missing: "Please send or verify the Welcome Letter / Carta de bienvenida template in Clio.",
-    late: "Welcome packet was found, but after the setup deadline. Please review intake handoff timing and tighten same-day setup.",
+    late: "Welcome packet was found, but after the 1-business-hour setup goal. Please review intake handoff timing.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the welcome packet from Clio.",
   },
   SETUP_ATTY_CALL: {
     label: "Attorney Call",
-    goal: "Schedule within 15 business minutes of intake.",
+    goal: "Schedule within 1 business hour of a new matter being created.",
     missing: "Please add or verify the attorney/client phone call calendar event on the matter.",
-    late: "Attorney/client call was scheduled, but after the setup deadline. Please review setup timing and scheduling habits.",
+    late: "Attorney/client call was scheduled, but after the 1-business-hour setup goal. Please review setup timing and scheduling habits.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the attorney call from Clio.",
   },
   SETUP_COURT_DATE: {
     label: "Court Date Added",
-    goal: "Add within 15 business minutes of intake when known.",
+    goal: "Add within 1 business hour when the court date is known.",
     missing: "Please add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
-    late: "Court date was added, but after the setup deadline. Please confirm why it was delayed and improve setup timing.",
+    late: "Court date was added, but after the 1-business-hour setup goal. Please confirm why it was delayed and improve setup timing.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the court date from Clio.",
   },
   CLIENT_CONTACT: {
@@ -82,7 +82,7 @@ const STEP_ACTIONS: Record<string, { label: string; goal: string; missing: strin
   },
   CLIENT_FOLLOWUP: {
     label: "Client Follow-Up",
-    goal: "Respond before three inbound client messages accumulate without a firm response.",
+    goal: "Respond before 2 inbound client messages accumulate without a firm response.",
     missing: "Please review the communication thread and respond or coach on unanswered client follow-up.",
     late: "Client follow-up was handled late. Please review response timing and prevent repeat delays.",
     unknown: "Please recheck this matter before coaching. The app could not confirm follow-up risk from Clio.",

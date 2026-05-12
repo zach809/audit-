@@ -423,8 +423,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     }),
     commError
       ? base("CLIENT_FOLLOWUP", "Unknown", "Unknown", null, null, commError)
-      : inboundStreak.max >= 3
-      ? base("CLIENT_FOLLOWUP", "Missing", "Client Follow-Up Risk", null, null, "THREE_INBOUND_BEFORE_RESPONSE")
+      : inboundStreak.max >= 2
+      ? base("CLIENT_FOLLOWUP", "Missing", "Client Follow-Up Risk", null, null, "TWO_INBOUND_BEFORE_RESPONSE")
       : base("CLIENT_FOLLOWUP", unknownDirection ? "Unknown" : "On Time", unknownDirection ? "Unknown" : "No Risk", null, null, unknownDirection ? "DIRECTION_UNCLEAR" : null),
   ];
 
