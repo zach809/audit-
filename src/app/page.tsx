@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
-import { getDashboardData } from "@/lib/dashboard-data";
+import { getDashboardData, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
 import { APP_TZ } from "@/lib/config";
+import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -12,22 +13,6 @@ function badge(value: string | null | undefined) {
   const label = value || "";
   const cls = label.replace(/\s+/g, "-").replace("/", "A");
   return <span className={`badge ${cls}`}>{label || "N/A"}</span>;
-}
-
-function step(items: Array<{ stepCode: string; status: string; operationalState?: string }>, code: string) {
-  const item = items.find((i) => i.stepCode === code);
-  return item?.status ?? "Pending";
-}
-
-function itemLabels(items: Array<{ stepCode: string; status: string }>, status: string) {
-  return items.filter((i) => i.status === status).map((i) => i.stepCode.replaceAll("_", " ")).join(", ");
-}
-
-function itemLabelsWithReasons(items: Array<{ stepCode: string; status: string; reasonCode?: string }>, status: string) {
-  return items
-    .filter((i) => i.status === status)
-    .map((i) => `${i.stepCode.replaceAll("_", " ")}${i.reasonCode ? ` (${i.reasonCode})` : ""}`)
-    .join(", ");
 }
 
 type DashboardItem = {
@@ -41,59 +26,6 @@ type DashboardItem = {
   evidenceRefId?: string;
   evidenceUrl?: string;
 };
-
-const STEP_INFO: Record<string, { label: string; missing: string; action: string; late: string }> = {
-  SETUP_WELCOME: {
-    label: "Welcome Packet",
-    missing: "Welcome packet email/template was not found in Clio communications.",
-    action: "Check or send the Welcome Letter / Carta de bienvenida template.",
-    late: "Welcome packet was found, but after the 1-business-hour setup goal.",
-  },
-  SETUP_ATTY_CALL: {
-    label: "Attorney Call",
-    missing: "Attorney/client phone call calendar event was not found.",
-    action: "Add or verify a Phone Call / Client Call calendar event on the matter.",
-    late: "Attorney/client call was scheduled after the 1-business-hour setup goal.",
-  },
-  SETUP_COURT_DATE: {
-    label: "Court Date Added",
-    missing: "Court date calendar event was not found.",
-    action: "Add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
-    late: "Court date was added after the 1-business-hour setup goal.",
-  },
-  CLIENT_CONTACT: {
-    label: "Client Contact",
-    missing: "Outgoing client contact communication was not found.",
-    action: "Check or send an email/log communication to the client.",
-    late: "Client contact was found, but after the next-business-day deadline.",
-  },
-  APPEARANCE_FILING: {
-    label: "Appearance Filed",
-    missing: "Appearance filing communication/template was not found.",
-    action: "Check or send the appearance filing notification template.",
-    late: "Appearance filing was found, but after the second-business-day deadline.",
-  },
-  COURT_RESULTS: {
-    label: "Court Results",
-    missing: "Court result communication/template was not found after the last court date.",
-    action: "Check or send the Court Result / Resultado template.",
-    late: "Court result was found, but after the court-results deadline.",
-  },
-  POST_COURT_CALL: {
-    label: "Post-Court Call",
-    missing: "Post-court attorney/client call calendar event was not found.",
-    action: "Schedule or verify the post-court attorney call if the case continues.",
-    late: "Post-court call was scheduled after the post-court deadline.",
-  },
-  CLIENT_FOLLOWUP: {
-    label: "Client Follow-Up",
-    missing: "Client follow-up risk detected: 2 or more inbound client communications before a firm response.",
-    action: "Review the communication thread and respond or coach as needed.",
-    late: "Client follow-up was handled late.",
-  },
-};
-
-const STEP_COLUMNS = Object.entries(STEP_INFO).map(([code, info]) => [code, info.label] as [string, string]);
 
 function evidencePath(item: DashboardItem): string {
   if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}`;
@@ -111,7 +43,7 @@ function evidenceLabel(item: DashboardItem): string {
 }
 
 function stepLabel(code: string): string {
-  return STEP_INFO[code]?.label ?? code.replaceAll("_", " ");
+  return workflowLabel(code);
 }
 
 function isInternalPlaceholder(reason?: string | null): boolean {
@@ -170,7 +102,7 @@ function stepCell(items: DashboardItem[], code: string) {
 }
 
 function problemText(item: DashboardItem): string {
-  const info = STEP_INFO[item.stepCode] ?? {
+  const info = WORKFLOW_RULES[item.stepCode] ?? {
     label: stepLabel(item.stepCode),
     missing: "Required evidence was not found.",
     action: "Review this item in Clio.",
@@ -319,10 +251,10 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 
 function auditItemPriority(status: string): number {
   if (status === "Missing") return 1;
-  if (status === "Unknown") return 2;
+  if (status === "Unknown" || status === "Needs Recheck") return 2;
   if (status === "Late") return 3;
   if (status === "Pending") return 4;
-  if (status === "On Time") return 5;
+  if (status === "On Time" || status === "On Track") return 5;
   return 6;
 }
 
@@ -332,9 +264,32 @@ function workspaceStatus(item: DashboardItem): string {
   return item.status;
 }
 
+type DashboardTab = "overview" | "workspace" | "matters" | "reports" | "compliance";
+
+const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
+  { id: "overview", label: "Overview", description: "Executive summary and audit progress" },
+  { id: "workspace", label: "Attorney Workspace", description: "Grouped audit items by attorney" },
+  { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
+  { id: "reports", label: "Reports", description: "Case manager and audit exports" },
+  { id: "compliance", label: "Compliance", description: "Read-only and data-handling rules" },
+];
+
+function dashboardTab(value?: string): DashboardTab {
+  return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "overview";
+}
+
+function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
+  const params = new URLSearchParams({ ...filters, tab });
+  for (const [key, value] of Array.from(params.entries())) {
+    if (!value) params.delete(key);
+  }
+  return `/?${params.toString()}`;
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
+  const activeTab = dashboardTab(searchParams.tab);
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -374,24 +329,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     evidenceRefId?: string;
     evidenceUrl?: string;
   }>>();
-  for (const matter of data.matters) {
-    const attorney = matter.responsible_attorney_name || "Unassigned";
-    const clientName = `${matter.client_first_name} ${matter.client_last_name}`.trim() || "Unnamed Client";
+  for (const item of data.workspaceItems as WorkspaceAuditItem[]) {
+    const attorney = item.responsible_attorney_name || "Unassigned";
+    const clientName = `${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`.trim() || "Unnamed Client";
     const rows = workspaceGroups.get(attorney) ?? [];
-    for (const item of matter.items as DashboardItem[]) {
-      rows.push({
-        matterId: matter.matter_id,
-        matterNumber: matter.matter_number,
-        clientName,
-        stepCode: item.stepCode,
-        status: workspaceStatus(item),
-        deadlineAt: item.deadlineAt,
-        evidenceAt: item.evidenceAt,
-        evidenceSource: item.evidenceSource,
-        evidenceRefId: item.evidenceRefId,
-        evidenceUrl: item.evidenceUrl,
-      });
-    }
+    rows.push({
+      matterId: item.matter_id,
+      matterNumber: item.matter_number,
+      clientName,
+      stepCode: item.step_code,
+      status: workspaceStatus({
+        stepCode: item.step_code,
+        status: item.item_status,
+        reasonCode: item.reason_code ?? undefined,
+      }),
+      deadlineAt: item.deadline_at ? String(item.deadline_at) : null,
+      evidenceAt: item.evidence_at ? String(item.evidence_at) : null,
+      evidenceSource: item.evidence_source ?? undefined,
+      evidenceRefId: item.evidence_ref_id ?? undefined,
+      evidenceUrl: item.evidence_url ?? undefined,
+    });
     workspaceGroups.set(attorney, rows);
   }
   const workspaceSections = Array.from(workspaceGroups.entries())
@@ -401,6 +358,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       needsFollowUp: rows.filter((row) => ["Missing", "Late", "Unknown", "Needs Recheck"].includes(row.status)).length,
     }))
     .sort((a, b) => b.needsFollowUp - a.needsFollowUp || a.attorney.localeCompare(b.attorney));
+  const statusChart = [
+    { label: "Needs Follow-Up", value: needsFollowUpCount, className: "followup" },
+    { label: "On Track", value: num(data.summary.pass), className: "ontrack" },
+    { label: "Not Due Yet", value: num(data.summary.pending), className: "pending" },
+    { label: "Still To Audit", value: uncheckedCount, className: "unchecked" },
+  ];
+  const statusChartTotal = Math.max(1, statusChart.reduce((sum, item) => sum + item.value, 0));
+  const topAttorneyChart = workspaceSections.filter((section) => section.needsFollowUp > 0).slice(0, 8);
+  const maxAttorneyFollowUp = Math.max(1, ...topAttorneyChart.map((section) => section.needsFollowUp));
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
@@ -438,6 +404,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <input type="hidden" name="overall" value={filters.overall} />
             <input type="hidden" name="from" value={filters.from} />
             <input type="hidden" name="to" value={filters.to} />
+            <input type="hidden" name="tab" value={activeTab} />
             <button className="primary" type="submit">Run Audit Batch</button>
           </form>
           <form action="/logout" method="post">
@@ -452,6 +419,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </section>
       ) : null}
 
+      <nav className="dashboard-tabs" aria-label="Dashboard sections">
+        {DASHBOARD_TABS.map((tab) => (
+          <a
+            className={activeTab === tab.id ? "dashboard-tab active" : "dashboard-tab"}
+            href={tabLink(filters, tab.id)}
+            key={tab.id}
+          >
+            <strong>{tab.label}</strong>
+            <span>{tab.description}</span>
+          </a>
+        ))}
+      </nav>
+
+      {activeTab === "overview" ? (
+        <>
       <section className="queue-panel overview-panel">
         <div className="queue-copy">
           <span className="label">Audit Progress</span>
@@ -482,6 +464,66 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="stat"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
       </section>
 
+      <section className="overview-visuals">
+        <div className="panel chart-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Status Mix</h2>
+              <p className="muted small">Simple breakdown of the current audit view.</p>
+            </div>
+          </div>
+          <div className="stacked-chart" aria-label="Status mix">
+            {statusChart.map((item) => (
+              <span
+                className={`stacked-segment ${item.className}`}
+                key={item.label}
+                style={{ width: `${Math.max(4, Math.round((item.value / statusChartTotal) * 100))}%` }}
+                title={`${item.label}: ${item.value}`}
+              />
+            ))}
+          </div>
+          <div className="chart-legend">
+            {statusChart.map((item) => (
+              <div className="legend-item" key={item.label}>
+                <span className={`legend-dot ${item.className}`} />
+                <strong>{item.value}</strong>
+                <small>{item.label}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel chart-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Top Follow-Up By Attorney</h2>
+              <p className="muted small">Attorneys with the most open follow-up items.</p>
+            </div>
+          </div>
+          {topAttorneyChart.length ? (
+            <div className="bar-chart">
+              {topAttorneyChart.map((section) => (
+                <div className="bar-row" key={section.attorney}>
+                  <span>{section.attorney}</span>
+                  <div className="bar-track">
+                    <div className="bar-fill" style={{ width: `${Math.round((section.needsFollowUp / maxAttorneyFollowUp) * 100)}%` }} />
+                  </div>
+                  <strong>{section.needsFollowUp}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="chart-empty">
+              <strong>No follow-up items found.</strong>
+              <p>When items need attention, they will appear here by attorney.</p>
+            </div>
+          )}
+        </div>
+      </section>
+        </>
+      ) : null}
+
+      {activeTab === "compliance" ? (
       <section className="panel compliance-panel">
         <div className="panel-heading">
           <div>
@@ -513,7 +555,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <span>This is workflow coaching, not legal advice.</span>
         </div>
       </section>
+      ) : null}
 
+      {activeTab === "reports" ? (
       <section className="panel report-panel">
         <div className="panel-heading">
           <div>
@@ -548,7 +592,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </form>
         </div>
       </section>
+      ) : null}
 
+      {activeTab === "workspace" || activeTab === "matters" ? (
       <section className="panel filter-panel">
         <div className="panel-heading">
           <div>
@@ -557,6 +603,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
         </div>
         <form className="filters">
+          <input type="hidden" name="tab" value={activeTab} />
           <label>
             Responsible Attorney
             <select name="attorney" defaultValue={filters.attorney}>
@@ -589,9 +636,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <a className="button" href="/">Clear</a>
         </form>
         <div className="quick-filters">
-          <a className="button" href={filterLink(filters, { from: today, to: today })}>Today</a>
-          <a className="button" href={filterLink(filters, { from: monthStart, to: today })}>This Month</a>
-          <a className="button" href={filterLink(filters, { from: "", to: "" })}>All Dates</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab }, { from: today, to: today })}>Today</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab }, { from: monthStart, to: today })}>This Month</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab }, { from: "", to: "" })}>All Dates</a>
         </div>
         {hasFilters ? (
           <p className="filter-alert">
@@ -604,7 +651,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         {data.lastRun?.message ? <p className="muted small">Last run note: {data.lastRun.message}</p> : null}
         <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
       </section>
+      ) : null}
 
+      {activeTab === "workspace" ? (
       <section className="panel workspace-panel">
         <div className="panel-heading">
           <div>
@@ -668,7 +717,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
         )}
       </section>
+      ) : null}
 
+      {activeTab === "matters" ? (
       <section className="matter-list">
         {data.matters.length ? data.matters.map((m) => {
           const items = m.items as DashboardItem[];
@@ -714,7 +765,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 </div>
               ) : (
                 <div className="step-grid">
-                  {STEP_COLUMNS.map(([code, label]) => (
+                  {WORKFLOW_COLUMNS.map(([code, label]) => (
                     <div className="step-block" key={code}>
                       <span className="step-label">{label}</span>
                       {stepCell(items, code)}
@@ -755,7 +806,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </section>
         )}
       </section>
+      ) : null}
 
+      {activeTab === "overview" ? (
       <section className="panel coaching-panel">
         <div className="panel-heading">
           <div>
@@ -810,6 +863,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </table>
         </div>
       </section>
+      ) : null}
     </main>
   );
 }

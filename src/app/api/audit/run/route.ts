@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       overall: form?.get("overall")?.toString() ?? "",
       from: form?.get("from")?.toString() ?? "",
       to: form?.get("to")?.toString() ?? "",
+      tab: form?.get("tab")?.toString() ?? "",
     };
     if (matterId) {
       try {

@@ -1,5 +1,6 @@
 import { APP_TZ } from "./config";
 import { initDb, db } from "./db";
+import { WORKFLOW_RULES, workflowLabel } from "./workflow-rules";
 
 export type DashboardFilters = {
   attorney?: string;
@@ -25,77 +26,35 @@ type ActionCsvRow = {
   reason_code: string | null;
 };
 
+export type WorkspaceAuditItem = {
+  matter_id: string;
+  matter_number: string;
+  client_first_name: string | null;
+  client_last_name: string | null;
+  responsible_attorney_id: string | null;
+  responsible_attorney_name: string | null;
+  step_code: string;
+  item_status: string;
+  deadline_at: string | Date | null;
+  evidence_at: string | Date | null;
+  evidence_source: string | null;
+  evidence_ref_id: string | null;
+  evidence_url: string | null;
+  reason_code: string | null;
+};
+
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-const STEP_ACTIONS: Record<string, { label: string; goal: string; missing: string; late: string; unknown: string }> = {
-  SETUP_WELCOME: {
-    label: "Welcome Packet",
-    goal: "Send within 1 business hour of a new matter being created.",
-    missing: "Please send or verify the Welcome Letter / Carta de bienvenida template in Clio.",
-    late: "Welcome packet was found, but after the 1-business-hour setup goal. Please review intake handoff timing.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm the welcome packet from Clio.",
-  },
-  SETUP_ATTY_CALL: {
-    label: "Attorney Call",
-    goal: "Schedule within 1 business hour of a new matter being created.",
-    missing: "Please add or verify the attorney/client phone call calendar event on the matter.",
-    late: "Attorney/client call was scheduled, but after the 1-business-hour setup goal. Please review setup timing and scheduling habits.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm the attorney call from Clio.",
-  },
-  SETUP_COURT_DATE: {
-    label: "Court Date Added",
-    goal: "Add within 1 business hour when the court date is known.",
-    missing: "Please add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
-    late: "Court date was added, but after the 1-business-hour setup goal. Please confirm why it was delayed and improve setup timing.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm the court date from Clio.",
-  },
-  CLIENT_CONTACT: {
-    label: "Client Contact",
-    goal: "Complete by next business day at 5:00 PM.",
-    missing: "Please send or log outgoing client contact communication on the matter.",
-    late: "Client contact was found, but after the deadline. Please improve next-business-day follow-up timing.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm client contact from Clio.",
-  },
-  APPEARANCE_FILING: {
-    label: "Appearance Filed",
-    goal: "Complete by the second business day at 5:00 PM.",
-    missing: "Please send or verify the appearance filing notification/template in Clio.",
-    late: "Appearance filing communication was found, but after the deadline. Please review the filing workflow timing.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm appearance filing from Clio.",
-  },
-  COURT_RESULTS: {
-    label: "Court Results",
-    goal: "Complete by next business day at 5:00 PM after court.",
-    missing: "Please send or verify the Court Result / Resultado communication after the last court date.",
-    late: "Court result communication was found, but after the deadline. Please improve post-court communication timing.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm court results from Clio.",
-  },
-  POST_COURT_CALL: {
-    label: "Post-Court Call",
-    goal: "Schedule by next business day at 5:00 PM after court when the case continues.",
-    missing: "Please schedule or verify the post-court attorney/client call if the case continues.",
-    late: "Post-court call was scheduled, but after the deadline. Please improve post-court follow-up timing.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm the post-court call from Clio.",
-  },
-  CLIENT_FOLLOWUP: {
-    label: "Client Follow-Up",
-    goal: "Respond before 2 inbound client messages accumulate without a firm response.",
-    missing: "Please review the communication thread and respond or coach on unanswered client follow-up.",
-    late: "Client follow-up was handled late. Please review response timing and prevent repeat delays.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm follow-up risk from Clio.",
-  },
-};
-
 function stepLabel(stepCode: string): string {
-  return STEP_ACTIONS[stepCode]?.label ?? stepCode.replaceAll("_", " ");
+  return workflowLabel(stepCode);
 }
 
 function actionFor(stepCode: string, status: string, reasonCode?: string | null): string {
-  const info = STEP_ACTIONS[stepCode];
-  if (status === "Missing") return info?.missing ?? "Complete or verify this missing workflow step in Clio.";
+  const info = WORKFLOW_RULES[stepCode];
+  if (status === "Missing") return info ? `${info.missing} ${info.action}` : "Complete or verify this missing workflow step in Clio.";
   if (status === "Late") return info?.late ?? "Review timing. Evidence was found after the deadline.";
   if (status === "Unknown") {
     if (reasonCode?.includes("API") || reasonCode?.startsWith("NOTES_400:")) {
@@ -129,7 +88,7 @@ function whyFlagged(stepCode: string, status: string, reasonCode?: string | null
 }
 
 function timingGoalFor(stepCode: string): string {
-  return STEP_ACTIONS[stepCode]?.goal ?? "Review the expected workflow timing.";
+  return WORKFLOW_RULES[stepCode]?.goal ?? "Review the expected workflow timing.";
 }
 
 function formatCsvDate(value: unknown): string {
@@ -379,12 +338,56 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     order by responsible_attorney_name
   `;
 
+  const workspaceItems = await sql<WorkspaceAuditItem[]>`
+    select
+      m.matter_id,
+      m.matter_number,
+      m.client_first_name,
+      m.client_last_name,
+      m.responsible_attorney_id,
+      m.responsible_attorney_name,
+      i.step_code,
+      case
+        when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+          then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+        else i.status
+      end as item_status,
+      i.deadline_at,
+      i.evidence_at,
+      i.evidence_source,
+      i.evidence_ref_id,
+      i.evidence_url,
+      case
+        when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+          then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
+        else i.reason_code
+      end as reason_code
+    from audit_matter m
+    join audit_item i on i.matter_id = m.matter_id
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
+    order by
+      m.responsible_attorney_name,
+      case
+        when i.status = 'Missing' then 1
+        when i.status = 'Unknown' then 2
+        when i.status = 'Late' then 3
+        when i.status = 'Pending' then 4
+        when i.status = 'On Time' then 5
+        else 6
+      end,
+      m.client_last_name,
+      m.client_first_name,
+      i.step_code
+    limit 1000
+  `;
+
   return {
     matters,
     attorneys,
     summary: summary[0] ?? { total: 0, unchecked: 0, pass: 0, pending: 0, late: 0, flag: 0, review: 0, missing_items: 0, late_items: 0, unknown_items: 0 },
     lastRun: lastRun[0] ?? null,
     metrics,
+    workspaceItems,
   };
 }
 

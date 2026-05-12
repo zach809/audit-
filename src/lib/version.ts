@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-attorney-workspace-2026-05-12";
+export const APP_VERSION = "cwca-tabbed-graphs-2026-05-12";
