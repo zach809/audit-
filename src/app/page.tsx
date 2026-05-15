@@ -126,6 +126,9 @@ function problemText(item: DashboardItem): string {
     if (isGenericApiError(item.reasonCode)) {
       return "This row came from an older incomplete audit result. Refresh this matter so the app can re-check the Clio communication and calendar evidence.";
     }
+    if (item.reasonCode === "EVIDENCE_NOT_CONFIRMED") {
+      return "CWCA could not confidently confirm this proof from read-only Clio evidence. Review the matter before treating it as missed work.";
+    }
     const reason = !isInternalPlaceholder(item.reasonCode) ? ` ${item.reasonCode}` : "";
     return `Could not verify this from the Clio API.${reason}`;
   }

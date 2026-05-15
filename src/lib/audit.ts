@@ -85,6 +85,7 @@ function classify(
     reasonCode?: string | null;
     now?: Date;
     unknown?: boolean;
+    missingAsReview?: boolean;
   } = {},
 ): AuditItemResult {
   const required = options.required ?? true;
@@ -98,6 +99,9 @@ function classify(
   if (!evidence) {
     const corrective = options.correctiveDeadlineAt ?? deadlineAt;
     const stillPending = corrective && now <= corrective;
+    if (!stillPending && options.missingAsReview) {
+      return base(stepCode, "Unknown", "Needs Review", deadlineAt, corrective, options.reasonCode ?? "EVIDENCE_NOT_CONFIRMED");
+    }
     return base(
       stepCode,
       stillPending ? "Pending" : "Missing",
@@ -379,6 +383,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Welcome Packet",
       unknown: Boolean(commError),
       reasonCode: commError,
+      missingAsReview: true,
       now,
     }),
     classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
@@ -405,6 +410,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Appearance Filing",
       unknown: Boolean(commError),
       reasonCode: commError,
+      missingAsReview: true,
       now,
     }),
     classify("COURT_RESULTS", courtResult, courtResultDeadline, {
@@ -412,6 +418,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Court Results",
       unknown: Boolean(lastCourtEnd && !courtResult && (commError || calendarError)),
       reasonCode: commError || calendarError,
+      missingAsReview: true,
       now,
     }),
     classify("POST_COURT_CALL", postCourtCall, postCourtCallDeadline, {
@@ -419,6 +426,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Post-Court Call",
       unknown: Boolean(lastCourtEnd && nextCourt && !postCourtCall && calendarError),
       reasonCode: calendarError,
+      missingAsReview: true,
       now,
     }),
     commError

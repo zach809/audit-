@@ -1,7 +1,7 @@
 CWCA deployment check
 
 Expected visible version in the app header:
-cwca-coaching-wording-visible-metrics-2026-05-15
+cwca-safer-proof-review-logic-2026-05-15
 
 Expected visible Overview sections:
 - Quick Workspace Views
@@ -12,5 +12,8 @@ Expected visible Overview sections:
 
 Expected coaching wording:
 Some required steps were completed after the target time. Review the matter handoff and coach the team to complete setup items sooner.
+
+Expected safer audit behavior:
+If CWCA cannot confidently confirm template/calendar proof for Welcome Packet, Appearance Filed, Court Results, or Post-Court Call, it should show Needs Review instead of immediately treating it as missed work.
 
 If the deployed site does not show this version, the newest files were not deployed.
