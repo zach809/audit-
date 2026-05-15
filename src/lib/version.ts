@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-safer-proof-review-logic-2026-05-15";
+export const APP_VERSION = "cwca-initial-client-setup-filter-2026-05-15";
