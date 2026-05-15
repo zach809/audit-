@@ -281,6 +281,19 @@ const WORKSPACE_STATUS_FILTERS = [
   { id: "all", label: "All Items" },
 ];
 
+const WORKSPACE_FOCUS_FILTERS = [
+  { id: "all", label: "All Areas" },
+  { id: "initial-client-setup", label: "Initial Client Setup" },
+  { id: "court-follow-up", label: "Court Follow-Up" },
+  { id: "client-follow-up", label: "Client Follow-Up" },
+];
+
+const WORKSPACE_FOCUS_STEPS: Record<string, string[]> = {
+  "initial-client-setup": ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE", "CLIENT_CONTACT", "APPEARANCE_FILING"],
+  "court-follow-up": ["COURT_RESULTS", "POST_COURT_CALL"],
+  "client-follow-up": ["CLIENT_FOLLOWUP"],
+};
+
 const GUIDE_STATUS_CARDS = [
   {
     color: "red",
@@ -322,11 +335,21 @@ function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
   return filterLink(filters, { tab });
 }
 
+function workspaceFocusMatches(stepCode: string, focus: string): boolean {
+  const steps = WORKSPACE_FOCUS_STEPS[focus];
+  return !steps || steps.includes(stepCode);
+}
+
+function workspaceFocusLabel(focus: string): string {
+  return WORKSPACE_FOCUS_FILTERS.find((filter) => filter.id === focus)?.label ?? "All Areas";
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
   const activeTab = dashboardTab(searchParams.tab);
   const workspaceStatusFilter = searchParams.wstatus ?? "followup";
+  const workspaceFocusFilter = searchParams.wfocus ?? "all";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -369,14 +392,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       evidenceUrl: item.evidence_url ?? undefined,
     } satisfies WorkspaceRow,
   }));
+  const focusedWorkspaceRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter));
   const workspaceGroups = new Map<string, WorkspaceRow[]>();
-  for (const item of allWorkspaceRows.filter((item) => workspaceFilterMatches(item.row.status, workspaceStatusFilter))) {
+  for (const item of focusedWorkspaceRows.filter((item) => workspaceFilterMatches(item.row.status, workspaceStatusFilter))) {
     const rows = workspaceGroups.get(item.attorney) ?? [];
     rows.push(item.row);
     workspaceGroups.set(item.attorney, rows);
   }
   const allWorkspaceGroups = new Map<string, WorkspaceRow[]>();
-  for (const item of allWorkspaceRows) {
+  for (const item of focusedWorkspaceRows) {
     const rows = allWorkspaceGroups.get(item.attorney) ?? [];
     rows.push(item.row);
     allWorkspaceGroups.set(item.attorney, rows);
@@ -405,6 +429,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .filter((item) => isFollowUpStatus(item.row.status))
     .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
     .slice(0, 8);
+  const initialClientSetupRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "initial-client-setup"));
+  const initialClientSetupFollowUp = initialClientSetupRows.filter((item) => isFollowUpStatus(item.row.status)).length;
+  const courtFollowUpRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "court-follow-up"));
+  const courtFollowUpCount = courtFollowUpRows.filter((item) => isFollowUpStatus(item.row.status)).length;
+  const clientFollowUpRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "client-follow-up"));
+  const clientFollowUpCount = clientFollowUpRows.filter((item) => isFollowUpStatus(item.row.status)).length;
+  const activeWorkspaceFocusLabel = workspaceFocusLabel(workspaceFocusFilter);
   const statusChart = [
     { label: "Needs Follow-Up", value: needsFollowUpCount, className: "followup" },
     { label: "On Track", value: num(data.summary.pass), className: "ontrack" },
@@ -447,12 +478,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>
           )}
           <form action="/api/audit/run" method="post">
-            <input type="hidden" name="attorney" value={filters.attorney} />
-            <input type="hidden" name="overall" value={filters.overall} />
-            <input type="hidden" name="from" value={filters.from} />
-            <input type="hidden" name="to" value={filters.to} />
-            <input type="hidden" name="tab" value={activeTab} />
-            <button className="primary" type="submit">Run Audit Batch</button>
+          <input type="hidden" name="attorney" value={filters.attorney} />
+          <input type="hidden" name="overall" value={filters.overall} />
+          <input type="hidden" name="from" value={filters.from} />
+          <input type="hidden" name="to" value={filters.to} />
+          <input type="hidden" name="tab" value={activeTab} />
+          <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
+          <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+          <button className="primary" type="submit">Run Audit Batch</button>
           </form>
           <form action="/logout" method="post">
             <button type="submit">Log Out</button>
@@ -509,6 +542,38 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="stat stat-purple"><span>Needs Review</span><strong>{data.summary.review}</strong><p>Check visibility before coaching.</p></div>
         <div className="stat stat-amber"><span>Late Timing</span><strong>{data.summary.late}</strong><p>Evidence was found after the goal.</p></div>
         <div className="stat stat-slate"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
+      </section>
+
+      <section className="panel workspace-presets-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Quick Workspace Views</h2>
+            <p className="muted small">Jump straight into the grouped attorney workspace by the kind of follow-up your team is doing.</p>
+          </div>
+        </div>
+        <div className="workspace-presets">
+          <a className="workspace-preset primary-preset" href={filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "initial-client-setup" }, {})}>
+            <span className="label">Start Here</span>
+            <strong>Initial Client Setup</strong>
+            <p>Welcome packet, attorney call, court date, client contact, and appearance filing.</p>
+            <b>{initialClientSetupFollowUp}</b>
+            <small>needs follow-up</small>
+          </a>
+          <a className="workspace-preset" href={filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "court-follow-up" }, {})}>
+            <span className="label">After Court</span>
+            <strong>Court Follow-Up</strong>
+            <p>Court results and post-court call items.</p>
+            <b>{courtFollowUpCount}</b>
+            <small>needs follow-up</small>
+          </a>
+          <a className="workspace-preset" href={filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "client-follow-up" }, {})}>
+            <span className="label">Client Replies</span>
+            <strong>Client Follow-Up</strong>
+            <p>Matters where inbound client messages may be building up.</p>
+            <b>{clientFollowUpCount}</b>
+            <small>needs follow-up</small>
+          </a>
+        </div>
       </section>
 
       <section className="panel priority-panel">
@@ -746,6 +811,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
         <form className="filters">
           <input type="hidden" name="tab" value={activeTab} />
+          <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
+          <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
           <label>
             Responsible Attorney
             <select name="attorney" defaultValue={filters.attorney}>
@@ -778,9 +845,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <a className="button" href="/">Clear</a>
         </form>
         <div className="quick-filters">
-          <a className="button" href={filterLink({ ...filters, tab: activeTab }, { from: today, to: today })}>Today</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab }, { from: monthStart, to: today })}>This Month</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab }, { from: "", to: "" })}>All Dates</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: today, to: today })}>Today</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: monthStart, to: today })}>This Month</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: "", to: "" })}>All Dates</a>
         </div>
         {hasFilters ? (
           <p className="filter-alert">
@@ -800,20 +867,40 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="panel-heading">
           <div>
             <h2>Attorney Audit Workspace</h2>
-            <p className="muted small">A clean grouped view of audit items by attorney. Use filters above to narrow the workspace.</p>
+          <p className="muted small">A clean grouped view of audit items by attorney. Use status and focus filters to narrow the workspace.</p>
           </div>
-          <span className="badge Unchecked">{workspaceSections.length} groups</span>
+          <div className="workspace-heading-badges">
+            <span className="badge Pending">{activeWorkspaceFocusLabel}</span>
+            <span className="badge Unchecked">{workspaceSections.length} groups</span>
+          </div>
         </div>
-        <div className="workspace-filter-tabs">
+        <div className="workspace-filter-block">
+          <span className="label">Status</span>
+          <div className="workspace-filter-tabs">
           {WORKSPACE_STATUS_FILTERS.map((filter) => (
             <a
               className={workspaceStatusFilter === filter.id ? "workspace-filter active" : "workspace-filter"}
-              href={filterLink({ ...filters, tab: "workspace", wstatus: filter.id }, {})}
+              href={filterLink({ ...filters, tab: "workspace", wstatus: filter.id, wfocus: workspaceFocusFilter }, {})}
               key={filter.id}
             >
               {filter.label}
             </a>
           ))}
+          </div>
+        </div>
+        <div className="workspace-filter-block">
+          <span className="label">Focus Area</span>
+          <div className="workspace-focus-tabs">
+          {WORKSPACE_FOCUS_FILTERS.map((filter) => (
+            <a
+              className={workspaceFocusFilter === filter.id ? "workspace-focus active" : "workspace-focus"}
+              href={filterLink({ ...filters, tab: "workspace", wstatus: workspaceStatusFilter, wfocus: filter.id }, {})}
+              key={filter.id}
+            >
+              {filter.label}
+            </a>
+          ))}
+          </div>
         </div>
         <div className="attorney-health-grid">
           {attorneyHealth.map((attorney) => (
@@ -920,6 +1007,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     <input type="hidden" name="overall" value={filters.overall} />
                     <input type="hidden" name="from" value={filters.from} />
                     <input type="hidden" name="to" value={filters.to} />
+                    <input type="hidden" name="tab" value={activeTab} />
+                    <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
+                    <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
                     <button type="submit">Recheck Matter</button>
                   </form>
                 </div>

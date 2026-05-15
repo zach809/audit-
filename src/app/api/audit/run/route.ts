@@ -54,6 +54,8 @@ export async function POST(request: NextRequest) {
       from: form?.get("from")?.toString() ?? "",
       to: form?.get("to")?.toString() ?? "",
       tab: form?.get("tab")?.toString() ?? "",
+      wstatus: form?.get("wstatus")?.toString() ?? "",
+      wfocus: form?.get("wfocus")?.toString() ?? "",
     };
     if (matterId) {
       try {
