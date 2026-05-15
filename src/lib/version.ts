@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-visible-workspace-presets-2026-05-15";
+export const APP_VERSION = "cwca-coaching-wording-visible-metrics-2026-05-15";

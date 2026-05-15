@@ -256,7 +256,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
     return { area: "Missing evidence", action: "Focus on completing or logging required workflow steps in Clio." };
   }
   if (late > 0) {
-    return { area: "Timeliness", action: "Review intake handoff timing and same-day setup deadlines." };
+    return { area: "Timeliness", action: "Some required steps were completed after the target time. Review the matter handoff and coach the team to complete setup items sooner." };
   }
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
@@ -431,6 +431,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .slice(0, 8);
   const initialClientSetupRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "initial-client-setup"));
   const initialClientSetupFollowUp = initialClientSetupRows.filter((item) => isFollowUpStatus(item.row.status)).length;
+  const initialClientSetupTotal = initialClientSetupRows.length;
   const courtFollowUpRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "court-follow-up"));
   const courtFollowUpCount = courtFollowUpRows.filter((item) => isFollowUpStatus(item.row.status)).length;
   const clientFollowUpRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "client-follow-up"));
@@ -442,9 +443,48 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     { label: "Not Due Yet", value: num(data.summary.pending), className: "pending" },
     { label: "Still To Audit", value: uncheckedCount, className: "unchecked" },
   ];
-  const statusChartTotal = Math.max(1, statusChart.reduce((sum, item) => sum + item.value, 0));
+  const statusChartRawTotal = statusChart.reduce((sum, item) => sum + item.value, 0);
+  const statusChartTotal = Math.max(1, statusChartRawTotal);
   const topAttorneyChart = workspaceSections.filter((section) => section.needsFollowUp > 0).slice(0, 8);
   const maxAttorneyFollowUp = Math.max(1, ...topAttorneyChart.map((section) => section.needsFollowUp));
+  const healthPct = totalCount ? Math.round((num(data.summary.pass) / totalCount) * 100) : 0;
+  const donutSegments = [
+    { color: "#b42318", value: needsFollowUpCount },
+    { color: "#067647", value: num(data.summary.pass) },
+    { color: "#175cd3", value: num(data.summary.pending) },
+    { color: "#98a2b3", value: uncheckedCount },
+  ];
+  let donutCursor = 0;
+  const donutGradient = statusChartRawTotal
+    ? donutSegments
+        .map((segment) => {
+          const start = donutCursor;
+          donutCursor += Math.round((segment.value / statusChartTotal) * 100);
+          return `${segment.color} ${start}% ${donutCursor}%`;
+        })
+        .join(", ")
+    : "#98a2b3 0% 100%";
+  const issueBreakdown = [
+    { label: "Missing Evidence", value: num(data.summary.missing_items), className: "red" },
+    { label: "Late Timing", value: num(data.summary.late_items), className: "amber" },
+    { label: "Needs Review", value: num(data.summary.unknown_items), className: "purple" },
+    { label: "Client Follow-Up Risk", value: clientFollowUpCount, className: "blue" },
+  ];
+  const maxIssueCount = Math.max(1, ...issueBreakdown.map((item) => item.value));
+  const workflowAreaBreakdown = WORKFLOW_COLUMNS.map(([code, label]) => ({
+    code,
+    label,
+    followUp: allWorkspaceRows.filter((item) => item.row.stepCode === code && isFollowUpStatus(item.row.status)).length,
+    checked: allWorkspaceRows.filter((item) => item.row.stepCode === code).length,
+  }));
+  const maxWorkflowCount = Math.max(1, ...workflowAreaBreakdown.map((item) => item.followUp));
+  const setupSnapshot = WORKFLOW_COLUMNS
+    .filter(([code]) => workspaceFocusMatches(code, "initial-client-setup"))
+    .map(([code, label]) => {
+      const rows = initialClientSetupRows.filter((item) => item.row.stepCode === code);
+      const followUp = rows.filter((item) => isFollowUpStatus(item.row.status)).length;
+      return { code, label, followUp, checked: rows.length, clear: Math.max(0, rows.length - followUp) };
+    });
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
@@ -573,6 +613,101 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <b>{clientFollowUpCount}</b>
             <small>needs follow-up</small>
           </a>
+        </div>
+      </section>
+
+      <section className="metrics-dashboard">
+        <div className="panel metric-card health-card">
+          <div className="panel-heading">
+            <div>
+              <h2>Workflow Health</h2>
+              <p className="muted small">Boss-level view of the current open-matter audit.</p>
+            </div>
+          </div>
+          <div className="donut-layout">
+            <div className="donut-chart" style={{ background: `conic-gradient(${donutGradient})` }}>
+              <div>
+                <strong>{healthPct}%</strong>
+                <span>on track</span>
+              </div>
+            </div>
+            <div className="metric-list">
+              {statusChart.map((item) => (
+                <div className="metric-list-row" key={item.label}>
+                  <span className={`legend-dot ${item.className}`} />
+                  <strong>{item.value}</strong>
+                  <small>{item.label}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="panel metric-card">
+          <div className="panel-heading">
+            <div>
+              <h2>Issue Type Breakdown</h2>
+              <p className="muted small">What kind of follow-up is showing up most.</p>
+            </div>
+          </div>
+          <div className="issue-bars">
+            {issueBreakdown.map((item) => (
+              <div className="issue-row" key={item.label}>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.value}</span>
+                </div>
+                <div className="issue-track">
+                  <span className={`issue-fill ${item.className}`} style={{ width: item.value ? `${Math.max(3, Math.round((item.value / maxIssueCount) * 100))}%` : "0%" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel metric-card setup-card">
+          <div className="panel-heading">
+            <div>
+              <h2>Initial Client Setup</h2>
+              <p className="muted small">Opening workflow snapshot across new setup steps.</p>
+            </div>
+            <a className="button compact" href={filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "initial-client-setup" }, {})}>Open</a>
+          </div>
+          <div className="setup-score">
+            <strong>{initialClientSetupFollowUp}</strong>
+            <span>of {initialClientSetupTotal} setup items need follow-up</span>
+          </div>
+          <div className="setup-steps">
+            {setupSnapshot.map((item) => (
+              <div className="setup-step" key={item.code}>
+                <span>{item.label}</span>
+                <b>{item.followUp}</b>
+                <small>{item.clear} clear</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel workflow-area-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Workflow Area Breakdown</h2>
+            <p className="muted small">Which workflow checks are creating the most follow-up.</p>
+          </div>
+        </div>
+        <div className="workflow-area-bars">
+          {workflowAreaBreakdown.map((item) => (
+            <div className="workflow-area-row" key={item.code}>
+              <div>
+                <strong>{item.label}</strong>
+                <small>{item.followUp} follow-up / {item.checked} checked</small>
+              </div>
+              <div className="workflow-track">
+                <span style={{ width: item.followUp ? `${Math.max(3, Math.round((item.followUp / maxWorkflowCount) * 100))}%` : "0%" }} />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
