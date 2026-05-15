@@ -23,7 +23,12 @@ export function haystack(...values: Array<string | null | undefined>): string {
 
 export function includesAny(text: string, terms: string[]): boolean {
   const normalized = normalizeText(text);
-  return terms.some((term) => normalized.includes(normalizeText(term)));
+  const compact = normalized.replace(/[^a-z0-9]+/g, "");
+  return terms.some((term) => {
+    const normalizedTerm = normalizeText(term);
+    const compactTerm = normalizedTerm.replace(/[^a-z0-9]+/g, "");
+    return normalized.includes(normalizedTerm) || Boolean(compactTerm && compact.includes(compactTerm));
+  });
 }
 
 export const TEMPLATE_PATTERNS = {
@@ -65,7 +70,12 @@ export const TEMPLATE_PATTERNS = {
 export const CALENDAR_PATTERNS = {
   attorneyCall: [
     "phone call",
+    "phone-call",
     "phonecall",
+    "spanish phone call",
+    "dc-phonecall",
+    "em phone call",
+    "em spanish phone call",
     "phone-client",
     "mf-phone-client",
     "client call",
