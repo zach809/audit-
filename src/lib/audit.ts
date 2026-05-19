@@ -74,6 +74,10 @@ function earliest<T>(items: Evidence<T>[]): Evidence<T> | null {
   return items.sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 }
 
+function calendarEnd(cal: ClioCalendarEntry): Date | null {
+  return parseDate(cal.end_at) ?? parseDate(cal.start_at);
+}
+
 function classify(
   stepCode: StepCode,
   evidence: Evidence<{ id: number }> | null,
@@ -85,6 +89,7 @@ function classify(
     reasonCode?: string | null;
     now?: Date;
     unknown?: boolean;
+    missingAsReview?: boolean;
   } = {},
 ): AuditItemResult {
   const required = options.required ?? true;
@@ -98,6 +103,9 @@ function classify(
   if (!evidence) {
     const corrective = options.correctiveDeadlineAt ?? deadlineAt;
     const stillPending = corrective && now <= corrective;
+    if (!stillPending && options.missingAsReview) {
+      return base(stepCode, "Unknown", "Needs Review", deadlineAt, corrective, options.reasonCode ?? "EVIDENCE_NOT_CONFIRMED");
+    }
     return base(
       stepCode,
       stillPending ? "Pending" : "Missing",
@@ -323,11 +331,20 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       .filter((ev) => ev.at >= record.effective_intake_at),
   );
 
-  const pastCourts = courtEvents.filter((ev) => ev.at < now).sort((a, b) => b.at.getTime() - a.at.getTime());
+  const pastCourts = courtEvents
+    .filter((ev) => {
+      const endedAt = calendarEnd(ev.item);
+      return Boolean(endedAt && endedAt < now);
+    })
+    .sort((a, b) => {
+      const aEnd = calendarEnd(a.item) ?? a.at;
+      const bEnd = calendarEnd(b.item) ?? b.at;
+      return bEnd.getTime() - aEnd.getTime();
+    });
   const lastCourt = pastCourts[0] ?? null;
-  const lastCourtEnd = lastCourt ? parseDate(lastCourt.item.end_at) ?? lastCourt.at : null;
+  const lastCourtEnd = lastCourt ? calendarEnd(lastCourt.item) : null;
   const nextCourt = lastCourtEnd
-    ? courtEvents.filter((ev) => ev.at > lastCourtEnd).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null
+    ? courtEvents.filter((ev) => ev.at > lastCourtEnd && ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null
     : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 
   const courtResultDeadline = lastCourtEnd ? addBusinessDaysDeadline(lastCourtEnd, 1) : null;
@@ -379,6 +396,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Welcome Packet",
       unknown: Boolean(commError),
       reasonCode: commError,
+      missingAsReview: true,
       now,
     }),
     classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
@@ -405,6 +423,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Appearance Filing",
       unknown: Boolean(commError),
       reasonCode: commError,
+      missingAsReview: true,
       now,
     }),
     classify("COURT_RESULTS", courtResult, courtResultDeadline, {
@@ -412,6 +431,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Court Results",
       unknown: Boolean(lastCourtEnd && !courtResult && (commError || calendarError)),
       reasonCode: commError || calendarError,
+      missingAsReview: true,
       now,
     }),
     classify("POST_COURT_CALL", postCourtCall, postCourtCallDeadline, {
@@ -419,6 +439,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Post-Court Call",
       unknown: Boolean(lastCourtEnd && nextCourt && !postCourtCall && calendarError),
       reasonCode: calendarError,
+      missingAsReview: true,
       now,
     }),
     commError

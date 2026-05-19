@@ -1,7 +1,7 @@
 CWCA deployment check
 
 Expected visible version in the app header:
-cwca-safer-proof-review-logic-2026-05-15
+cwca-post-court-after-court-only-2026-05-19
 
 Expected visible Overview sections:
 - Quick Workspace Views
@@ -15,5 +15,9 @@ Some required steps were completed after the target time. Review the matter hand
 
 Expected safer audit behavior:
 If CWCA cannot confidently confirm template/calendar proof for Welcome Packet, Appearance Filed, Court Results, or Post-Court Call, it should show Needs Review instead of immediately treating it as missed work.
+
+Expected court follow-up behavior:
+Court Results should only become relevant after an actual court event has ended.
+Post-Court Call should only become relevant after an actual court event has ended and there is a future next court date.
 
 If the deployed site does not show this version, the newest files were not deployed.
