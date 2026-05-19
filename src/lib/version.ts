@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-post-court-after-court-only-2026-05-19";
+export const APP_VERSION = "cwca-audit-rules-tidy-pass-2026-05-19";

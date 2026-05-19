@@ -1,7 +1,7 @@
 CWCA deployment check
 
 Expected visible version in the app header:
-cwca-post-court-after-court-only-2026-05-19
+cwca-audit-rules-tidy-pass-2026-05-19
 
 Expected visible Overview sections:
 - Quick Workspace Views
@@ -18,6 +18,10 @@ If CWCA cannot confidently confirm template/calendar proof for Welcome Packet, A
 
 Expected court follow-up behavior:
 Court Results should only become relevant after an actual court event has ended.
+Court Results should be due by 5:00 PM the same business day after court ends.
 Post-Court Call should only become relevant after an actual court event has ended and there is a future next court date.
+
+Expected attorney call behavior:
+Attorney Call is required unless the matter can be identified as petty traffic from the matter number.
 
 If the deployed site does not show this version, the newest files were not deployed.

@@ -13,7 +13,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     goal: "Send within 1 business hour of a new matter being created.",
     missing: "Welcome packet email/template was not found in Clio communications.",
     action: "Check or send the Welcome Letter / Carta de bienvenida template.",
-    late: "Welcome packet was found, but after the 1-business-hour setup goal.",
+    late: "Welcome packet was found, but it was completed after the 1-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the welcome packet from Clio.",
   },
   SETUP_ATTY_CALL: {
@@ -21,7 +21,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     goal: "Schedule within 1 business hour of a new matter being created.",
     missing: "Attorney/client phone call calendar event was not found.",
     action: "Add or verify a Phone Call / Client Call calendar event on the matter.",
-    late: "Attorney/client call was scheduled after the 1-business-hour setup goal.",
+    late: "Attorney/client call was scheduled, but it was completed after the 1-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the attorney call from Clio.",
   },
   SETUP_COURT_DATE: {
@@ -29,7 +29,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     goal: "Add within 1 business hour when the court date is known.",
     missing: "Court date calendar event was not found.",
     action: "Add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
-    late: "Court date was added after the 1-business-hour setup goal.",
+    late: "Court date was added, but it was completed after the 1-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the court date from Clio.",
   },
   CLIENT_CONTACT: {
@@ -37,7 +37,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     goal: "Complete by next business day at 5:00 PM.",
     missing: "Outgoing client contact communication was not found.",
     action: "Check or send an email/log communication to the client.",
-    late: "Client contact was found, but after the next-business-day deadline.",
+    late: "Client contact was found, but it was completed after the next-business-day 5:00 PM goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm client contact from Clio.",
   },
   APPEARANCE_FILING: {
@@ -45,15 +45,15 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     goal: "Complete by the second business day at 5:00 PM.",
     missing: "Appearance filing communication/template was not found.",
     action: "Check or send the appearance filing notification template.",
-    late: "Appearance filing was found, but after the second-business-day deadline.",
+    late: "Appearance filing was found, but it was completed after the second-business-day 5:00 PM goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm appearance filing from Clio.",
   },
   COURT_RESULTS: {
     label: "Court Results",
-    goal: "Complete by next business day at 5:00 PM after court.",
+    goal: "Complete by 5:00 PM the same business day after court ends.",
     missing: "Court result communication/template was not found after the last court date.",
     action: "Check or send the Court Result / Resultado template.",
-    late: "Court result was found, but after the court-results deadline.",
+    late: "Court result was found, but it was completed after the same-day 5:00 PM court-results goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm court results from Clio.",
   },
   POST_COURT_CALL: {
@@ -61,7 +61,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     goal: "Schedule by next business day at 5:00 PM after court when the case continues.",
     missing: "Post-court attorney/client call calendar event was not found.",
     action: "Schedule or verify the post-court attorney call if the case continues.",
-    late: "Post-court call was scheduled after the post-court deadline.",
+    late: "Post-court call was scheduled, but it was completed after the next-business-day 5:00 PM goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the post-court call from Clio.",
   },
   CLIENT_FOLLOWUP: {

@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, effectiveIntake, setupDeadlines } from "./business-time";
+import { addBusinessDaysDeadline, businessDayEnd, effectiveIntake, setupDeadlines } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -76,6 +76,15 @@ function earliest<T>(items: Evidence<T>[]): Evidence<T> | null {
 
 function calendarEnd(cal: ClioCalendarEntry): Date | null {
   return parseDate(cal.end_at) ?? parseDate(cal.start_at);
+}
+
+function sameBusinessDayDeadline(after: Date): Date {
+  const deadline = businessDayEnd(after);
+  return deadline >= after ? deadline : addBusinessDaysDeadline(after, 1);
+}
+
+function isPettyTrafficMatter(record: MatterRecord): boolean {
+  return haystack(record.matter_number).includes("petty traffic");
 }
 
 function classify(
@@ -347,7 +356,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     ? courtEvents.filter((ev) => ev.at > lastCourtEnd && ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null
     : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 
-  const courtResultDeadline = lastCourtEnd ? addBusinessDaysDeadline(lastCourtEnd, 1) : null;
+  const courtResultDeadline = lastCourtEnd ? sameBusinessDayDeadline(lastCourtEnd) : null;
   const postCourtCallDeadline = lastCourtEnd ? addBusinessDaysDeadline(lastCourtEnd, 1) : null;
   const courtResult = lastCourtEnd ? communicationEvidence(isCourtResultTemplate, lastCourtEnd) : null;
   const postCourtCall = lastCourtEnd
@@ -400,6 +409,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       now,
     }),
     classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
+      required: !isPettyTrafficMatter(record),
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Attorney Call",
       unknown: Boolean(calendarError),
