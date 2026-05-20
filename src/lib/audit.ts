@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, businessDayEnd, effectiveIntake, setupDeadlines } from "./business-time";
+import { addBusinessDaysDeadline, effectiveIntake, setupDeadlines } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -78,13 +78,12 @@ function calendarEnd(cal: ClioCalendarEntry): Date | null {
   return parseDate(cal.end_at) ?? parseDate(cal.start_at);
 }
 
-function sameBusinessDayDeadline(after: Date): Date {
-  const deadline = businessDayEnd(after);
-  return deadline >= after ? deadline : addBusinessDaysDeadline(after, 1);
-}
-
 function isPettyTrafficMatter(record: MatterRecord): boolean {
   return haystack(record.matter_number).includes("petty traffic");
+}
+
+function addHours(date: Date, hours: number): Date {
+  return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }
 
 function classify(
@@ -356,21 +355,45 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     ? courtEvents.filter((ev) => ev.at > lastCourtEnd && ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null
     : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 
-  const courtResultDeadline = lastCourtEnd ? sameBusinessDayDeadline(lastCourtEnd) : null;
-  const postCourtCallDeadline = lastCourtEnd ? addBusinessDaysDeadline(lastCourtEnd, 1) : null;
+  const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
   const courtResult = lastCourtEnd ? communicationEvidence(isCourtResultTemplate, lastCourtEnd) : null;
-  const postCourtCall = lastCourtEnd
+  const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
+  const postCourtCall = courtResult?.at
     ? earliest(
         evidence.calendars
           .map((cal): Evidence<ClioCalendarEntry> | null => {
             const at = parseDate(cal.created_at ?? cal.start_at);
-            if (!at || at < lastCourtEnd) return null;
+            if (!at || at < courtResult.at) return null;
             if (!isAttorneyCall(haystack(cal.summary, cal.description))) return null;
             return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
           })
           .filter(Boolean) as Evidence<ClioCalendarEntry>[],
       )
     : null;
+  const courtResultItem =
+    lastCourtEnd
+      ? classify("COURT_RESULTS", courtResult, courtResultDeadline, {
+          operationalState: "Awaiting Court Results",
+          unknown: Boolean(!courtResult && (commError || calendarError)),
+          reasonCode: commError || calendarError,
+          now,
+        })
+      : nextCourt
+        ? base("COURT_RESULTS", "Pending", "Court Appearance Scheduled", calendarEnd(nextCourt.item), null)
+        : base("COURT_RESULTS", "N/A", "", null, null);
+  const postCourtCallItem =
+    courtResult && nextCourt
+      ? classify("POST_COURT_CALL", postCourtCall, postCourtCallDeadline, {
+          operationalState: "Awaiting Post-Court Call",
+          unknown: Boolean(!postCourtCall && calendarError),
+          reasonCode: calendarError,
+          now,
+        })
+      : lastCourtEnd && !courtResult
+        ? base("POST_COURT_CALL", "Pending", "Awaiting Court Results", courtResultDeadline, null)
+        : nextCourt
+          ? base("POST_COURT_CALL", "Pending", "Court Appearance Scheduled", calendarEnd(nextCourt.item), null)
+          : base("POST_COURT_CALL", "N/A", "", null, null);
 
   const clientContact = earliest(
     evidence.communications
@@ -436,22 +459,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       missingAsReview: true,
       now,
     }),
-    classify("COURT_RESULTS", courtResult, courtResultDeadline, {
-      required: Boolean(lastCourtEnd),
-      operationalState: "Needs Court Results",
-      unknown: Boolean(lastCourtEnd && !courtResult && (commError || calendarError)),
-      reasonCode: commError || calendarError,
-      missingAsReview: true,
-      now,
-    }),
-    classify("POST_COURT_CALL", postCourtCall, postCourtCallDeadline, {
-      required: Boolean(lastCourtEnd && nextCourt),
-      operationalState: "Needs Post-Court Call",
-      unknown: Boolean(lastCourtEnd && nextCourt && !postCourtCall && calendarError),
-      reasonCode: calendarError,
-      missingAsReview: true,
-      now,
-    }),
+    courtResultItem,
+    postCourtCallItem,
     commError
       ? base("CLIENT_FOLLOWUP", "Unknown", "Unknown", null, null, commError)
       : inboundStreak.max >= 2

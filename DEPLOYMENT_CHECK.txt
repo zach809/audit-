@@ -1,7 +1,7 @@
 CWCA deployment check
 
 Expected visible version in the app header:
-cwca-audit-rules-tidy-pass-2026-05-19
+cwca-court-hold-48h-results-2026-05-20
 
 Expected visible Overview sections:
 - Quick Workspace Views
@@ -18,8 +18,10 @@ If CWCA cannot confidently confirm template/calendar proof for Welcome Packet, A
 
 Expected court follow-up behavior:
 Court Results should only become relevant after an actual court event has ended.
-Court Results should be due by 5:00 PM the same business day after court ends.
-Post-Court Call should only become relevant after an actual court event has ended and there is a future next court date.
+Future court dates should show Court Results and Post-Court Call as not due yet.
+Court Results should be due within 48 hours after court ends.
+Post-Court Call should only become relevant after court results are found and there is a future next court date.
+Post-Court Call should be due within 24 hours after court results are found.
 
 Expected attorney call behavior:
 Attorney Call is required unless the matter can be identified as petty traffic from the matter number.

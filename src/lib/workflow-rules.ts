@@ -50,18 +50,18 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   COURT_RESULTS: {
     label: "Court Results",
-    goal: "Complete by 5:00 PM the same business day after court ends.",
+    goal: "Complete within 48 hours after court ends.",
     missing: "Court result communication/template was not found after the last court date.",
     action: "Check or send the Court Result / Resultado template.",
-    late: "Court result was found, but it was completed after the same-day 5:00 PM court-results goal.",
+    late: "Court result was found, but it was completed after the 48-hour court-results goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm court results from Clio.",
   },
   POST_COURT_CALL: {
     label: "Post-Court Call",
-    goal: "Schedule by next business day at 5:00 PM after court when the case continues.",
+    goal: "Schedule or complete within 24 hours after court results are received when the case continues.",
     missing: "Post-court attorney/client call calendar event was not found.",
-    action: "Schedule or verify the post-court attorney call if the case continues.",
-    late: "Post-court call was scheduled, but it was completed after the next-business-day 5:00 PM goal.",
+    action: "Schedule or verify the post-court attorney call after court results are received if the case continues.",
+    late: "Post-court call was scheduled, but it was completed after the 24-hour post-result goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the post-court call from Clio.",
   },
   CLIENT_FOLLOWUP: {
