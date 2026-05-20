@@ -129,6 +129,32 @@ export const CALENDAR_PATTERNS = {
     "sentencia",
     "mocion",
   ],
+  nonCourtEvent: [
+    "phone call",
+    "phone-call",
+    "phonecall",
+    "client call",
+    "attorney call",
+    "post-court call",
+    "post court call",
+    "consultation",
+    "consult",
+    "meeting",
+    "task",
+    "todo",
+    "to do",
+    "deadline",
+    "reminder",
+    "follow up",
+    "follow-up",
+    "payment",
+    "billing",
+    "filing",
+    "filed",
+    "appearance filed",
+    "welcome",
+    "intake",
+  ],
 };
 
 export function isWelcomeTemplate(text: string): boolean {
@@ -149,4 +175,12 @@ export function isAttorneyCall(text: string): boolean {
 
 export function isCourtEvent(text: string): boolean {
   return includesAny(text, CALENDAR_PATTERNS.courtEvent);
+}
+
+export function isNonCourtCalendarEvent(text: string): boolean {
+  return includesAny(text, CALENDAR_PATTERNS.nonCourtEvent);
+}
+
+export function isPossibleCourtEvent(text: string): boolean {
+  return Boolean(normalizeText(text)) && !isAttorneyCall(text) && !isNonCourtCalendarEvent(text);
 }

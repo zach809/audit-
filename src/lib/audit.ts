@@ -7,6 +7,7 @@ import {
   isAttorneyCall,
   isCourtEvent,
   isCourtResultTemplate,
+  isPossibleCourtEvent,
   isWelcomeTemplate,
 } from "./patterns";
 import type {
@@ -328,7 +329,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.start_at);
       if (!at) return null;
-      if (!isCourtEvent(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
+      const text = haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name);
+      if (!isCourtEvent(text) && !isPossibleCourtEvent(text)) return null;
       return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
     })
     .filter(Boolean) as Evidence<ClioCalendarEntry>[];

@@ -53,6 +53,40 @@ a { color: var(--blue); }
   padding: 20px;
 }
 
+.deployment-proof {
+  align-items: center;
+  background: linear-gradient(90deg, #101828 0%, #175cd3 100%);
+  border: 2px solid #84caff;
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(23, 92, 211, 0.22);
+  color: #fff;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin: -4px 0 18px;
+  padding: 14px 16px;
+}
+.deployment-proof .label {
+  color: #bfdbfe;
+}
+.deployment-proof strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+.deployment-proof p {
+  color: #eff6ff;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+.deployment-proof .button {
+  background: #fff;
+  border-color: #fff;
+  color: var(--blue);
+  flex: 0 0 auto;
+}
+
 .title { max-width: 760px; }
 .title h1 {
   font-size: 30px;

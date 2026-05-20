@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-court-hold-48h-results-2026-05-20";
+export const APP_VERSION = "cwca-OBVIOUS-BANNER-court-logic-2026-05-20";

@@ -536,6 +536,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
       </div>
 
+      <section className="deployment-proof">
+        <div>
+          <span className="label">Deployment Proof</span>
+          <strong>Updated court audit logic is active</strong>
+          <p>Version {APP_VERSION}: court results use the 48-hour window, post-court calls wait for court results, and vague matter-linked calendar entries can count as possible court events.</p>
+        </div>
+        <a className="button compact" href="/api/health" target="_blank" rel="noreferrer">Check Version</a>
+      </section>
+
       {notice ? (
         <section className={searchParams.audit === "failed" || searchParams.clio === "failed" ? "notice danger" : "notice"}>
           {notice}
