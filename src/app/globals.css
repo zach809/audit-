@@ -175,6 +175,37 @@ button:active, .button:active { transform: translateY(1px); }
   color: var(--red);
 }
 
+.court-rules-panel {
+  background: linear-gradient(180deg, #fff 0, #f8fbff 100%);
+  border-color: #b2ccff;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.07);
+}
+.court-rule-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.court-rule-card {
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  box-shadow: inset 4px 0 0 var(--blue);
+  min-height: 138px;
+  padding: 13px;
+}
+.court-rule-card strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.25;
+  margin: 8px 0;
+}
+.court-rule-card p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .dashboard-tabs {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid var(--line-soft);
@@ -1381,6 +1412,7 @@ tbody tr:hover { background: #fbfcfe; }
 
 @media (max-width: 1100px) {
   .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .court-rule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-visuals { grid-template-columns: 1fr; }
   .metrics-dashboard { grid-template-columns: 1fr; }
   .workflow-area-bars { grid-template-columns: 1fr; }
@@ -1424,6 +1456,7 @@ tbody tr:hover { background: #fbfcfe; }
   .title h1 { font-size: 24px; }
   .grid { grid-template-columns: 1fr; }
   .chart-legend, .bar-row { grid-template-columns: 1fr; }
+  .court-rule-grid { grid-template-columns: 1fr; }
   .donut-layout { grid-template-columns: 1fr; justify-items: center; }
   .priority-row { grid-template-columns: 1fr; }
   .guide-grid { grid-template-columns: 1fr; }

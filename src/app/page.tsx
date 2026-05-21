@@ -566,6 +566,38 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
 
       {activeTab === "overview" ? (
         <>
+      <section className="panel court-rules-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Court Workflow Rules In Use</h2>
+            <p className="muted small">These are the current court audit rules. Recheck older matters after deploying so saved results refresh.</p>
+          </div>
+          <a className="button compact" href={filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "court-follow-up" }, {})}>Open Court Follow-Up</a>
+        </div>
+        <div className="court-rule-grid">
+          <div className="court-rule-card">
+            <span className="label">Before Court</span>
+            <strong>Appearance Hold</strong>
+            <p>Future court dates keep Court Results and Post-Court Call as not due yet.</p>
+          </div>
+          <div className="court-rule-card">
+            <span className="label">After Court Ends</span>
+            <strong>48-Hour Results Window</strong>
+            <p>Court Results are due within 48 hours after the court event ends.</p>
+          </div>
+          <div className="court-rule-card">
+            <span className="label">After Results Found</span>
+            <strong>24-Hour Call Window</strong>
+            <p>Post-Court Call starts only after Court Results are found and the case continues.</p>
+          </div>
+          <div className="court-rule-card">
+            <span className="label">Calendar Matching</span>
+            <strong>Flexible Detection</strong>
+            <p>Client name, case number, plea/status/hearing, and vague linked court entries can count when they are not obvious non-court events.</p>
+          </div>
+        </div>
+      </section>
+
       <section className="queue-panel overview-panel">
         <div className="queue-copy">
           <span className="label">Audit Progress</span>
