@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-clean-dashboard-ui-2026-05-27";
+export const APP_VERSION = "cwca-poster-display-day-theme-2026-05-27";
