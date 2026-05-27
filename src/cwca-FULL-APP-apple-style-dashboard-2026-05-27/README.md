@@ -1,0 +1,120 @@
+# Clio Workflow Compliance Auditor
+
+Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA is for internal compliance checking and workflow coaching only.
+
+## What It Does
+
+- Pulls Clio matters, communications, and calendar entries through read-only API calls.
+- Excludes Closed matters.
+- Groups the dashboard by the matter's responsible attorney.
+- Applies Monday-Friday, 8 AM-5 PM America/Chicago deadline rules.
+- Tracks setup, client contact, appearance filing, court results, post-court calls, and client follow-up risks.
+- Stores minimal local audit data and evidence references only.
+- Provides manual refresh, Vercel Cron refresh, filters, historical metrics, and CSV export.
+- Provides a Case Manager action CSV named `cwca-case-manager-action-report.csv`.
+- Provides a Notepad-friendly Case Manager to-do list named `cwca-case-manager-to-do-list.txt`.
+
+No AI is used.
+
+## Current Workflow Rules
+
+CWCA checks open matters using Illinois business time: Monday-Friday, 8:00 AM-5:00 PM America/Chicago. After-hours and weekend items roll into business-time handling so the audit is less strict than a plain clock timer.
+
+- Welcome Packet: welcome letter / bienvenida communication sent within 1 business hour of a new matter being created.
+- Attorney Call: attorney/client call calendar event scheduled within 1 business hour of a new matter being created.
+- Court Date Added: court, hearing, status, or continuance calendar event added within 1 business hour when the court date is known.
+- Client Contact: outgoing client contact completed by the next business day at 5:00 PM.
+- Appearance Filed: appearance filing notification or template evidence completed by the second business day at 5:00 PM.
+- Court Results: court result communication sent by the next business day at 5:00 PM after court.
+- Post-Court Call: post-court attorney/client call scheduled by the next business day at 5:00 PM after court when the case continues.
+- Client Follow-Up: flags when 2 or more inbound client messages appear before a firm response.
+
+## Compliance And Data Handling
+
+CWCA must stay read-only against Clio. Do not add create, update, delete, webhook, billing, payment, or document-content behavior.
+
+Stored locally:
+
+- Matter IDs and matter numbers.
+- Client names.
+- Responsible attorney.
+- Workflow timestamps and statuses.
+- Evidence IDs and proof links.
+- Audit-run history.
+- Encrypted OAuth tokens.
+
+Not stored locally:
+
+- Communication bodies.
+- Note text.
+- Document contents.
+- Billing data.
+- Payment data.
+
+Retention defaults:
+
+- `AUDIT_RUN_RETENTION_DAYS`: `90`.
+- `AUDIT_METRIC_RETENTION_DAYS`: `365`.
+- `CLOSED_MATTER_RETENTION_DAYS`: `30`.
+
+Expired stored access tokens are cleared automatically. Refresh tokens remain encrypted so the read-only connection can continue working.
+
+## Illinois-Focused Operational Guardrails
+
+- Use this internally for workflow coaching and compliance review only.
+- Limit dashboard access to approved staff.
+- Require MFA for Clio, Vercel, database, and repository access.
+- Review vendors, hosting, and access logs on a regular schedule.
+- Rotate secrets on a schedule and after staff changes.
+- Treat dashboard findings as operational signals, not legal advice.
+
+## Deploy On Vercel
+
+1. Push this folder to GitHub.
+2. In Vercel, import the GitHub repo.
+3. Add a Neon Postgres database from the Vercel Marketplace. Neon Free is enough to start.
+4. Add the environment variables from `.env.example`.
+5. In Clio Developer Portal, set the redirect URI to:
+
+   `https://YOUR-APP.vercel.app/api/auth/clio/callback`
+
+6. Deploy.
+7. Open the app, log in with `DASHBOARD_PASSWORD`, and click **Connect Clio**.
+8. After Clio OAuth succeeds, click **Run Audit Batch**.
+
+## Required Clio Permissions
+
+Use read-only permissions only:
+
+- Matters
+- Contacts
+- Users
+- Calendars
+- Communications
+- Notes
+- Activities, optional for call metrics
+
+Do not enable write permissions.
+
+## Environment Variables
+
+- `DATABASE_URL`: Neon Postgres connection string.
+- `CLIO_CLIENT_ID`: Clio app key.
+- `CLIO_CLIENT_SECRET`: Clio app secret.
+- `CLIO_REDIRECT_URI`: OAuth callback URL.
+- `CLIO_BASE_URL`: `https://app.clio.com` for US.
+- `DASHBOARD_PASSWORD`: password for the dashboard.
+- `SESSION_SECRET`: long random string for login cookies.
+- `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
+- `CRON_SECRET`: random string used to secure cron/manual worker access.
+- `AUDIT_BATCH_SIZE`: matters per audit run. Start with `10`.
+- `AUDIT_COOLDOWN_SECONDS`: pause between audit batches. Default `30`.
+- `CLIO_INITIAL_LOOKBACK_DAYS`: first-run discovery window. Start with `90`.
+- `CLIO_RATE_LIMIT_PER_MINUTE`: default `40`.
+- `AUDIT_RUN_RETENTION_DAYS`: audit-run history retention. Default `90`.
+- `AUDIT_METRIC_RETENTION_DAYS`: monthly snapshot retention. Default `365`.
+- `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
+
+## Notes
+
+The worker is intentionally chunked. Each cron/manual run audits a limited number of matters so Vercel functions stay reliable and Clio rate limits are respected.
