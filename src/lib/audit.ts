@@ -360,13 +360,15 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
   const courtResult = lastCourtEnd ? communicationEvidence(isCourtResultTemplate, lastCourtEnd) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
+  const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
+  const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
   const postCourtCall = courtResult?.at
     ? earliest(
         evidence.calendars
           .map((cal): Evidence<ClioCalendarEntry> | null => {
             const at = parseDate(cal.created_at ?? cal.start_at);
             if (!at || at < courtResult.at) return null;
-            if (!isAttorneyCall(haystack(cal.summary, cal.description))) return null;
+            if (!isAttorneyCall(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
             return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
           })
           .filter(Boolean) as Evidence<ClioCalendarEntry>[],
@@ -375,26 +377,26 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResultItem =
     lastCourtEnd
       ? classify("COURT_RESULTS", courtResult, courtResultDeadline, {
-          operationalState: "Awaiting Court Results",
-          unknown: Boolean(!courtResult && (commError || calendarError)),
+          operationalState: "Not Due Yet",
+          unknown: Boolean(!courtResult && !courtResultWindowOpen && (commError || calendarError)),
           reasonCode: commError || calendarError,
           now,
         })
       : nextCourt
-        ? base("COURT_RESULTS", "Pending", "Court Appearance Scheduled", calendarEnd(nextCourt.item), null)
+        ? base("COURT_RESULTS", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
         : base("COURT_RESULTS", "N/A", "", null, null);
   const postCourtCallItem =
     courtResult && nextCourt
       ? classify("POST_COURT_CALL", postCourtCall, postCourtCallDeadline, {
-          operationalState: "Awaiting Post-Court Call",
-          unknown: Boolean(!postCourtCall && calendarError),
+          operationalState: "Not Due Yet",
+          unknown: Boolean(!postCourtCall && !postCourtCallWindowOpen && calendarError),
           reasonCode: calendarError,
           now,
         })
       : lastCourtEnd && !courtResult
-        ? base("POST_COURT_CALL", "Pending", "Awaiting Court Results", courtResultDeadline, null)
+        ? base("POST_COURT_CALL", "Pending", "Not Due Yet", courtResultDeadline, null)
         : nextCourt
-          ? base("POST_COURT_CALL", "Pending", "Court Appearance Scheduled", calendarEnd(nextCourt.item), null)
+          ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
 
   const clientContact = earliest(

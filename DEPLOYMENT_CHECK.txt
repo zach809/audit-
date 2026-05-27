@@ -1,7 +1,7 @@
 CWCA deployment check
 
 Expected visible version in the app header:
-cwca-overview-removed-report-ready-2026-05-27
+cwca-court-not-due-yet-window-2026-05-27
 
 Expected visible banner:
 A dark blue banner directly below the header that says "Updated court audit logic is active".
@@ -41,8 +41,10 @@ Expected court follow-up behavior:
 Court Results should only become relevant after an actual court event has ended.
 Future court dates should show Court Results and Post-Court Call as not due yet.
 Court Results should be due within 48 hours after court ends.
+Court Results should show Not Due Yet during the 48-hour window before being treated as missing/review.
 Post-Court Call should only become relevant after court results are found and there is a future next court date.
 Post-Court Call should be due within 24 hours after court results are found.
+Post-Court Call should show Not Due Yet before the 24-hour post-result window expires.
 
 Expected calendar detection behavior:
 Court events should be detected from strong court words like plea/status/hearing/trial/continuance.
@@ -50,5 +52,6 @@ If a matter-linked calendar entry has a vague title, CWCA may treat it as a poss
 
 Expected attorney call behavior:
 Attorney Call is required unless the matter can be identified as petty traffic from the matter number.
+Attorney Call should recognize flexible calendar wording such as Phone, Phone Call, PhoneCall, Client Call, Call With Client, Atty Call, Initial Call, Spanish Call, Telephonic, and Llamada.
 
 If the deployed site does not show this version, the newest files were not deployed.

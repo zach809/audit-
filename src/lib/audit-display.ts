@@ -21,6 +21,7 @@ export function displayAuditStatus(status: string, reasonCode?: string | null): 
   if (status === "Unknown" && isGenericApiError(reasonCode)) return "Needs Recheck";
   if (status === "Unknown") return "Needs Review";
   if (status === "On Time") return "On Track";
+  if (status === "Pending") return "Not Due Yet";
   return status;
 }
 
