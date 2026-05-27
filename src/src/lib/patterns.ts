@@ -72,16 +72,47 @@ export const CALENDAR_PATTERNS = {
     "phone call",
     "phone-call",
     "phonecall",
+    "phonecallclient",
+    "telephone call",
+    "telephonic call",
+    "telephonic",
     "spanish phone call",
     "dc-phonecall",
     "em phone call",
     "em spanish phone call",
     "phone-client",
     "mf-phone-client",
+    "client phone",
+    "client phone call",
     "client call",
+    "call client",
+    "call with client",
+    "call w client",
+    "call to client",
     "attorney call",
+    "attorney client call",
+    "attorney/client call",
+    "atty call",
+    "atty client call",
+    "lawyer call",
+    "initial call",
+    "initial client call",
+    "setup call",
+    "intake call",
+    "llamada",
+    "llamada telefonica",
+    "llamada con cliente",
+    "llamar cliente",
+    "telefono",
+    "telefonica",
+    "spanish call",
+    "zoom call",
+    "video call",
+    "conference call",
     "phone",
     "call",
+    "contact client",
+    "client contact call",
   ],
   courtEvent: [
     "court",
@@ -170,7 +201,32 @@ export function isCourtResultTemplate(text: string): boolean {
 }
 
 export function isAttorneyCall(text: string): boolean {
-  return includesAny(text, CALENDAR_PATTERNS.attorneyCall);
+  const normalized = normalizeText(text);
+  if (!includesAny(normalized, CALENDAR_PATTERNS.attorneyCall)) return false;
+
+  const phoneSpecific = includesAny(normalized, [
+    "phone",
+    "phonecall",
+    "telephone",
+    "telephonic",
+    "telefono",
+    "telefonica",
+    "llamada",
+    "client call",
+    "call client",
+    "call with client",
+    "call w client",
+    "call to client",
+    "attorney call",
+    "atty call",
+    "spanish call",
+    "zoom call",
+    "video call",
+    "conference call",
+  ]);
+
+  if (isCourtEvent(normalized) && !phoneSpecific) return false;
+  return true;
 }
 
 export function isCourtEvent(text: string): boolean {

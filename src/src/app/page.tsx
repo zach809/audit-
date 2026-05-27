@@ -6,6 +6,7 @@ import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
 import { APP_TZ } from "@/lib/config";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
+import { ThemeToggle } from "./theme-toggle";
 import {
   auditItemPriority,
   displayAuditStatus,
@@ -264,7 +265,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "overview" | "workspace" | "matters" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "reports" | "guide" | "compliance";
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "workspace", label: "Attorney Workspace", description: "Grouped audit items by attorney" },
@@ -506,14 +507,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <span className="eyebrow">Internal Workflow Coaching</span>
             <span className="badge Pass">Read-Only Clio</span>
           </div>
-          <h1>Clio Workflow Compliance Auditor</h1>
-          <p>Open-matter workflow checks, proof links, and case-manager follow-up in one place, using Illinois business time.</p>
+          <h1>Workflow Auditor</h1>
+          <p>Open matters, proof links, and follow-up in one focused workspace.</p>
           <div className="header-meta">
             <span>Last run: {lastRunText}</span>
             <span>Version: {APP_VERSION}</span>
           </div>
         </div>
         <div className="actions header-actions">
+          <ThemeToggle />
           {connected ? (
             <span className="badge Pass">Clio Connected</span>
           ) : (
@@ -535,7 +537,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
       </div>
 
-      <section className="deployment-proof">
+      <section className="deployment-proof sr-only">
         <div>
           <span className="label">Deployment Proof</span>
           <strong>Updated court audit logic is active</strong>
@@ -563,7 +565,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         ))}
       </nav>
 
-      {activeTab === "overview" ? (
+      {false ? (
         <>
       <section className="panel court-rules-panel">
         <div className="panel-heading">
@@ -947,33 +949,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="panel-heading">
           <div>
             <h2>Reports</h2>
-            <p className="muted small">Choose the date range first, then download a clean follow-up report without changing anything in Clio.</p>
           </div>
         </div>
-        <form className="filters report-filters" method="get">
-          <input type="hidden" name="tab" value="reports" />
-          <input type="hidden" name="attorney" value={filters.attorney} />
-          <input type="hidden" name="overall" value={filters.overall} />
-          <label>
-            Report From
-            <input name="from" type="date" defaultValue={filters.from} />
-          </label>
-          <label>
-            Report To
-            <input name="to" type="date" defaultValue={filters.to} />
-          </label>
-          <button type="submit">Use Date Range</button>
-          <a className="button" href={filterLink({ ...filters, tab: "reports" }, { from: "", to: "" })}>All Dates</a>
-        </form>
-        <p className="muted small report-range-note">
-          Current report range: {filters.from || filters.to ? `${filters.from || "Beginning"} through ${filters.to || "Today"}` : "All dates in the current open-matter audit view"}.
-        </p>
         <div className="report-grid">
-          <form className="report-card" action={`/api/export.csv?type=case-manager-text&${exportParams}`} method="post">
+          <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
-              <span className="label">For Case Managers</span>
-              <strong>Missing Items Review</strong>
-              <p>Pam-style text report grouped by attorney and matter, with missing items and action-needed bullets.</p>
+              <span className="label">Main Report</span>
+              <strong>Case Manager Audit - Missing Items Review</strong>
+              <p>Plain text report in the requested format, grouped by attorney and matter.</p>
+              <div className="report-date-row">
+                <label>
+                  Report From
+                  <input name="from" type="date" defaultValue={filters.from} />
+                </label>
+                <label>
+                  Report To
+                  <input name="to" type="date" defaultValue={filters.to} />
+                </label>
+              </div>
+              <input type="hidden" name="attorney" value={filters.attorney} />
+              <input type="hidden" name="overall" value={filters.overall} />
             </div>
             <button className="primary" type="submit">Download Review</button>
           </form>
@@ -994,6 +989,33 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <button type="submit">Download Audit</button>
           </form>
         </div>
+        <div className="report-preview">
+          <span className="label">Report Format Preview</span>
+          <pre>{`Case Manager Audit - Missing Items Review
+
+Please review the matters below and complete all missing items in Clio.
+
+1. Attorney: [Attorney Name]
+   Client/Matter: [Client Name]
+   Matter Number: [Matter Number]
+   Clio Link: [Insert Clio Matter Link]
+
+Missing Item(s):
+* Welcome packet not found
+* Calendar event missing
+* Appearance filing follow-up needed
+
+Action Needed:
+* Send the welcome packet if not already sent
+* Add the required calendar event
+* Confirm/file the appearance
+
+Proof of Completion Required:
+Please reply in this thread for each matter once completed. Include:
+* Client/matter name
+* What was completed
+* Proof of completion, such as a screenshot, confirmation note, or Clio update confirmation`}</pre>
+        </div>
       </section>
       ) : null}
 
@@ -1002,7 +1024,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="panel-heading">
           <div>
             <h2>Review Matters</h2>
-            <p className="muted small">Filter the active dashboard view by attorney, status, or created date.</p>
           </div>
         </div>
         <form className="filters">
@@ -1047,14 +1068,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
         {hasFilters ? (
           <p className="filter-alert">
-            Filtered view is on. The totals and table now match these filters.
+            Filtered view is on.
           </p>
         ) : null}
-        <p className="muted small">
-          Run Audit Batch checks up to {auditBatchSize} matters at a time and returns after about 25 seconds if Clio is slow. {uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left, about ${batchesLeft} ${batchLabel} to finish this view.` : "Everything discovered has been checked."}
-        </p>
-        {data.lastRun?.message ? <p className="muted small">Last run note: {data.lastRun.message}</p> : null}
-        <p className="muted small">Showing the first 150 matching matters. Use filters or CSV export for broader review.</p>
+        <div className="filter-summary">
+          <span>{checkedCount} of {totalCount} audited</span>
+          <span>{uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left` : "All discovered matters checked"}</span>
+          {data.lastRun?.message ? <span>{data.lastRun.message}</span> : null}
+        </div>
       </section>
       ) : null}
 
@@ -1063,7 +1084,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="panel-heading">
           <div>
             <h2>Attorney Audit Workspace</h2>
-          <p className="muted small">A clean grouped view of audit items by attorney. Use status and focus filters to narrow the workspace.</p>
           </div>
           <div className="workspace-heading-badges">
             <span className="badge Pending">{activeWorkspaceFocusLabel}</span>
@@ -1261,7 +1281,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
       ) : null}
 
-      {activeTab === "overview" ? (
+      {false ? (
       <section className="panel coaching-panel">
         <div className="panel-heading">
           <div>

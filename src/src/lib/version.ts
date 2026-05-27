@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-pam-report-and-report-range-2026-05-27";
+export const APP_VERSION = "cwca-cool-blue-day-theme-2026-05-27";

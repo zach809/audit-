@@ -554,8 +554,7 @@ function matterMissingItemLabel(stepCode: string, attorneyName?: string | null):
   }
 }
 
-function matterActionItem(stepCode: string, attorneyName?: string | null): string {
-  if (!attorneyName) return "Assign/update the responsible attorney";
+function matterActionItem(stepCode: string): string {
   switch (stepCode) {
     case "SETUP_ATTY_CALL":
       return "Add the required calendar event";
@@ -578,10 +577,6 @@ function matterActionItem(stepCode: string, attorneyName?: string | null): strin
   }
 }
 
-function caseManagerLabel(): string {
-  return "Not listed in CWCA";
-}
-
 export async function caseManagerTodoText(filters: DashboardFilters = {}, origin = ""): Promise<string> {
   const rows = await getActionRows(filters);
   const generated = new Intl.DateTimeFormat("en-US", {
@@ -592,12 +587,6 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date());
-  const grouped = new Map<string, ActionCsvRow[]>();
-  for (const row of rows) {
-    const key = row.responsible_attorney_name || "Unassigned";
-    grouped.set(key, [...(grouped.get(key) ?? []), row]);
-  }
-
   const lines = [
     "Case Manager Audit - Missing Items Review",
     `Generated: ${generated}`,
@@ -611,53 +600,51 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
     return lines.join("\r\n");
   }
 
+  const matters = new Map<string, ActionCsvRow[]>();
+  for (const row of rows) {
+    const key = `${row.responsible_attorney_name || "Unassigned"}::${row.matter_id}::${row.matter_number}`;
+    matters.set(key, [...(matters.get(key) ?? []), row]);
+  }
+
   let reportIndex = 0;
-  for (const [attorney, items] of grouped) {
-    const matters = new Map<string, ActionCsvRow[]>();
-    for (const row of items) {
-      const key = `${row.matter_id}::${row.matter_number}`;
-      matters.set(key, [...(matters.get(key) ?? []), row]);
-    }
+  for (const matterRows of matters.values()) {
+    reportIndex += 1;
+    const first = matterRows[0];
+    const attorney = first.responsible_attorney_name || "Unassigned";
+    const missingItems = Array.from(new Set(matterRows.map((row) => matterMissingItemLabel(row.step_code, row.responsible_attorney_name))));
+    const actions = Array.from(new Set(matterRows.map((row) => matterActionItem(row.step_code))));
+    const proofLines = matterRows.map((row) => {
+      const parts = [
+        workflowLabel(row.step_code),
+        humanStatus(String(row.item_status ?? "")),
+        whyFlagged(row.step_code, String(row.item_status ?? ""), row.reason_code),
+        textLine("Due", formatCsvDate(row.deadline_at)),
+        textLine("Found", formatCsvDate(row.evidence_at)),
+        textLine("Proof", proofPath(origin, row.evidence_source, row.evidence_ref_id)),
+      ].filter(Boolean);
+      return `* ${parts.join(" | ")}`;
+    });
 
-    for (const matterRows of matters.values()) {
-      reportIndex += 1;
-      const first = matterRows[0];
-      const missingItems = Array.from(new Set(matterRows.map((row) => matterMissingItemLabel(row.step_code, row.responsible_attorney_name))));
-      const actions = Array.from(new Set(matterRows.map((row) => matterActionItem(row.step_code, row.responsible_attorney_name))));
-      const proofLines = matterRows.map((row) => {
-        const parts = [
-          workflowLabel(row.step_code),
-          humanStatus(String(row.item_status ?? "")),
-          whyFlagged(row.step_code, String(row.item_status ?? ""), row.reason_code),
-          textLine("Due", formatCsvDate(row.deadline_at)),
-          textLine("Found", formatCsvDate(row.evidence_at)),
-          textLine("Proof", proofPath(origin, row.evidence_source, row.evidence_ref_id)),
-        ].filter(Boolean);
-        return `* ${parts.join(" | ")}`;
-      });
-
-      lines.push(`${reportIndex}. Attorney: ${attorney}`);
-      lines.push(`   Case Manager: ${caseManagerLabel()}`);
-      lines.push(`   Client/Matter: ${clientMatterName(first)}`);
-      lines.push(`   Matter Number: ${first.matter_number}`);
-      lines.push(`   Clio Link: ${clioMatterLink(String(first.matter_id))}`);
-      lines.push("");
-      lines.push("Missing Item(s):");
-      for (const item of missingItems) lines.push(`* ${item}`);
-      lines.push("");
-      lines.push("Action Needed:");
-      for (const item of actions) lines.push(`* ${item}`);
-      lines.push("");
-      lines.push("Proof of Completion Required:");
-      lines.push("Please reply in this thread for each matter once completed. Include:");
-      lines.push("* Client/matter name");
-      lines.push("* What was completed");
-      lines.push("* Proof of completion, such as a screenshot, confirmation note, or Clio update confirmation");
-      lines.push("");
-      lines.push("CWCA Audit Notes:");
-      for (const item of proofLines) lines.push(item);
-      lines.push("");
-    }
+    lines.push(`${reportIndex}. Attorney: ${attorney}`);
+    lines.push(`   Client/Matter: ${clientMatterName(first)}`);
+    lines.push(`   Matter Number: ${first.matter_number}`);
+    lines.push(`   Clio Link: ${clioMatterLink(String(first.matter_id))}`);
+    lines.push("");
+    lines.push("Missing Item(s):");
+    for (const item of missingItems) lines.push(`* ${item}`);
+    lines.push("");
+    lines.push("Action Needed:");
+    for (const item of actions) lines.push(`* ${item}`);
+    lines.push("");
+    lines.push("Proof of Completion Required:");
+    lines.push("Please reply in this thread for each matter once completed. Include:");
+    lines.push("* Client/matter name");
+    lines.push("* What was completed");
+    lines.push("* Proof of completion, such as a screenshot, confirmation note, or Clio update confirmation");
+    lines.push("");
+    lines.push("CWCA Audit Notes:");
+    for (const item of proofLines) lines.push(item);
+    lines.push("");
   }
 
   lines.push("Audit Areas to Fine-Tune in the App Report:");
