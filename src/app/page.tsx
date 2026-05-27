@@ -264,10 +264,9 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "overview" | "workspace" | "matters" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "reports" | "guide" | "compliance";
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
-  { id: "overview", label: "Overview", description: "Executive summary and audit progress" },
   { id: "workspace", label: "Attorney Workspace", description: "Grouped audit items by attorney" },
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
@@ -331,7 +330,7 @@ const GUIDE_STATUS_CARDS = [
 ];
 
 function dashboardTab(value?: string): DashboardTab {
-  return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "overview";
+  return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "workspace";
 }
 
 function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
@@ -564,7 +563,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         ))}
       </nav>
 
-      {activeTab === "overview" ? (
+      {false ? (
         <>
       <section className="panel court-rules-panel">
         <div className="panel-heading">
@@ -899,10 +898,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </div>
           </div>
           <div className="playbook-list">
-            <div><strong>1. Start with Overview.</strong><span>Check Needs Follow-Up and Today's Priorities first.</span></div>
-            <div><strong>2. Open Attorney Workspace.</strong><span>Use the colored filters to group work by attorney and status.</span></div>
-            <div><strong>3. Verify in Clio.</strong><span>Open the Clio link and proof link before deciding whether coaching is needed.</span></div>
-            <div><strong>4. Send the case-manager list.</strong><span>Use Reports to download a plain to-do list for follow-up.</span></div>
+            <div><strong>1. Start with Attorney Workspace.</strong><span>Use the grouped attorney view to see what actually needs follow-up.</span></div>
+            <div><strong>2. Verify in Clio.</strong><span>Open the Clio link and proof link before deciding whether coaching is needed.</span></div>
+            <div><strong>3. Set the report range.</strong><span>Use Reports to choose the exact dates you want covered before downloading.</span></div>
+            <div><strong>4. Send the case-manager list.</strong><span>Download the missing-items review when you need a clean follow-up handoff.</span></div>
             <div><strong>5. Keep it coaching-focused.</strong><span>Use CWCA as a visibility tool, not as discipline by itself.</span></div>
           </div>
         </section>
@@ -948,17 +947,29 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="panel-heading">
           <div>
             <h2>Reports</h2>
-            <p className="muted small">Download clean follow-up lists without changing anything in Clio.</p>
+            <p className="muted small">Create a clean missing-items review for internal follow-up without changing anything in Clio.</p>
           </div>
         </div>
         <div className="report-grid">
-          <form className="report-card" action="/api/export.csv?type=case-manager-text" method="post">
+          <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
-              <span className="label">For Case Managers</span>
-              <strong>Notepad To-Do List</strong>
-              <p>Plain text list grouped by attorney, ready to send for follow-up.</p>
+              <span className="label">Main Report</span>
+              <strong>Case Manager Audit - Missing Items Review</strong>
+              <p>Plain text report in the requested format, grouped by attorney and matter.</p>
+              <div className="report-date-row">
+                <label>
+                  Report From
+                  <input name="from" type="date" defaultValue={filters.from} />
+                </label>
+                <label>
+                  Report To
+                  <input name="to" type="date" defaultValue={filters.to} />
+                </label>
+              </div>
+              <input type="hidden" name="attorney" value={filters.attorney} />
+              <input type="hidden" name="overall" value={filters.overall} />
             </div>
-            <button className="primary" type="submit">Download List</button>
+            <button className="primary" type="submit">Download Review</button>
           </form>
           <form className="report-card" action={`/api/export.csv?${actionExportParams.toString()}`} method="post">
             <div>
@@ -976,6 +987,33 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </div>
             <button type="submit">Download Audit</button>
           </form>
+        </div>
+        <div className="report-preview">
+          <span className="label">Report Format Preview</span>
+          <pre>{`Case Manager Audit - Missing Items Review
+
+Please review the matters below and complete all missing items in Clio.
+
+1. Attorney: [Attorney Name]
+   Client/Matter: [Client Name]
+   Matter Number: [Matter Number]
+   Clio Link: [Insert Clio Matter Link]
+
+Missing Item(s):
+* Welcome packet not found
+* Calendar event missing
+* Appearance filing follow-up needed
+
+Action Needed:
+* Send the welcome packet if not already sent
+* Add the required calendar event
+* Confirm/file the appearance
+
+Proof of Completion Required:
+Please reply in this thread for each matter once completed. Include:
+* Client/matter name
+* What was completed
+* Proof of completion, such as a screenshot, confirmation note, or Clio update confirmation`}</pre>
         </div>
       </section>
       ) : null}
@@ -1244,7 +1282,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
       ) : null}
 
-      {activeTab === "overview" ? (
+      {false ? (
       <section className="panel coaching-panel">
         <div className="panel-heading">
           <div>

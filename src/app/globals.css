@@ -876,6 +876,33 @@ button:active, .button:active { transform: translateY(1px); }
   min-height: 132px;
   padding: 14px;
 }
+.report-card-wide {
+  grid-column: span 3;
+}
+.report-date-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  margin-top: 14px;
+}
+.report-preview {
+  background: rgba(247, 249, 252, 0.92);
+  border: 1px solid rgba(60, 60, 67, 0.1);
+  border-radius: 18px;
+  margin-top: 16px;
+  padding: 16px;
+}
+.report-preview pre {
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  color: var(--text);
+  font: 13px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  margin: 8px 0 0;
+  overflow: auto;
+  padding: 14px;
+  white-space: pre-wrap;
+}
 .report-card strong {
   display: block;
   font-size: 16px;
@@ -1513,6 +1540,8 @@ tbody tr:hover { background: #fbfcfe; }
   .rule-row { grid-template-columns: 1fr; }
   .dashboard-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .report-grid { grid-template-columns: 1fr; }
+  .report-card-wide { grid-column: auto; }
+  .report-date-row { grid-template-columns: 1fr; }
   .report-card { grid-template-columns: 1fr; }
   .report-card button { justify-self: flex-start; }
   .workspace-row {

@@ -10,10 +10,10 @@ export type WorkflowRule = {
 export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   SETUP_WELCOME: {
     label: "Welcome Packet",
-    goal: "Send within 1 business hour of a new matter being created.",
+    goal: "Send within 2 business hours of a new matter being created.",
     missing: "Welcome packet email/template was not found in Clio communications.",
     action: "Check or send the Welcome Letter / Carta de bienvenida template.",
-    late: "Welcome packet was found, but it was completed after the 1-hour setup goal.",
+    late: "Welcome packet was found, but it was completed after the 2-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the welcome packet from Clio.",
   },
   SETUP_ATTY_CALL: {
@@ -26,17 +26,17 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   SETUP_COURT_DATE: {
     label: "Court Date Added",
-    goal: "Add within 1 business hour when the court date is known.",
+    goal: "Add within 2 business hours when the court date is known.",
     missing: "Court date calendar event was not found.",
     action: "Add or verify the court/hearing/plea/status/continuance calendar event on the matter.",
-    late: "Court date was added, but it was completed after the 1-hour setup goal.",
+    late: "Court date was added, but it was completed after the 2-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the court date from Clio.",
   },
   CLIENT_CONTACT: {
     label: "Client Contact",
     goal: "Complete by next business day at 5:00 PM.",
     missing: "Outgoing client contact communication was not found.",
-    action: "Check or send an email/log communication to the client.",
+    action: "Check whether an email was sent or a phone call log or communication note was added for the client.",
     late: "Client contact was found, but it was completed after the next-business-day 5:00 PM goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm client contact from Clio.",
   },
@@ -60,7 +60,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     label: "Post-Court Call",
     goal: "Schedule or complete within 24 hours after court results are received when the case continues.",
     missing: "Post-court attorney/client call calendar event was not found.",
-    action: "Schedule or verify the post-court attorney call after court results are received if the case continues.",
+    action: "Schedule or verify a calendar event showing the post-court attorney phone call after court results are received, if the case continues.",
     late: "Post-court call was scheduled, but it was completed after the 24-hour post-result goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the post-court call from Clio.",
   },

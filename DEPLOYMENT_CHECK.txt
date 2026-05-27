@@ -1,7 +1,7 @@
 CWCA deployment check
 
 Expected visible version in the app header:
-cwca-apple-style-dashboard-2026-05-27
+cwca-overview-removed-report-ready-2026-05-27
 
 Expected visible banner:
 A dark blue banner directly below the header that says "Updated court audit logic is active".
@@ -11,6 +11,15 @@ Expected visible Apple-style polish:
 - Cleaner segmented tab bar
 - More polished metric cards and chart surfaces
 - Lighter Apple-style color palette and spacing
+
+Expected visible report changes:
+- No Overview tab in the top navigation
+- Opening "/" should show Attorney Workspace, not Overview
+- Old "?tab=overview" links should not show the Overview page
+- Reports tab has Report From and Report To date fields directly inside the Missing Items Review card
+- Reports tab shows a Report Format Preview matching the requested structure
+- Text export downloads as cwca-case-manager-missing-items-review.txt
+- Text export uses the Pam-style missing-items review format with no Case Manager line inside each matter
 
 Expected visible Overview panel:
 A section called "Court Workflow Rules In Use" with four cards: Appearance Hold, 48-Hour Results Window, 24-Hour Call Window, and Flexible Detection.

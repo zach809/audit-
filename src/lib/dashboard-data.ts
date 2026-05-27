@@ -519,6 +519,64 @@ function textLine(label: string, value: unknown): string {
   return text ? `${label}: ${text}` : "";
 }
 
+function clientMatterName(row: ActionCsvRow): string {
+  return `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim() || row.matter_number;
+}
+
+function reportDateRange(filters: DashboardFilters): string {
+  if (filters.from && filters.to) return `${filters.from} through ${filters.to}`;
+  if (filters.from) return `${filters.from} and later`;
+  if (filters.to) return `through ${filters.to}`;
+  return "all open audited matters";
+}
+
+function matterMissingItemLabel(stepCode: string, attorneyName?: string | null): string {
+  if (!attorneyName) return "Responsible attorney missing/needs update";
+  switch (stepCode) {
+    case "SETUP_ATTY_CALL":
+      return "Calendar event missing";
+    case "SETUP_WELCOME":
+      return "Welcome packet not found";
+    case "APPEARANCE_FILING":
+      return "Appearance filing follow-up needed";
+    case "COURT_RESULTS":
+      return "Court results not sent/recorded";
+    case "SETUP_COURT_DATE":
+      return "Court/hearing calendar event missing";
+    case "CLIENT_CONTACT":
+      return "Client contact proof missing";
+    case "POST_COURT_CALL":
+      return "Post-court call missing";
+    case "CLIENT_FOLLOWUP":
+      return "Client follow-up review needed";
+    default:
+      return `${workflowLabel(stepCode)} follow-up needed`;
+  }
+}
+
+function matterActionItem(stepCode: string): string {
+  switch (stepCode) {
+    case "SETUP_ATTY_CALL":
+      return "Add the required calendar event";
+    case "SETUP_WELCOME":
+      return "Send the welcome packet if not already sent";
+    case "APPEARANCE_FILING":
+      return "Confirm/file the appearance";
+    case "COURT_RESULTS":
+      return "Send court results to the client and add them to matter notes";
+    case "SETUP_COURT_DATE":
+      return "Add or verify that the court/hearing event is on the matter";
+    case "CLIENT_CONTACT":
+      return "Check whether client contact was completed and logged";
+    case "POST_COURT_CALL":
+      return "Schedule or verify the post-court attorney call";
+    case "CLIENT_FOLLOWUP":
+      return "Review the message thread and respond or coach as needed";
+    default:
+      return actionFor(stepCode, "Missing");
+  }
+}
+
 export async function caseManagerTodoText(filters: DashboardFilters = {}, origin = ""): Promise<string> {
   const rows = await getActionRows(filters);
   const generated = new Intl.DateTimeFormat("en-US", {
@@ -529,62 +587,85 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date());
-  const grouped = new Map<string, ActionCsvRow[]>();
-  for (const row of rows) {
-    const key = row.responsible_attorney_name || "Unassigned";
-    grouped.set(key, [...(grouped.get(key) ?? []), row]);
-  }
-
   const lines = [
-    "CWCA Case Manager To-Do List",
+    "Case Manager Audit - Missing Items Review",
     `Generated: ${generated}`,
-    "Use this for internal workflow follow-up only. Open Clio, complete or verify the item, and keep any case details in Clio.",
+    `Date Range: ${reportDateRange(filters)}`,
+    "Please review the matters below and complete all missing items in Clio.",
     "",
   ];
 
   if (!rows.length) {
-    lines.push("No open-matter missing, late, or review items were found for the case manager list.");
-    lines.push("If the dashboard still shows older monthly coaching counts, click Run Audit Batch once and export again so the to-do list uses the latest open-matter checks.");
+    lines.push("No open-matter missing, late, or review items were found for this report.");
     return lines.join("\r\n");
   }
 
-  for (const [attorney, items] of grouped) {
-    lines.push("============================================================");
-    lines.push(`Attorney: ${attorney}`);
-    lines.push(`Items: ${items.length}`);
-    lines.push("============================================================");
-    lines.push("");
+  const matters = new Map<string, ActionCsvRow[]>();
+  for (const row of rows) {
+    const key = `${row.responsible_attorney_name || "Unassigned"}::${row.matter_id}::${row.matter_number}`;
+    matters.set(key, [...(matters.get(key) ?? []), row]);
+  }
 
-    items.forEach((row, index) => {
-      const status = String(row.item_status ?? "");
-      const evidence =
-        row.evidence_source && row.evidence_ref_id
-          ? `${row.evidence_source} #${row.evidence_ref_id}`
-          : "";
-      const proof = proofPath(origin, row.evidence_source, row.evidence_ref_id);
-      const details = [
-        textLine("Priority", priorityFor(status)),
-        textLine("Client", `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim()),
-        textLine("Matter", row.matter_number),
-        textLine("Overall", row.overall_status),
-        textLine("Improvement Area", workflowLabel(row.step_code)),
-        textLine("Status", humanStatus(status)),
-        textLine("What The Case Manager Should Do In Clio", actionFor(row.step_code, status, row.reason_code)),
-        textLine("Timeliness Goal", timingGoalFor(row.step_code)),
+  let reportIndex = 0;
+  for (const matterRows of matters.values()) {
+    reportIndex += 1;
+    const first = matterRows[0];
+    const attorney = first.responsible_attorney_name || "Unassigned";
+    const missingItems = Array.from(new Set(matterRows.map((row) => matterMissingItemLabel(row.step_code, row.responsible_attorney_name))));
+    const actions = Array.from(new Set(matterRows.map((row) => matterActionItem(row.step_code))));
+    const proofLines = matterRows.map((row) => {
+      const parts = [
+        workflowLabel(row.step_code),
+        humanStatus(String(row.item_status ?? "")),
+        whyFlagged(row.step_code, String(row.item_status ?? ""), row.reason_code),
         textLine("Due", formatCsvDate(row.deadline_at)),
         textLine("Found", formatCsvDate(row.evidence_at)),
-        textLine("Open Matter In Clio", clioMatterLink(String(row.matter_id))),
-        textLine("Proof Saved In Auditor", proof),
-        textLine("Evidence Found", evidence),
-        textLine("Matter Created", formatCsvDate(row.matter_created_at)),
-        textLine("Why This Was Flagged", whyFlagged(row.step_code, status, row.reason_code)),
+        textLine("Proof", proofPath(origin, row.evidence_source, row.evidence_ref_id)),
       ].filter(Boolean);
-
-      lines.push(`${index + 1}. ${workflowLabel(row.step_code)} - ${humanStatus(status)}`);
-      lines.push(...details.map((detail) => `   ${detail}`));
-      lines.push("");
+      return `* ${parts.join(" | ")}`;
     });
+
+    lines.push(`${reportIndex}. Attorney: ${attorney}`);
+    lines.push(`   Client/Matter: ${clientMatterName(first)}`);
+    lines.push(`   Matter Number: ${first.matter_number}`);
+    lines.push(`   Clio Link: ${clioMatterLink(String(first.matter_id))}`);
+    lines.push("");
+    lines.push("Missing Item(s):");
+    for (const item of missingItems) lines.push(`* ${item}`);
+    lines.push("");
+    lines.push("Action Needed:");
+    for (const item of actions) lines.push(`* ${item}`);
+    lines.push("");
+    lines.push("Proof of Completion Required:");
+    lines.push("Please reply in this thread for each matter once completed. Include:");
+    lines.push("* Client/matter name");
+    lines.push("* What was completed");
+    lines.push("* Proof of completion, such as a screenshot, confirmation note, or Clio update confirmation");
+    lines.push("");
+    lines.push("CWCA Audit Notes:");
+    for (const item of proofLines) lines.push(item);
+    lines.push("");
   }
+
+  lines.push("Audit Areas to Fine-Tune in the App Report:");
+  lines.push("");
+  lines.push("1. Welcome Packet");
+  lines.push("Requirement: Send within 2 business hours of a new matter being created.");
+  lines.push("If flagged: Check or send the Welcome Letter / Carta de Bienvenida template.");
+  lines.push("");
+  lines.push("2. Court Date Added");
+  lines.push("Requirement: Add within 2 business hours.");
+  lines.push("If flagged: Add or verify that the court/hearing/plea/status/continuance calendar event is added to the matter.");
+  lines.push("");
+  lines.push("3. Client Contact");
+  lines.push("Requirement: Complete by the next business day at 5:00 PM.");
+  lines.push("If flagged: Check whether an email was sent or communication was logged with the client.");
+  lines.push("Clarification: There should be proof that the client was contacted, either through an email, phone call log, or communication note.");
+  lines.push("");
+  lines.push("4. Post-Court Call");
+  lines.push("Requirement: Schedule or complete within 24 hours after court results are received, if the case continues.");
+  lines.push("Clarification: There should be a calendar event showing that a post-court phone call with the attorney exists.");
+  lines.push("If flagged: Schedule or verify the post-court attorney call after court results are received, if the case continues.");
 
   return lines.join("\r\n");
 }

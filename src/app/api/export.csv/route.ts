@@ -11,30 +11,27 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const url = new URL(request.url);
+  const formData = await request.formData().catch(() => null);
+  const formValue = (name: string) => {
+    const value = formData?.get(name);
+    return typeof value === "string" ? value : "";
+  };
   const filters = {
-    attorney: url.searchParams.get("attorney") ?? "",
-    overall: url.searchParams.get("overall") ?? "",
-    from: url.searchParams.get("from") ?? "",
-    to: url.searchParams.get("to") ?? "",
+    attorney: formValue("attorney") || url.searchParams.get("attorney") || "",
+    overall: formValue("overall") || url.searchParams.get("overall") || "",
+    from: formValue("from") || url.searchParams.get("from") || "",
+    to: formValue("to") || url.searchParams.get("to") || "",
   };
   const exportType = url.searchParams.get("type") ?? "";
   const isActionList = exportType === "actions";
   const isCaseManagerText = exportType === "case-manager-text";
-  const caseManagerFilters = isCaseManagerText
-    ? {
-        attorney: "",
-        overall: "",
-        from: "",
-        to: "",
-      }
-    : filters;
   const body = isCaseManagerText
-    ? await caseManagerTodoText(caseManagerFilters, url.origin)
+    ? await caseManagerTodoText(filters, url.origin)
     : isActionList
       ? await actionItemsCsv(filters, url.origin)
       : await dashboardCsv(filters);
   const filename = isCaseManagerText
-    ? "cwca-case-manager-to-do-list.txt"
+    ? "cwca-case-manager-missing-items-review.txt"
     : isActionList
       ? "cwca-case-manager-action-report.csv"
       : "cwca-audit.csv";
