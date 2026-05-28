@@ -347,6 +347,40 @@ function workspaceFocusLabel(focus: string): string {
   return WORKSPACE_FOCUS_FILTERS.find((filter) => filter.id === focus)?.label ?? "All Areas";
 }
 
+function DashboardUnavailable({ message, connected }: { message: string; connected: boolean }) {
+  return (
+    <main className="shell">
+      <section className="app-header topbar">
+        <div className="title">
+          <div className="eyebrow-row">
+            <span className="eyebrow">Internal Workflow Coaching</span>
+            <span className="badge Pass">Read-Only Clio</span>
+          </div>
+          <h1>Workflow Auditor</h1>
+          <p>Open matters, proof links, and follow-up in one focused workspace.</p>
+          <div className="header-meta">
+            <span>Version: {APP_VERSION}</span>
+          </div>
+        </div>
+        <div className="actions header-actions">
+          <ThemeToggle />
+          {connected ? <span className="badge Pass">Clio Connected</span> : <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>}
+          <a className="button" href="/logout">Log Out</a>
+        </div>
+      </section>
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Dashboard Temporarily Unavailable</h2>
+            <p>{message}</p>
+          </div>
+          <a className="button primary" href="/">Try Again</a>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
@@ -362,12 +396,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const today = dateInput(new Date());
   const monthStart = monthStartInput(new Date());
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
-  const data = await getDashboardData(filters);
+  let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
+  try {
+    data = await getDashboardData(filters);
+  } catch {
+    data = null;
+  }
+  if (!data) {
+    return (
+      <DashboardUnavailable
+        connected={connected}
+        message="The dashboard could not reach the database. Check DATABASE_URL in Vercel and make sure the database is awake and accepting connections."
+      />
+    );
+  }
+  const dashboardData = data;
   const auditBatchSize = Math.max(1, Number(process.env.AUDIT_BATCH_SIZE ?? "5") || 5);
-  const totalCount = num(data.summary.total);
-  const uncheckedCount = num(data.summary.unchecked);
+  const totalCount = num(dashboardData.summary.total);
+  const uncheckedCount = num(dashboardData.summary.unchecked);
   const checkedCount = Math.max(0, totalCount - uncheckedCount);
-  const needsFollowUpCount = num(data.summary.flag) + num(data.summary.late) + num(data.summary.review);
+  const needsFollowUpCount = num(dashboardData.summary.flag) + num(dashboardData.summary.late) + num(dashboardData.summary.review);
   const batchesLeft = Math.ceil(uncheckedCount / auditBatchSize);
   const progressPct = totalCount ? Math.round((checkedCount / totalCount) * 100) : 0;
   const nextBatchCount = Math.min(auditBatchSize, uncheckedCount);
@@ -377,10 +425,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const exportParams = new URLSearchParams(filters).toString();
   const actionExportParams = new URLSearchParams(filters);
   actionExportParams.set("type", "actions");
-  const lastRunText = data.lastRun
-    ? `${data.lastRun.status} at ${formatLocal(data.lastRun.finished_at ?? data.lastRun.started_at)}`
+  const lastRunText = dashboardData.lastRun
+    ? `${dashboardData.lastRun.status} at ${formatLocal(dashboardData.lastRun.finished_at ?? dashboardData.lastRun.started_at)}`
     : "No audit has run yet";
-  const allWorkspaceRows = (data.workspaceItems as WorkspaceAuditItem[]).map((item) => ({
+  const allWorkspaceRows = (dashboardData.workspaceItems as WorkspaceAuditItem[]).map((item) => ({
     attorney: item.responsible_attorney_name || "Unassigned",
     row: {
       matterId: item.matter_id,
@@ -442,19 +490,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const activeWorkspaceFocusLabel = workspaceFocusLabel(workspaceFocusFilter);
   const statusChart = [
     { label: "Needs Follow-Up", value: needsFollowUpCount, className: "followup" },
-    { label: "On Track", value: num(data.summary.pass), className: "ontrack" },
-    { label: "Not Due Yet", value: num(data.summary.pending), className: "pending" },
+    { label: "On Track", value: num(dashboardData.summary.pass), className: "ontrack" },
+    { label: "Not Due Yet", value: num(dashboardData.summary.pending), className: "pending" },
     { label: "Still To Audit", value: uncheckedCount, className: "unchecked" },
   ];
   const statusChartRawTotal = statusChart.reduce((sum, item) => sum + item.value, 0);
   const statusChartTotal = Math.max(1, statusChartRawTotal);
   const topAttorneyChart = workspaceSections.filter((section) => section.needsFollowUp > 0).slice(0, 8);
   const maxAttorneyFollowUp = Math.max(1, ...topAttorneyChart.map((section) => section.needsFollowUp));
-  const healthPct = totalCount ? Math.round((num(data.summary.pass) / totalCount) * 100) : 0;
+  const healthPct = totalCount ? Math.round((num(dashboardData.summary.pass) / totalCount) * 100) : 0;
   const donutSegments = [
     { color: "#b42318", value: needsFollowUpCount },
-    { color: "#067647", value: num(data.summary.pass) },
-    { color: "#175cd3", value: num(data.summary.pending) },
+    { color: "#067647", value: num(dashboardData.summary.pass) },
+    { color: "#175cd3", value: num(dashboardData.summary.pending) },
     { color: "#98a2b3", value: uncheckedCount },
   ];
   let donutCursor = 0;
@@ -468,9 +516,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         .join(", ")
     : "#98a2b3 0% 100%";
   const issueBreakdown = [
-    { label: "Missing Evidence", value: num(data.summary.missing_items), className: "red" },
-    { label: "Late Timing", value: num(data.summary.late_items), className: "amber" },
-    { label: "Needs Review", value: num(data.summary.unknown_items), className: "purple" },
+    { label: "Missing Evidence", value: num(dashboardData.summary.missing_items), className: "red" },
+    { label: "Late Timing", value: num(dashboardData.summary.late_items), className: "amber" },
+    { label: "Needs Review", value: num(dashboardData.summary.unknown_items), className: "purple" },
     { label: "Client Follow-Up Risk", value: clientFollowUpCount, className: "blue" },
   ];
   const maxIssueCount = Math.max(1, ...issueBreakdown.map((item) => item.value));
@@ -622,10 +670,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
 
       <section className="grid">
         <div className="stat focus-stat stat-red"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Missing, late, or review items.</p></div>
-        <div className="stat stat-green"><span>On Track</span><strong>{data.summary.pass}</strong><p>No current workflow problems found.</p></div>
-        <div className="stat stat-blue"><span>Not Due Yet</span><strong>{data.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
-        <div className="stat stat-purple"><span>Needs Review</span><strong>{data.summary.review}</strong><p>Check visibility before coaching.</p></div>
-        <div className="stat stat-amber"><span>Late Timing</span><strong>{data.summary.late}</strong><p>Evidence was found after the goal.</p></div>
+        <div className="stat stat-green"><span>On Track</span><strong>{dashboardData.summary.pass}</strong><p>No current workflow problems found.</p></div>
+        <div className="stat stat-blue"><span>Not Due Yet</span><strong>{dashboardData.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
+        <div className="stat stat-purple"><span>Needs Review</span><strong>{dashboardData.summary.review}</strong><p>Check visibility before coaching.</p></div>
+        <div className="stat stat-amber"><span>Late Timing</span><strong>{dashboardData.summary.late}</strong><p>Evidence was found after the goal.</p></div>
         <div className="stat stat-slate"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
       </section>
 
@@ -1034,7 +1082,7 @@ Please reply in this thread for each matter once completed. Include:
             Responsible Attorney
             <select name="attorney" defaultValue={filters.attorney}>
               <option value="">All</option>
-              {data.attorneys.map((a) => (
+              {dashboardData.attorneys.map((a) => (
                 <option key={a.id ?? "none"} value={a.id ?? ""}>{a.name || "Unassigned"} ({a.count})</option>
               ))}
             </select>
@@ -1074,7 +1122,7 @@ Please reply in this thread for each matter once completed. Include:
         <div className="filter-summary">
           <span>{checkedCount} of {totalCount} audited</span>
           <span>{uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left` : "All discovered matters checked"}</span>
-          {data.lastRun?.message ? <span>{data.lastRun.message}</span> : null}
+          {dashboardData.lastRun?.message ? <span>{dashboardData.lastRun.message}</span> : null}
         </div>
       </section>
       ) : null}
@@ -1191,7 +1239,7 @@ Please reply in this thread for each matter once completed. Include:
 
       {activeTab === "matters" ? (
       <section className="matter-list">
-        {data.matters.length ? data.matters.map((m) => {
+        {dashboardData.matters.length ? dashboardData.matters.map((m) => {
           const items = m.items as DashboardItem[];
           const evidenceItems = items.filter((i) => evidencePath(i));
           const refreshNeeded = needsMatterRefresh(items);
@@ -1307,7 +1355,7 @@ Please reply in this thread for each matter once completed. Include:
               </tr>
             </thead>
             <tbody>
-              {data.metrics.map((m) => {
+              {dashboardData.metrics.map((m) => {
                 const focus = metricFocus(m);
                 const checked = num(m.matters_checked);
                 const pass = num(m.pass_count);

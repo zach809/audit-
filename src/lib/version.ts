@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-fluid-motion-ui-2026-05-27";
+export const APP_VERSION = "cwca-database-timeout-friendly-2026-05-28";

@@ -13,10 +13,27 @@ export function db() {
     global.cwcaSql = postgres(appConfig().databaseUrl, {
       max: 5,
       idle_timeout: 20,
-      connect_timeout: 15,
+      connect_timeout: 8,
     });
   }
   return global.cwcaSql;
+}
+
+function dbErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (raw.includes("CONNECT_TIMEOUT")) {
+    return "Database connection timed out. Check that DATABASE_URL is correct, the database is awake, and Vercel is allowed to connect.";
+  }
+  if (raw.includes("ECONNREFUSED") || raw.includes("ENOTFOUND") || raw.includes("ETIMEDOUT")) {
+    return "Database connection failed. Check DATABASE_URL and the database network settings.";
+  }
+  return raw;
+}
+
+export function formatDbError(error: unknown): Error {
+  const formatted = new Error(dbErrorMessage(error));
+  if (error instanceof Error && error.stack) formatted.stack = error.stack;
+  return formatted;
 }
 
 const schema = `
@@ -108,7 +125,13 @@ create index if not exists audit_item_status_idx on audit_item(status);
 
 export async function initDb(): Promise<void> {
   if (!global.cwcaDbReady) {
-    global.cwcaDbReady = db().unsafe(schema).then(() => undefined);
+    global.cwcaDbReady = db()
+      .unsafe(schema)
+      .then(() => undefined)
+      .catch((error) => {
+        global.cwcaDbReady = undefined;
+        throw formatDbError(error);
+      });
   }
   return global.cwcaDbReady;
 }
