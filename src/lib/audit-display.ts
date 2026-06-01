@@ -18,6 +18,7 @@ export function isInternalPlaceholder(reason?: string | null): boolean {
 }
 
 export function displayAuditStatus(status: string, reasonCode?: string | null): string {
+  if (status === "Missing") return "Needs Follow-Up";
   if (status === "Unknown" && isGenericApiError(reasonCode)) return "Needs Recheck";
   if (status === "Unknown") return "Needs Review";
   if (status === "On Time") return "On Track";
@@ -56,7 +57,7 @@ export function workspaceFilterMatches(status: string, filter: string): boolean 
 
 export function actionFor(stepCode: string, status: string, reasonCode?: string | null): string {
   const info = WORKFLOW_RULES[stepCode];
-  if (status === "Missing") return info ? `${info.missing} ${info.action}` : "Complete or verify this missing workflow step in Clio.";
+  if (status === "Missing") return info ? `${info.missing} ${info.action}` : "Complete or verify this workflow step in Clio.";
   if (status === "Late") return info?.late ?? "Review timing. Evidence was found after the deadline.";
   if (status === "Unknown" || status === "Needs Recheck") {
     if (isGenericApiError(reasonCode)) {
@@ -78,7 +79,7 @@ export function priorityFor(status: string): string {
 }
 
 export function whyFlagged(stepCode: string, status: string, reasonCode?: string | null): string {
-  if (status === "Missing") return `${workflowLabel(stepCode)} was not found from the allowed read-only Clio evidence.`;
+  if (status === "Missing") return `${workflowLabel(stepCode)} needs follow-up because CWCA did not find matching proof in Clio.`;
   if (status === "Late") return `${workflowLabel(stepCode)} was found, but after the expected timeliness goal.`;
   if (status === "Unknown" || status === "Needs Recheck") {
     if (reasonCode === "EVIDENCE_NOT_CONFIRMED") return "CWCA could not confidently confirm this proof from read-only Clio evidence.";

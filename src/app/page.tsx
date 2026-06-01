@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 function badge(value: string | null | undefined) {
   const label = value || "";
   const cls = statusClass(label);
-  return <span className={`badge ${cls}`}>{label || "N/A"}</span>;
+  return <span className={`badge ${cls}`}>{displayAuditStatus(label) || "N/A"}</span>;
 }
 
 type DashboardItem = {
@@ -117,7 +117,7 @@ function stepCell(items: DashboardItem[], code: string) {
 function problemText(item: DashboardItem): string {
   const info = WORKFLOW_RULES[item.stepCode] ?? {
     label: workflowLabel(item.stepCode),
-    missing: "Required evidence was not found.",
+    missing: "This workflow step needs follow-up.",
     action: "Review this item in Clio.",
     late: "Evidence was found late.",
   };
@@ -257,7 +257,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
     return { area: "Audit visibility", action: "Recheck matters and confirm emails/events are linked to the matter." };
   }
   if (missing >= late && missing > 0) {
-    return { area: "Missing evidence", action: "Focus on completing or logging required workflow steps in Clio." };
+    return { area: "Needs follow-up", action: "Focus on completing or logging required workflow steps in Clio." };
   }
   if (late > 0) {
     return { area: "Timeliness", action: "Some required steps were completed after the target time. Review the matter handoff and coach the team to complete setup items sooner." };
@@ -277,7 +277,7 @@ const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: stri
 
 const WORKSPACE_STATUS_FILTERS = [
   { id: "followup", label: "Needs Follow-Up" },
-  { id: "missing", label: "Missing" },
+  { id: "missing", label: "Needs Action" },
   { id: "review", label: "Needs Review" },
   { id: "late", label: "Late" },
   { id: "pending", label: "Pending" },
@@ -471,7 +471,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       const missing = rows.filter((row) => row.status === "Missing").length;
       const late = rows.filter((row) => row.status === "Late").length;
       const review = rows.filter((row) => REVIEW_STATUSES.has(row.status)).length;
-      const mainArea = review >= missing && review >= late && review > 0 ? "Review" : missing >= late && missing > 0 ? "Missing" : late > 0 ? "Late" : "On Track";
+      const mainArea = review >= missing && review >= late && review > 0 ? "Review" : missing >= late && missing > 0 ? "Needs follow-up" : late > 0 ? "Late" : "On Track";
       return { attorney, checked, followUp, onTrack, missing, late, review, mainArea };
     })
     .sort((a, b) => b.followUp - a.followUp || a.attorney.localeCompare(b.attorney))
@@ -516,7 +516,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         .join(", ")
     : "#98a2b3 0% 100%";
   const issueBreakdown = [
-    { label: "Missing Evidence", value: num(dashboardData.summary.missing_items), className: "red" },
+    { label: "Needs Action", value: num(dashboardData.summary.missing_items), className: "red" },
     { label: "Late Timing", value: num(dashboardData.summary.late_items), className: "amber" },
     { label: "Needs Review", value: num(dashboardData.summary.unknown_items), className: "purple" },
     { label: "Client Follow-Up Risk", value: clientFollowUpCount, className: "blue" },
@@ -669,7 +669,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       <section className="grid">
-        <div className="stat focus-stat stat-red"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Missing, late, or review items.</p></div>
+        <div className="stat focus-stat stat-red"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Items that need action, timing review, or verification.</p></div>
         <div className="stat stat-green"><span>On Track</span><strong>{dashboardData.summary.pass}</strong><p>No current workflow problems found.</p></div>
         <div className="stat stat-blue"><span>Not Due Yet</span><strong>{dashboardData.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
         <div className="stat stat-purple"><span>Needs Review</span><strong>{dashboardData.summary.review}</strong><p>Check visibility before coaching.</p></div>
@@ -1356,7 +1356,7 @@ Items Still Needing Action
                 <th>Pass Rate</th>
                 <th>Needs Action</th>
                 <th>Needs Review</th>
-                <th>Missing Steps</th>
+                <th>Follow-Up Steps</th>
                 <th>Late Steps</th>
                 <th>Unknown Checks</th>
                 <th>Main Area</th>

@@ -1639,7 +1639,7 @@ tbody tr:hover { background: #fbfcfe; }
 .Pass, .On-Time, .Strong { background: var(--green-soft); border-color: rgba(52, 199, 89, 0.18); color: var(--green); }
 .Pending, .Not-Due-Yet { background: var(--blue-soft); border-color: rgba(0, 122, 255, 0.18); color: var(--blue); }
 .Late, .Watch { background: var(--amber-soft); border-color: rgba(255, 149, 0, 0.22); color: var(--amber); }
-.Flag, .Missing, .Overdue, .Needs-Focus { background: var(--red-soft); border-color: rgba(255, 59, 48, 0.18); color: var(--red); }
+.Flag, .Missing, .Needs-Follow-Up, .Overdue, .Needs-Focus { background: var(--red-soft); border-color: rgba(255, 59, 48, 0.18); color: var(--red); }
 .Review, .Unknown, .Needs-Review, .Needs-Recheck { background: var(--purple-soft); border-color: rgba(175, 82, 222, 0.18); color: var(--purple); }
 .Unchecked, .Not-Checked, .No-Data, .NA {
   background: #eef2f7;
