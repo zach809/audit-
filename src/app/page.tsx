@@ -1003,8 +1003,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
               <span className="label">Main Report</span>
-              <strong>Case Manager Audit - Missing Items Review</strong>
-              <p>Plain text report in the requested format, grouped by attorney and matter.</p>
+              <strong>End-of-Week Case Manager Audit Report</strong>
+              <p>Plain text report with alerts, flagged matters, current status, and next steps.</p>
               <div className="report-date-row">
                 <label>
                   Report From
@@ -1039,30 +1039,39 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
         <div className="report-preview">
           <span className="label">Report Format Preview</span>
-          <pre>{`Case Manager Audit - Missing Items Review
+          <pre>{`End-of-Week Clio Case Manager Audit Report
 
-Please review the matters below and complete all missing items in Clio.
+Priority Summary
+* Flagged matters reviewed: 3
+* Items still needing action: 2
+* Completed late/resolved items: 1
 
-1. Attorney: [Attorney Name]
-   Client/Matter: [Client Name]
+Flagged Matters
+
+1. Matter: [Client Name]
+   Attorney: [Attorney Name]
    Matter Number: [Matter Number]
    Clio Link: [Insert Clio Matter Link]
 
-Missing Item(s):
-* Welcome packet not found
-* Calendar event missing
-* Appearance filing follow-up needed
+   Alert / Flag: Alert: Welcome packet was not completed within the required timeframe.
 
-Action Needed:
-* Send the welcome packet if not already sent
-* Add the required calendar event
-* Confirm/file the appearance
+   Flagged Matter & What Happened:
+   Welcome Packet is still flagged because CWCA did not find matching proof in Clio.
 
-Proof of Completion Required:
-Please reply in this thread for each matter once completed. Include:
-* Client/matter name
-* What was completed
-* Proof of completion, such as a screenshot, confirmation note, or Clio update confirmation`}</pre>
+   What the Team Did:
+   No proof of completion has been found yet.
+
+   Current Status:
+   Still Needs Action
+
+   Next Step:
+   Send the welcome packet if not already sent
+
+Completed Items
+* [Client Name] - Attorney Call: Complete
+
+Items Still Needing Action
+* [Client Name] - Welcome Packet: Still Needs Action.`}</pre>
         </div>
       </section>
       ) : null}

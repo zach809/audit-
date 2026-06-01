@@ -577,6 +577,55 @@ function matterActionItem(stepCode: string): string {
   }
 }
 
+function alertDescription(row: ActionCsvRow): string {
+  const status = String(row.item_status ?? "");
+  const area = workflowLabel(row.step_code);
+  if (status === "Late") return `Alert: ${area} was completed after the expected timeframe.`;
+  if (status === "Unknown") return `Flagged Matter: ${area} could not be confirmed from the available Clio proof.`;
+  return `Alert: ${area} was not completed within the required timeframe.`;
+}
+
+function whatHappened(row: ActionCsvRow): string {
+  const status = String(row.item_status ?? "");
+  const area = workflowLabel(row.step_code);
+  if (status === "Late") {
+    return `${area} was found, but it appears to have happened after the target time.`;
+  }
+  if (status === "Unknown") {
+    return `${area} needs review because CWCA could not clearly confirm the proof from Clio.`;
+  }
+  return `${area} is still flagged because CWCA did not find matching proof in Clio.`;
+}
+
+function whatTeamDid(row: ActionCsvRow, origin: string): string {
+  const proof = proofPath(origin, row.evidence_source, row.evidence_ref_id);
+  if (row.evidence_at) {
+    const found = formatCsvDate(row.evidence_at);
+    return proof
+      ? `Proof was found on ${found}. Proof saved in auditor: ${proof}`
+      : `Proof was found on ${found}.`;
+  }
+  if (String(row.item_status ?? "") === "Unknown") {
+    return "No clear proof of completion is available yet. The team should verify the item in Clio.";
+  }
+  return "No proof of completion has been found yet.";
+}
+
+function currentStatus(row: ActionCsvRow): "Complete" | "Pending" | "Still Needs Action" | "In Progress" {
+  const status = String(row.item_status ?? "");
+  if (row.evidence_at || status === "Late") return "Complete";
+  if (status === "Unknown") return "Pending";
+  return "Still Needs Action";
+}
+
+function priorityRank(row: ActionCsvRow): number {
+  const status = String(row.item_status ?? "");
+  if (status === "Missing") return 1;
+  if (status === "Unknown") return 2;
+  if (status === "Late") return 3;
+  return 4;
+}
+
 export async function caseManagerTodoText(filters: DashboardFilters = {}, origin = ""): Promise<string> {
   const rows = await getActionRows(filters);
   const generated = new Intl.DateTimeFormat("en-US", {
@@ -588,15 +637,16 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
     minute: "2-digit",
   }).format(new Date());
   const lines = [
-    "Case Manager Audit - Missing Items Review",
+    "End-of-Week Clio Case Manager Audit Report",
     `Generated: ${generated}`,
     `Date Range: ${reportDateRange(filters)}`,
-    "Please review the matters below and complete all missing items in Clio.",
+    "Use this report for internal workflow follow-up. Open Clio, verify the item, and keep case details in Clio.",
     "",
   ];
 
   if (!rows.length) {
-    lines.push("No open-matter missing, late, or review items were found for this report.");
+    lines.push("Priority Summary");
+    lines.push("* No alerts, flagged matters, or needs-action items were found for this report range.");
     return lines.join("\r\n");
   }
 
@@ -606,66 +656,76 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
     matters.set(key, [...(matters.get(key) ?? []), row]);
   }
 
+  const sortedMatterGroups = Array.from(matters.values()).sort((a, b) => {
+    const aRank = Math.min(...a.map(priorityRank));
+    const bRank = Math.min(...b.map(priorityRank));
+    return aRank - bRank || clientMatterName(a[0]).localeCompare(clientMatterName(b[0]));
+  });
+  const allItems = rows.slice().sort((a, b) => priorityRank(a) - priorityRank(b));
+  const completedItems = allItems.filter((row) => currentStatus(row) === "Complete");
+  const openItems = allItems.filter((row) => currentStatus(row) !== "Complete");
+
+  lines.push("Priority Summary");
+  lines.push(`* Flagged matters reviewed: ${matters.size}`);
+  lines.push(`* Items still needing action: ${openItems.length}`);
+  lines.push(`* Completed late/resolved items: ${completedItems.length}`);
+  const topItems = openItems.slice(0, 5);
+  if (topItems.length) {
+    lines.push("* Highest-priority follow-up:");
+    for (const row of topItems) {
+      lines.push(`  - ${clientMatterName(row)}: ${alertDescription(row)}`);
+    }
+  }
+  lines.push("");
+  lines.push("Flagged Matters");
+  lines.push("");
+
   let reportIndex = 0;
-  for (const matterRows of matters.values()) {
+  for (const matterRows of sortedMatterGroups) {
     reportIndex += 1;
     const first = matterRows[0];
     const attorney = first.responsible_attorney_name || "Unassigned";
-    const missingItems = Array.from(new Set(matterRows.map((row) => matterMissingItemLabel(row.step_code, row.responsible_attorney_name))));
-    const actions = Array.from(new Set(matterRows.map((row) => matterActionItem(row.step_code))));
-    const proofLines = matterRows.map((row) => {
-      const parts = [
-        workflowLabel(row.step_code),
-        humanStatus(String(row.item_status ?? "")),
-        whyFlagged(row.step_code, String(row.item_status ?? ""), row.reason_code),
-        textLine("Due", formatCsvDate(row.deadline_at)),
-        textLine("Found", formatCsvDate(row.evidence_at)),
-        textLine("Proof", proofPath(origin, row.evidence_source, row.evidence_ref_id)),
-      ].filter(Boolean);
-      return `* ${parts.join(" | ")}`;
-    });
-
-    lines.push(`${reportIndex}. Attorney: ${attorney}`);
-    lines.push(`   Client/Matter: ${clientMatterName(first)}`);
+    lines.push(`${reportIndex}. Matter: ${clientMatterName(first)}`);
+    lines.push(`   Attorney: ${attorney}`);
     lines.push(`   Matter Number: ${first.matter_number}`);
     lines.push(`   Clio Link: ${clioMatterLink(String(first.matter_id))}`);
     lines.push("");
-    lines.push("Missing Item(s):");
-    for (const item of missingItems) lines.push(`* ${item}`);
-    lines.push("");
-    lines.push("Action Needed:");
-    for (const item of actions) lines.push(`* ${item}`);
-    lines.push("");
-    lines.push("Proof of Completion Required:");
-    lines.push("Please reply in this thread for each matter once completed. Include:");
-    lines.push("* Client/matter name");
-    lines.push("* What was completed");
-    lines.push("* Proof of completion, such as a screenshot, confirmation note, or Clio update confirmation");
-    lines.push("");
-    lines.push("CWCA Audit Notes:");
-    for (const item of proofLines) lines.push(item);
-    lines.push("");
+    for (const row of matterRows.sort((a, b) => priorityRank(a) - priorityRank(b))) {
+      lines.push(`   Alert / Flag: ${alertDescription(row)}`);
+      lines.push("");
+      lines.push("   Flagged Matter & What Happened:");
+      lines.push(`   ${whatHappened(row)}`);
+      lines.push("");
+      lines.push("   What the Team Did:");
+      lines.push(`   ${whatTeamDid(row, origin)}`);
+      lines.push("");
+      lines.push("   Current Status:");
+      lines.push(`   ${currentStatus(row)}`);
+      lines.push("");
+      lines.push("   Next Step:");
+      lines.push(`   ${matterActionItem(row.step_code)}`);
+      if (row.deadline_at) lines.push(`   Due: ${formatCsvDate(row.deadline_at)}`);
+      lines.push("");
+    }
   }
 
-  lines.push("Audit Areas to Fine-Tune in the App Report:");
+  lines.push("Completed Items");
+  if (!completedItems.length) {
+    lines.push("* No completed flagged items were found in this report range.");
+  } else {
+    for (const row of completedItems) {
+      lines.push(`* ${clientMatterName(row)} - ${workflowLabel(row.step_code)}: Complete`);
+    }
+  }
   lines.push("");
-  lines.push("1. Welcome Packet");
-  lines.push("Requirement: Send within 2 business hours of a new matter being created.");
-  lines.push("If flagged: Check or send the Welcome Letter / Carta de Bienvenida template.");
-  lines.push("");
-  lines.push("2. Court Date Added");
-  lines.push("Requirement: Add within 2 business hours.");
-  lines.push("If flagged: Add or verify that the court/hearing/plea/status/continuance calendar event is added to the matter.");
-  lines.push("");
-  lines.push("3. Client Contact");
-  lines.push("Requirement: Complete by the next business day at 5:00 PM.");
-  lines.push("If flagged: Check whether an email was sent or communication was logged with the client.");
-  lines.push("Clarification: There should be proof that the client was contacted, either through an email, phone call log, or communication note.");
-  lines.push("");
-  lines.push("4. Post-Court Call");
-  lines.push("Requirement: Schedule or complete within 24 hours after court results are received, if the case continues.");
-  lines.push("Clarification: There should be a calendar event showing that a post-court phone call with the attorney exists.");
-  lines.push("If flagged: Schedule or verify the post-court attorney call after court results are received, if the case continues.");
+  lines.push("Items Still Needing Action");
+  if (!openItems.length) {
+    lines.push("* No items still need action.");
+  } else {
+    for (const row of openItems) {
+      lines.push(`* ${clientMatterName(row)} - ${workflowLabel(row.step_code)}: ${currentStatus(row)}. Next step: ${matterActionItem(row.step_code)}`);
+    }
+  }
 
   return lines.join("\r\n");
 }

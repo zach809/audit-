@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       ? await actionItemsCsv(filters, url.origin)
       : await dashboardCsv(filters);
   const filename = isCaseManagerText
-    ? "cwca-case-manager-missing-items-review.txt"
+    ? "cwca-end-of-week-case-manager-audit-report.txt"
     : isActionList
       ? "cwca-case-manager-action-report.csv"
       : "cwca-audit.csv";
