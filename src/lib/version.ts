@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-softer-follow-up-wording-2026-06-01";
+export const APP_VERSION = "cwca-welcome-letter-template-check-2026-06-01";

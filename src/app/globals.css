@@ -380,7 +380,7 @@ button:active, .button:active { transform: translateY(0) scale(0.985); }
   box-shadow: var(--shadow-soft);
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 18px;
   padding: 8px;
 }

@@ -305,7 +305,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         .map((comm): Evidence<ClioCommunication> | null => {
           const at = commDate(comm);
           if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
-          const text = haystack(comm.subject, comm.body);
+          const text = haystack(comm.subject, comm.type);
           if (!matcher(text)) return null;
           const direction = isOutbound(comm, record.client_id);
           if (direction !== true) return null;

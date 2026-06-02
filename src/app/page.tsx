@@ -268,7 +268,6 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 type DashboardTab = "workspace" | "matters" | "reports" | "guide" | "compliance";
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
-  { id: "workspace", label: "Attorney Workspace", description: "Grouped audit items by attorney" },
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
   { id: "guide", label: "Guide", description: "How to read the results" },
@@ -331,7 +330,7 @@ const GUIDE_STATUS_CARDS = [
 ];
 
 function dashboardTab(value?: string): DashboardTab {
-  return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "workspace";
+  return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "matters";
 }
 
 function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
@@ -948,7 +947,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </div>
           </div>
           <div className="playbook-list">
-            <div><strong>1. Start with Attorney Workspace.</strong><span>Use the grouped attorney view to see what actually needs follow-up.</span></div>
+            <div><strong>1. Start with Matters.</strong><span>Use the matter cards to see what needs follow-up and open the proof links.</span></div>
             <div><strong>2. Verify in Clio.</strong><span>Open the Clio link and proof link before deciding whether coaching is needed.</span></div>
             <div><strong>3. Set the report range.</strong><span>Use Reports to choose the exact dates you want covered before downloading.</span></div>
             <div><strong>4. Send the case-manager list.</strong><span>Download the missing-items review when you need a clean follow-up handoff.</span></div>

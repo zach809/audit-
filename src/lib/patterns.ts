@@ -34,6 +34,8 @@ export function includesAny(text: string, terms: string[]): boolean {
 export const TEMPLATE_PATTERNS = {
   welcome: [
     "welcome letter",
+    "welcome letter -",
+    "welcome letter:",
     "carta de bienvenida",
     "welcome packet",
     "bienvenida",
@@ -189,7 +191,8 @@ export const CALENDAR_PATTERNS = {
 };
 
 export function isWelcomeTemplate(text: string): boolean {
-  return includesAny(text, TEMPLATE_PATTERNS.welcome);
+  const normalized = normalizeText(text);
+  return normalized.startsWith("welcome letter") || includesAny(normalized, TEMPLATE_PATTERNS.welcome);
 }
 
 export function isAppearanceTemplate(text: string): boolean {
