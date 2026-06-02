@@ -7,6 +7,7 @@ import { APP_VERSION } from "@/lib/version";
 import { APP_TZ } from "@/lib/config";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
 import { ThemeToggle } from "./theme-toggle";
+import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import {
   actionFor,
   auditItemPriority,
@@ -488,6 +489,24 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const clientFollowUpRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "client-follow-up"));
   const clientFollowUpCount = clientFollowUpRows.filter((item) => isFollowUpStatus(item.row.status)).length;
   const activeWorkspaceFocusLabel = workspaceFocusLabel(workspaceFocusFilter);
+  const reviewBuilderItems: ReviewBuilderItem[] = allWorkspaceRows
+    .filter((item) => isFollowUpStatus(item.row.status))
+    .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
+    .slice(0, 100)
+    .map((item) => ({
+      id: `${item.row.matterId}-${item.row.stepCode}-${item.row.status}`,
+      attorney: item.attorney,
+      clientName: item.row.clientName,
+      matterNumber: item.row.matterNumber,
+      auditItem: workflowLabel(item.row.stepCode),
+      status: displayAuditStatus(item.row.status),
+      why: actionFor(item.row.stepCode, item.row.status),
+      nextStep: actionFor(item.row.stepCode, item.row.status),
+      due: item.row.deadlineAt ? formatLocal(item.row.deadlineAt) : null,
+      found: item.row.evidenceAt ? formatLocal(item.row.evidenceAt) : null,
+      clioUrl: clioMatterPath(item.row.matterId),
+      proofUrl: item.row.evidenceUrl ?? null,
+    }));
   const statusChart = [
     { label: "Needs Follow-Up", value: needsFollowUpCount, className: "followup" },
     { label: "On Track", value: num(dashboardData.summary.pass), className: "ontrack" },
@@ -1032,6 +1051,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <h2>Reports</h2>
           </div>
         </div>
+        <ReviewBuilder items={reviewBuilderItems} />
         <div className="report-grid">
           <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
