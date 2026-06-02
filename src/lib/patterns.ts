@@ -43,7 +43,9 @@ export const TEMPLATE_PATTERNS = {
   ],
   appearance: [
     "court appearance has been filed notification",
+    "court appearance has been filed",
     "notificacion de presentacion en la corte",
+    "notificación de presentación en la corte",
     "notice of appearance",
     "filed appearance",
     "e-filed",
@@ -53,7 +55,9 @@ export const TEMPLATE_PATTERNS = {
     "court result and next court date",
     "final court result - your representation has ended",
     "resultado del juicio y proxima fecha de audiencia",
+    "resultado del juicio y próxima fecha de audiencia",
     "resultado final del caso: su representacion ha terminado",
+    "resultado final del caso: su representación ha terminado",
     "court result",
     "court results",
     "next court date",
@@ -64,7 +68,10 @@ export const TEMPLATE_PATTERNS = {
     "in-person court reminder",
     "recordatorio de audiencia presencial",
     "zoom court reminder & instructions",
+    "zoom instructions for your court hearing",
     "recordatorio e instrucciones para la audiencia por zoom",
+    "recordatorio e instrucciones para la audiencia por zoom manana",
+    "recordatorio e instrucciones para la audiencia por zoom mañana",
     "you have court",
   ],
 };
@@ -196,11 +203,18 @@ export function isWelcomeTemplate(text: string): boolean {
 }
 
 export function isAppearanceTemplate(text: string): boolean {
-  return includesAny(text, TEMPLATE_PATTERNS.appearance);
+  const normalized = normalizeText(text);
+  return normalized.startsWith("court appearance has been filed notification") || normalized.startsWith("notificacion de presentacion en la corte") || includesAny(normalized, TEMPLATE_PATTERNS.appearance);
 }
 
 export function isCourtResultTemplate(text: string): boolean {
-  return includesAny(text, TEMPLATE_PATTERNS.courtResults);
+  const normalized = normalizeText(text);
+  return normalized.startsWith("court result and next court date") || normalized.startsWith("final court result") || normalized.startsWith("resultado del juicio") || normalized.startsWith("resultado final del caso") || includesAny(normalized, TEMPLATE_PATTERNS.courtResults);
+}
+
+export function isCourtReminderTemplate(text: string): boolean {
+  const normalized = normalizeText(text);
+  return normalized.startsWith("in-person court reminder") || normalized.startsWith("recordatorio de audiencia presencial") || normalized.startsWith("zoom instructions for your court hearing") || normalized.startsWith("recordatorio e instrucciones para la audiencia por zoom") || includesAny(normalized, TEMPLATE_PATTERNS.courtReminder);
 }
 
 export function isAttorneyCall(text: string): boolean {

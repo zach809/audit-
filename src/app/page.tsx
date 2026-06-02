@@ -8,6 +8,7 @@ import { APP_TZ } from "@/lib/config";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
 import { ThemeToggle } from "./theme-toggle";
 import {
+  actionFor,
   auditItemPriority,
   displayAuditStatus,
   isFollowUpStatus,
@@ -598,6 +599,39 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           {notice}
         </section>
       ) : null}
+
+      <section className="audit-summary-strip" aria-label="Audit summary">
+        <div>
+          <span className="summary-icon">✓</span>
+          <strong>{checkedCount} of {totalCount}</strong>
+          <small>Matters audited</small>
+        </div>
+        <div>
+          <span className="summary-icon review">?</span>
+          <strong>{dashboardData.summary.review}</strong>
+          <small>Matters need review</small>
+        </div>
+        <div>
+          <span className="summary-icon followup">!</span>
+          <strong>{needsFollowUpCount}</strong>
+          <small>Need follow-up</small>
+        </div>
+        <div>
+          <span className="summary-icon success">✓</span>
+          <strong>{dashboardData.summary.pass}</strong>
+          <small>On track / complete</small>
+        </div>
+        <div>
+          <span className="summary-icon slate">↻</span>
+          <strong>{uncheckedCount}</strong>
+          <small>Still to audit</small>
+        </div>
+        <div>
+          <span className="summary-icon shield">◇</span>
+          <strong>{uncheckedCount > 0 ? `${batchesLeft} ${batchLabel}` : "Done"}</strong>
+          <small>{uncheckedCount > 0 ? "Safe batches left" : "All discovered matters checked"}</small>
+        </div>
+      </section>
 
       <nav className="dashboard-tabs" aria-label="Dashboard sections">
         {DASHBOARD_TABS.map((tab) => (
@@ -1251,6 +1285,10 @@ Items Still Needing Action
           const items = m.items as DashboardItem[];
           const evidenceItems = items.filter((i) => evidencePath(i));
           const refreshNeeded = needsMatterRefresh(items);
+          const attentionItems = items
+            .filter((i) => ["Missing", "Late", "Unknown"].includes(i.status))
+            .sort((a, b) => auditItemPriority(a.status) - auditItemPriority(b.status));
+          const nextAction = attentionItems[0];
           return (
             <article className="matter-card" key={m.matter_id}>
               <div className="matter-head">
@@ -1286,6 +1324,18 @@ Items Still Needing Action
                   </form>
                 </div>
               </div>
+
+              {!refreshNeeded && nextAction ? (
+                <section className={`next-action-card status-row-${statusClass(displayAuditStatus(nextAction.status, nextAction.reasonCode))}`}>
+                  <span className="label">Next Best Action</span>
+                  <strong>{actionFor(nextAction.stepCode, nextAction.status, nextAction.reasonCode)}</strong>
+                  <p><b>Why?</b> {problemText(nextAction)}</p>
+                  <div className="next-action-links">
+                    <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
+                    {evidencePath(nextAction) ? <a className="button compact" href={evidencePath(nextAction)}>Open Proof</a> : null}
+                  </div>
+                </section>
+              ) : null}
 
               {refreshNeeded ? (
                 <div className="refresh-needed">
