@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900">
+  <rect width="1500" height="900" fill="#eef3f7"/>
+  <text x="70" y="78" fill="#17202b" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="800">CWCA Color Direction Options</text>
+  <text x="70" y="112" fill="#5a6878" font-family="Segoe UI, Arial, sans-serif" font-size="17">Option 1 is applied in the app: professional, calmer, less muddy, with matching day and night modes.</text>
+
+  <g transform="translate(70 160)">
+    <rect width="430" height="640" rx="22" fill="#ffffff" stroke="#cbd6df"/>
+    <text x="28" y="48" fill="#17202b" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="800">Option 1: Legal Slate</text>
+    <text x="28" y="76" fill="#5a6878" font-family="Segoe UI, Arial, sans-serif" font-size="15">Applied. Balanced, polished, easiest to read.</text>
+    <rect x="28" y="108" width="374" height="190" rx="16" fill="#0f1115"/>
+    <rect x="48" y="132" width="170" height="32" rx="7" fill="#1d2027"/>
+    <rect x="48" y="178" width="330" height="86" rx="10" fill="#17191f" stroke="#3a3e48"/>
+    <rect x="238" y="132" width="96" height="32" rx="7" fill="#e3d8c8"/>
+    <text x="258" y="153" fill="#121419" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">Action</text>
+    <circle cx="64" cy="221" r="9" fill="#8fb39a"/>
+    <circle cx="92" cy="221" r="9" fill="#c58a54"/>
+    <circle cx="120" cy="221" r="9" fill="#b394bd"/>
+    <circle cx="148" cy="221" r="9" fill="#8fa7bb"/>
+    <text x="28" y="338" fill="#17202b" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="800">Night</text>
+    <g transform="translate(28 358)">
+      <rect width="66" height="66" rx="10" fill="#0f1115"/><rect x="76" width="66" height="66" rx="10" fill="#17191f"/><rect x="152" width="66" height="66" rx="10" fill="#e3d8c8"/><rect x="228" width="66" height="66" rx="10" fill="#8fa7bb"/><rect x="304" width="66" height="66" rx="10" fill="#8fb39a"/>
+      <text x="0" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#0F1115</text><text x="76" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#17191F</text><text x="152" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#E3D8C8</text><text x="228" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#8FA7BB</text><text x="304" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#8FB39A</text>
+    </g>
+    <text x="28" y="496" fill="#17202b" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="800">Day</text>
+    <g transform="translate(28 516)">
+      <rect width="66" height="66" rx="10" fill="#e8f3fb"/><rect x="76" width="66" height="66" rx="10" fill="#ffffff" stroke="#d0dce6"/><rect x="152" width="66" height="66" rx="10" fill="#17202b"/><rect x="228" width="66" height="66" rx="10" fill="#97bad5"/><rect x="304" width="66" height="66" rx="10" fill="#be814d"/>
+      <text x="0" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#E8F3FB</text><text x="76" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#FFFFFF</text><text x="152" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#17202B</text><text x="228" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#97BAD5</text><text x="304" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#BE814D</text>
+    </g>
+  </g>
+
+  <g transform="translate(535 160)">
+    <rect width="430" height="640" rx="22" fill="#ffffff" stroke="#cbd6df"/>
+    <text x="28" y="48" fill="#17202b" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="800">Option 2: Hirsch Formal</text>
+    <text x="28" y="76" fill="#5a6878" font-family="Segoe UI, Arial, sans-serif" font-size="15">More law-firm branding: navy, ivory, copper.</text>
+    <rect x="28" y="108" width="374" height="190" rx="16" fill="#101827"/>
+    <rect x="48" y="132" width="170" height="32" rx="7" fill="#1e293b"/>
+    <rect x="48" y="178" width="330" height="86" rx="10" fill="#fffdf8" opacity="0.96"/>
+    <rect x="238" y="132" width="96" height="32" rx="7" fill="#b95635"/>
+    <text x="258" y="153" fill="#fff" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">Action</text>
+    <g transform="translate(28 358)">
+      <rect width="66" height="66" rx="10" fill="#101827"/><rect x="76" width="66" height="66" rx="10" fill="#1e293b"/><rect x="152" width="66" height="66" rx="10" fill="#f7f3ea"/><rect x="228" width="66" height="66" rx="10" fill="#c8a24a"/><rect x="304" width="66" height="66" rx="10" fill="#b95635"/>
+      <text x="0" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#101827</text><text x="76" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#1E293B</text><text x="152" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#F7F3EA</text><text x="228" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#C8A24A</text><text x="304" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#B95635</text>
+    </g>
+  </g>
+
+  <g transform="translate(1000 160)">
+    <rect width="430" height="640" rx="22" fill="#ffffff" stroke="#cbd6df"/>
+    <text x="28" y="48" fill="#17202b" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="800">Option 3: Cool Minimal</text>
+    <text x="28" y="76" fill="#5a6878" font-family="Segoe UI, Arial, sans-serif" font-size="15">Most modern: periwinkle, pale blue, celadon.</text>
+    <rect x="28" y="108" width="374" height="190" rx="16" fill="#0c0c16"/>
+    <rect x="48" y="132" width="170" height="32" rx="7" fill="#202238"/>
+    <rect x="48" y="178" width="330" height="86" rx="10" fill="#c9e8ff" opacity="0.96"/>
+    <rect x="238" y="132" width="96" height="32" rx="7" fill="#6669ff"/>
+    <text x="258" y="153" fill="#fff" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">Action</text>
+    <g transform="translate(28 358)">
+      <rect width="66" height="66" rx="10" fill="#6669ff"/><rect x="76" width="66" height="66" rx="10" fill="#b8baff"/><rect x="152" width="66" height="66" rx="10" fill="#c9e8ff"/><rect x="228" width="66" height="66" rx="10" fill="#0c0c16"/><rect x="304" width="66" height="66" rx="10" fill="#b9f0cf"/>
+      <text x="0" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#6669FF</text><text x="76" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#B8BAFF</text><text x="152" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#C9E8FF</text><text x="228" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#0C0C16</text><text x="304" y="92" fill="#5a6878" font-family="Consolas, monospace" font-size="12">#B9F0CF</text>
+    </g>
+  </g>
+</svg>

@@ -195,6 +195,23 @@ export const CALENDAR_PATTERNS = {
     "welcome",
     "intake",
   ],
+  emailContact: [
+    "email",
+    "e-mail",
+    "emailed",
+    "send email",
+    "sent email",
+    "email client",
+    "client email",
+    "email to client",
+    "email with client",
+    "correo",
+    "correo electronico",
+    "correo electrónico",
+    "enviar correo",
+    "email enviado",
+    "mensaje al cliente",
+  ],
 };
 
 export function isWelcomeTemplate(text: string): boolean {
@@ -256,4 +273,11 @@ export function isNonCourtCalendarEvent(text: string): boolean {
 
 export function isPossibleCourtEvent(text: string): boolean {
   return Boolean(normalizeText(text)) && !isAttorneyCall(text) && !isNonCourtCalendarEvent(text);
+}
+
+export function isCalendarEmailContact(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!includesAny(normalized, CALENDAR_PATTERNS.emailContact)) return false;
+  if (isCourtEvent(normalized) || isCourtReminderTemplate(normalized)) return false;
+  return true;
 }

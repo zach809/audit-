@@ -5,6 +5,7 @@ import {
   haystack,
   isAppearanceTemplate,
   isAttorneyCall,
+  isCalendarEmailContact,
   isCourtEvent,
   isCourtResultTemplate,
   isPossibleCourtEvent,
@@ -399,8 +400,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
 
-  const clientContact = earliest(
-    evidence.communications
+  const clientContactCommunication = evidence.communications
       .map((comm): Evidence<ClioCommunication> | null => {
         const at = commDate(comm);
         if (!at) return null;
@@ -408,7 +408,20 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         if (direction !== true) return null;
         return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
       })
-      .filter(Boolean) as Evidence<ClioCommunication>[],
+      .filter(Boolean) as Evidence<ClioCommunication>[];
+
+  const clientContactCalendar = evidence.calendars
+    .map((cal): Evidence<ClioCalendarEntry> | null => {
+      const at = parseDate(cal.created_at ?? cal.start_at);
+      if (!at) return null;
+      const text = haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name);
+      if (!isCalendarEmailContact(text)) return null;
+      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
+
+  const clientContact = earliest(
+    [...clientContactCommunication, ...clientContactCalendar],
   );
 
   const unknownDirection = evidence.communications.some((comm) => isOutbound(comm, record.client_id) === null);

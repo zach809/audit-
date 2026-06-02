@@ -1,25 +1,25 @@
 :root {
-  --bg: #11100e;
-  --panel: rgba(23, 21, 18, 0.94);
-  --panel-strong: rgba(29, 26, 22, 0.96);
-  --panel-soft: rgba(32, 29, 25, 0.9);
-  --line: rgba(58, 52, 44, 0.92);
-  --line-soft: rgba(58, 52, 44, 0.66);
-  --text: #f1ece2;
-  --muted: #afa79a;
-  --blue: #8a98a8;
-  --blue-soft: rgba(138, 152, 168, 0.16);
-  --green: #93aa83;
-  --green-soft: rgba(147, 170, 131, 0.16);
-  --amber: #c37a2c;
-  --amber-soft: rgba(195, 122, 44, 0.18);
-  --red: #c37a2c;
-  --red-soft: rgba(195, 122, 44, 0.18);
-  --purple: #9d7a9c;
-  --purple-soft: rgba(157, 122, 156, 0.18);
-  --stone: #e7ded0;
-  --charcoal: #3a342c;
-  --deep-teal: #1f2c2c;
+  --bg: #0f1115;
+  --panel: rgba(23, 25, 31, 0.94);
+  --panel-strong: rgba(29, 32, 39, 0.96);
+  --panel-soft: rgba(34, 37, 45, 0.9);
+  --line: rgba(58, 62, 72, 0.9);
+  --line-soft: rgba(58, 62, 72, 0.58);
+  --text: #f2efe8;
+  --muted: #a8a29a;
+  --blue: #8fa7bb;
+  --blue-soft: rgba(143, 167, 187, 0.16);
+  --green: #8fb39a;
+  --green-soft: rgba(143, 179, 154, 0.16);
+  --amber: #c58a54;
+  --amber-soft: rgba(197, 138, 84, 0.18);
+  --red: #c58a54;
+  --red-soft: rgba(197, 138, 84, 0.18);
+  --purple: #b394bd;
+  --purple-soft: rgba(179, 148, 189, 0.18);
+  --stone: #e3d8c8;
+  --charcoal: #30343d;
+  --deep-teal: #21363a;
   --shadow: 0 28px 70px rgba(0, 0, 0, 0.56);
   --shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.34);
   --ring: 0 0 0 1px rgba(239, 235, 225, 0.08) inset;
@@ -59,11 +59,11 @@
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(239, 235, 225, 0.05) 0 1px, transparent 1px),
-    linear-gradient(90deg, rgba(239, 235, 225, 0.035) 0 1px, transparent 1px),
-    radial-gradient(circle at 14% 8%, rgba(90, 176, 232, 0.16), transparent 18%),
-    radial-gradient(circle at 88% 14%, rgba(217, 138, 26, 0.1), transparent 18%),
-    linear-gradient(180deg, #0d0907 0, #080504 360px, var(--bg) 100%);
+    linear-gradient(180deg, rgba(227, 216, 200, 0.04) 0 1px, transparent 1px),
+    linear-gradient(90deg, rgba(227, 216, 200, 0.03) 0 1px, transparent 1px),
+    radial-gradient(circle at 14% 8%, rgba(143, 167, 187, 0.14), transparent 18%),
+    radial-gradient(circle at 88% 14%, rgba(197, 138, 84, 0.08), transparent 18%),
+    linear-gradient(180deg, #101116 0, #0b0c10 360px, var(--bg) 100%);
   background-size: 28px 28px, 28px 28px, auto, auto, auto;
   color: var(--text);
   font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -71,8 +71,8 @@ body {
 
 body::before {
   background:
-    linear-gradient(180deg, rgba(247, 240, 227, 0.08), transparent 20%),
-    linear-gradient(90deg, transparent 0, rgba(247, 240, 227, 0.18) 50%, transparent 100%);
+    linear-gradient(180deg, rgba(242, 239, 232, 0.06), transparent 20%),
+    linear-gradient(90deg, transparent 0, rgba(143, 167, 187, 0.08) 50%, transparent 100%);
   content: "";
   inset: 0;
   pointer-events: none;
@@ -2826,6 +2826,248 @@ html[data-theme="day"] .workspace-row-head {
 html[data-theme="day"] .theme-toggle-thumb {
   background: var(--blue);
   transform: translateX(0);
+}
+
+/* Final palette cleanup: Night and Day now share one calmer visual system. */
+.app-header,
+.deployment-proof,
+.audit-summary-strip,
+.dashboard-tabs,
+.panel,
+.matter-card,
+.queue-panel,
+.stat,
+.workspace-panel,
+.workspace-group,
+.table-wrap,
+.login {
+  background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+  border-color: var(--line);
+}
+
+.app-header {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(143, 167, 187, 0.12), transparent 24%),
+    linear-gradient(135deg, #1d2027 0%, #111318 100%);
+}
+
+.app-header::before {
+  background: var(--amber);
+}
+
+.app-header::after {
+  background: linear-gradient(90deg, var(--stone) 0 110px, var(--blue) 110px 190px, var(--purple) 190px 260px, var(--charcoal) 260px 380px);
+}
+
+.deployment-proof {
+  background: linear-gradient(135deg, rgba(33, 54, 58, 0.88), rgba(17, 19, 24, 0.96));
+  border-color: rgba(143, 167, 187, 0.24);
+}
+
+.primary,
+html[data-theme="day"] .primary {
+  background: linear-gradient(180deg, #f4eee5, #d9cbb8);
+  border-color: rgba(227, 216, 200, 0.76);
+  color: #121419;
+}
+
+.primary:hover,
+html[data-theme="day"] .primary:hover {
+  background: #fbf6ee;
+  color: #121419;
+}
+
+.dashboard-tab.active,
+.workspace-filter.active,
+.workspace-focus.active {
+  background: linear-gradient(180deg, #f4eee5, #d9cbb8);
+  border-color: rgba(227, 216, 200, 0.7);
+  color: #121419;
+}
+
+.next-action-card,
+.problem-item.Missing,
+.problem-item.Late {
+  background: linear-gradient(180deg, rgba(197, 138, 84, 0.16), rgba(23, 25, 31, 0.92));
+  border-color: rgba(197, 138, 84, 0.34);
+}
+
+.problem-item.Unknown {
+  background: linear-gradient(180deg, rgba(179, 148, 189, 0.16), rgba(23, 25, 31, 0.92));
+  border-color: rgba(179, 148, 189, 0.34);
+}
+
+.step-block,
+.report-card,
+.report-preview,
+.review-editor,
+.review-preview,
+.review-item-list,
+.review-range-card,
+.evidence-links,
+.guide-card,
+.rule-row,
+.compliance-grid div,
+.attorney-health-card {
+  background: rgba(23, 25, 31, 0.72);
+  border-color: var(--line-soft);
+}
+
+input,
+select,
+textarea,
+.report-preview pre,
+.review-preview pre {
+  background: rgba(13, 15, 19, 0.92);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.Pass,
+.On-Time,
+.Strong {
+  background: var(--green-soft);
+  border-color: rgba(143, 179, 154, 0.34);
+  color: var(--green);
+}
+
+.Pending,
+.Not-Due-Yet {
+  background: var(--blue-soft);
+  border-color: rgba(143, 167, 187, 0.34);
+  color: var(--blue);
+}
+
+.Late,
+.Watch,
+.Flag,
+.Missing,
+.Needs-Follow-Up,
+.Overdue,
+.Needs-Focus {
+  background: var(--amber-soft);
+  border-color: rgba(197, 138, 84, 0.38);
+  color: #d6a06c;
+}
+
+.Review,
+.Unknown,
+.Needs-Review,
+.Needs-Recheck {
+  background: var(--purple-soft);
+  border-color: rgba(179, 148, 189, 0.38);
+  color: #ceb0d4;
+}
+
+html[data-theme="day"] {
+  --bg: #e8f3fb;
+  --panel: rgba(255, 255, 255, 0.94);
+  --panel-strong: rgba(255, 255, 255, 0.98);
+  --panel-soft: rgba(241, 247, 252, 0.94);
+  --line: rgba(137, 157, 177, 0.34);
+  --line-soft: rgba(137, 157, 177, 0.2);
+  --text: #17202b;
+  --muted: #5a6878;
+  --blue: #536f8a;
+  --blue-soft: rgba(151, 186, 213, 0.22);
+  --green: #4d8260;
+  --green-soft: rgba(119, 171, 135, 0.18);
+  --amber: #a66f3d;
+  --amber-soft: rgba(190, 129, 77, 0.18);
+  --red: #a66f3d;
+  --red-soft: rgba(190, 129, 77, 0.18);
+  --purple: #8d6f98;
+  --purple-soft: rgba(141, 111, 152, 0.16);
+  --stone: #f7f3ed;
+  --charcoal: #17202b;
+  --deep-teal: #d8eee8;
+  --shadow: 0 24px 60px rgba(48, 62, 77, 0.14);
+  --shadow-soft: 0 10px 30px rgba(48, 62, 77, 0.08);
+  --ring: 0 0 0 1px rgba(255, 255, 255, 0.82) inset;
+}
+
+html[data-theme="day"] body {
+  background:
+    linear-gradient(180deg, rgba(83, 111, 138, 0.04) 0 1px, transparent 1px),
+    linear-gradient(90deg, rgba(83, 111, 138, 0.035) 0 1px, transparent 1px),
+    radial-gradient(circle at 12% 6%, rgba(151, 186, 213, 0.34), transparent 22%),
+    radial-gradient(circle at 86% 8%, rgba(216, 238, 232, 0.56), transparent 24%),
+    linear-gradient(180deg, #f7fbff 0, #eef7fd 360px, var(--bg) 100%);
+  background-size: 30px 30px, 30px 30px, auto, auto, auto;
+}
+
+html[data-theme="day"] body::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.56), transparent 34%);
+}
+
+html[data-theme="day"] .app-header {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(151, 186, 213, 0.18), transparent 24%),
+    linear-gradient(135deg, #17202b 0%, #223044 100%);
+  border-color: rgba(83, 111, 138, 0.42);
+}
+
+html[data-theme="day"] .app-header::before {
+  background: #be814d;
+}
+
+html[data-theme="day"] .app-header::after {
+  background: linear-gradient(90deg, #f7f3ed 0 110px, #97bad5 110px 190px, #8d6f98 190px 260px, #536f8a 260px 380px);
+}
+
+html[data-theme="day"] .deployment-proof {
+  background: linear-gradient(135deg, #223044 0%, #17202b 100%);
+  border-color: rgba(151, 186, 213, 0.42);
+}
+
+html[data-theme="day"] .dashboard-tab.active,
+html[data-theme="day"] .workspace-filter.active,
+html[data-theme="day"] .workspace-focus.active {
+  background: #17202b;
+  border-color: rgba(83, 111, 138, 0.44);
+  color: #fff;
+}
+
+html[data-theme="day"] .dashboard-tab.active span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+html[data-theme="day"] .step-block,
+html[data-theme="day"] .report-card,
+html[data-theme="day"] .report-preview,
+html[data-theme="day"] .review-editor,
+html[data-theme="day"] .review-preview,
+html[data-theme="day"] .review-item-list,
+html[data-theme="day"] .review-range-card,
+html[data-theme="day"] .evidence-links,
+html[data-theme="day"] .guide-card,
+html[data-theme="day"] .rule-row,
+html[data-theme="day"] .compliance-grid div,
+html[data-theme="day"] .attorney-health-card {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: var(--line-soft);
+}
+
+html[data-theme="day"] .next-action-card,
+html[data-theme="day"] .problem-item.Missing,
+html[data-theme="day"] .problem-item.Late {
+  background: linear-gradient(180deg, rgba(190, 129, 77, 0.14), rgba(255, 255, 255, 0.86));
+  border-color: rgba(190, 129, 77, 0.3);
+}
+
+html[data-theme="day"] .problem-item.Unknown {
+  background: linear-gradient(180deg, rgba(141, 111, 152, 0.12), rgba(255, 255, 255, 0.86));
+  border-color: rgba(141, 111, 152, 0.26);
+}
+
+html[data-theme="day"] input,
+html[data-theme="day"] select,
+html[data-theme="day"] textarea,
+html[data-theme="day"] .report-preview pre,
+html[data-theme="day"] .review-preview pre {
+  background: #ffffff;
+  border-color: var(--line);
+  color: var(--text);
 }
 
 @media (prefers-reduced-motion: reduce) {

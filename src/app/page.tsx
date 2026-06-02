@@ -694,7 +694,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="court-rule-card">
             <span className="label">Calendar Matching</span>
             <strong>Flexible Detection</strong>
-            <p>Client name, case number, plea/status/hearing, and vague linked court entries can count when they are not obvious non-court events.</p>
+            <p>Client name, case number, plea/status/hearing, email contact entries, and vague linked court entries can count when they are not obvious non-court events.</p>
           </div>
         </div>
       </section>
