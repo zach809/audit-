@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-report-review-builder-2026-06-02";
+export const APP_VERSION = "cwca-weekly-report-review-builder-2026-06-02";

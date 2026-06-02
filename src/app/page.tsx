@@ -1051,7 +1051,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <h2>Reports</h2>
           </div>
         </div>
-        <ReviewBuilder items={reviewBuilderItems} />
+        <ReviewBuilder items={reviewBuilderItems} initialFrom={filters.from} initialTo={filters.to} />
         <div className="report-grid">
           <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
