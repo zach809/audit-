@@ -77,6 +77,11 @@ function isOutbound(comm: ClioCommunication, clientId: string | null): boolean |
   return null;
 }
 
+function isEmailCommunication(comm: ClioCommunication): boolean {
+  const text = communicationSearchText(comm);
+  return text.includes("email") || text.includes("e-mail") || text.includes("correo");
+}
+
 function earliest<T>(items: Evidence<T>[]): Evidence<T> | null {
   return items.sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 }
@@ -406,6 +411,22 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
 
+  const welcomeTemplateEvidence = communicationEvidence(isWelcomeTemplate, record.matter_created_at, { allowAnyDirection: true, includeBodyText: true });
+  const welcomeEmailFallback = earliest(
+    evidence.communications
+      .map((comm): Evidence<ClioCommunication> | null => {
+        const at = commDate(comm);
+        if (!at || at < record.matter_created_at) return null;
+        if (setup.corrective && at > setup.corrective) return null;
+        if (!isEmailCommunication(comm)) return null;
+        const direction = isOutbound(comm, record.client_id);
+        if (direction === false) return null;
+        return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+      })
+      .filter(Boolean) as Evidence<ClioCommunication>[],
+  );
+  const welcomeEvidence = welcomeTemplateEvidence ?? welcomeEmailFallback;
+
   const clientContactCommunication = evidence.communications
       .map((comm): Evidence<ClioCommunication> | null => {
         const at = commDate(comm);
@@ -446,7 +467,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     );
 
   const items: AuditItemResult[] = [
-    classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate, record.matter_created_at, { allowAnyDirection: true, includeBodyText: true }), setup.onTime, {
+    classify("SETUP_WELCOME", welcomeEvidence, setup.onTime, {
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Welcome Letter",
       unknown: Boolean(commError),
