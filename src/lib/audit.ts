@@ -425,7 +425,19 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       })
       .filter(Boolean) as Evidence<ClioCommunication>[],
   );
-  const welcomeEvidence = welcomeTemplateEvidence ?? welcomeEmailFallback;
+  const welcomeOutboundFallback = earliest(
+    evidence.communications
+      .map((comm): Evidence<ClioCommunication> | null => {
+        const at = commDate(comm);
+        if (!at || at < record.matter_created_at) return null;
+        if (clientDeadline && at > clientDeadline) return null;
+        const direction = isOutbound(comm, record.client_id);
+        if (direction !== true) return null;
+        return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+      })
+      .filter(Boolean) as Evidence<ClioCommunication>[],
+  );
+  const welcomeEvidence = welcomeTemplateEvidence ?? welcomeEmailFallback ?? welcomeOutboundFallback;
 
   const clientContactCommunication = evidence.communications
       .map((comm): Evidence<ClioCommunication> | null => {
