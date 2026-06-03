@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-polished-palettes-email-calendar-2026-06-02";
+export const APP_VERSION = "cwca-welcome-template-metadata-fix-2026-06-03";

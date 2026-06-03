@@ -52,9 +52,10 @@ export type ClioCommunication = {
   date?: string | null;
   created_at?: string | null;
   received_at?: string | null;
+  external_properties?: Array<{ name?: string | null; value?: string | null }>;
   user?: { id?: number; name?: string | null } | null;
-  senders?: Array<{ id?: number; name?: string | null }>;
-  receivers?: Array<{ id?: number; name?: string | null }>;
+  senders?: Array<{ id?: number; name?: string | null; type?: string | null }>;
+  receivers?: Array<{ id?: number; name?: string | null; type?: string | null }>;
 };
 
 export type ClioCalendarEntry = {

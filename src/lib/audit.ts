@@ -60,7 +60,12 @@ function parseDate(value?: string | null): Date | null {
 }
 
 function commDate(comm: ClioCommunication): Date | null {
-  return parseDate(comm.date ?? comm.created_at ?? comm.received_at);
+  return parseDate(comm.date ?? comm.received_at ?? comm.created_at);
+}
+
+function communicationSearchText(comm: ClioCommunication): string {
+  const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
+  return haystack(comm.subject, comm.type, ...externalValues);
 }
 
 function isOutbound(comm: ClioCommunication, clientId: string | null): boolean | null {
@@ -272,9 +277,9 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
   const to = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
   const [communicationsResult, calendarsResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
-      fields: "id,subject,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name},receivers{id,name}",
+      fields: "id,subject,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}",
       matter_id: matter.matter_id,
-      created_since: since,
+      received_since: since,
     }),
     client.list<ClioCalendarEntry>("/calendar_entries.json", {
       fields: "id,summary,description,start_at,end_at,created_at,all_day,matter{id},calendar_owner{id,name},calendar_entry_event_type{id,name}",
@@ -300,16 +305,17 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
 
-  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date) =>
+  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date, options: { allowUnclearDirection?: boolean } = {}) =>
     earliest(
       evidence.communications
         .map((comm): Evidence<ClioCommunication> | null => {
           const at = commDate(comm);
           if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
-          const text = haystack(comm.subject, comm.type);
+          const text = communicationSearchText(comm);
           if (!matcher(text)) return null;
           const direction = isOutbound(comm, record.client_id);
-          if (direction !== true) return null;
+          if (direction !== true && !options.allowUnclearDirection) return null;
+          if (direction === false) return null;
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
         })
         .filter(Boolean) as Evidence<ClioCommunication>[],
@@ -440,7 +446,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     );
 
   const items: AuditItemResult[] = [
-    classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate), setup.onTime, {
+    classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate, record.matter_created_at, { allowUnclearDirection: true }), setup.onTime, {
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Welcome Packet",
       unknown: Boolean(commError),
