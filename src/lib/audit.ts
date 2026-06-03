@@ -273,13 +273,12 @@ export async function discoverMatters(client = new ClioClient(), lookbackDays = 
 }
 
 async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<EvidenceBundle> {
-  const since = matter.effective_intake_at.toISOString();
+  const since = matter.matter_created_at.toISOString();
   const to = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
   const [communicationsResult, calendarsResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
       fields: "id,subject,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}",
       matter_id: matter.matter_id,
-      received_since: since,
     }),
     client.list<ClioCalendarEntry>("/calendar_entries.json", {
       fields: "id,summary,description,start_at,end_at,created_at,all_day,matter{id},calendar_owner{id,name},calendar_entry_event_type{id,name}",
@@ -305,7 +304,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
 
-  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date, options: { allowUnclearDirection?: boolean } = {}) =>
+  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date, options: { allowUnclearDirection?: boolean; allowAnyDirection?: boolean } = {}) =>
     earliest(
       evidence.communications
         .map((comm): Evidence<ClioCommunication> | null => {
@@ -314,6 +313,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           const text = communicationSearchText(comm);
           if (!matcher(text)) return null;
           const direction = isOutbound(comm, record.client_id);
+          if (options.allowAnyDirection) return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
           if (direction !== true && !options.allowUnclearDirection) return null;
           if (direction === false) return null;
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
@@ -446,7 +446,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     );
 
   const items: AuditItemResult[] = [
-    classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate, record.matter_created_at, { allowUnclearDirection: true }), setup.onTime, {
+    classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate, record.matter_created_at, { allowAnyDirection: true }), setup.onTime, {
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Welcome Letter",
       unknown: Boolean(commError),
