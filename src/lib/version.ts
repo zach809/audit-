@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-welcome-dashboard-reconciliation-2026-06-03";
+export const APP_VERSION = "cwca-cohesive-mobile-ui-2026-06-03";

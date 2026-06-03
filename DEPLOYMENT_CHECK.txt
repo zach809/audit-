@@ -1,4 +1,4 @@
-CWCA deployment check 1
+CWCA deployment check
 
 Expected visible version in the app header:
 cwca-clean-dashboard-ui-2026-05-27
