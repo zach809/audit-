@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-welcome-template-metadata-fix-2026-06-03";
+export const APP_VERSION = "cwca-welcome-letter-label-2026-06-03";

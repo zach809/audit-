@@ -448,7 +448,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const items: AuditItemResult[] = [
     classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate, record.matter_created_at, { allowUnclearDirection: true }), setup.onTime, {
       correctiveDeadlineAt: setup.corrective,
-      operationalState: "Needs Welcome Packet",
+      operationalState: "Needs Welcome Letter",
       unknown: Boolean(commError),
       reasonCode: commError,
       missingAsReview: true,

@@ -1106,10 +1106,10 @@ Flagged Matters
    Matter Number: [Matter Number]
    Clio Link: [Insert Clio Matter Link]
 
-   Alert / Flag: Alert: Welcome packet was not completed within the required timeframe.
+   Alert / Flag: Alert: Welcome letter was not completed within the required timeframe.
 
    Flagged Matter & What Happened:
-   Welcome Packet is still flagged because CWCA did not find matching proof in Clio.
+   Welcome Letter is still flagged because CWCA did not find matching proof in Clio.
 
    What the Team Did:
    No proof of completion has been found yet.
@@ -1118,13 +1118,13 @@ Flagged Matters
    Still Needs Action
 
    Next Step:
-   Send the welcome packet if not already sent
+   Send the welcome letter if not already sent
 
 Completed Items
 * [Client Name] - Attorney Call: Complete
 
 Items Still Needing Action
-* [Client Name] - Welcome Packet: Still Needs Action.`}</pre>
+* [Client Name] - Welcome Letter: Still Needs Action.`}</pre>
         </div>
       </section>
       ) : null}

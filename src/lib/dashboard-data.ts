@@ -360,7 +360,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     "Matter Number",
     "Responsible Attorney",
     "Overall Status",
-    "Welcome Packet",
+    "Welcome Letter",
     "Attorney Call",
     "Court Date Added",
     "Client Contact",
@@ -559,7 +559,7 @@ function matterActionItem(stepCode: string): string {
     case "SETUP_ATTY_CALL":
       return "Add the required calendar event";
     case "SETUP_WELCOME":
-      return "Send the welcome packet if not already sent";
+      return "Send the welcome letter if not already sent";
     case "APPEARANCE_FILING":
       return "Confirm/file the appearance";
     case "COURT_RESULTS":

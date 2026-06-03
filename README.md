@@ -20,7 +20,7 @@ No AI is used.
 
 CWCA checks open matters using Illinois business time: Monday-Friday, 8:00 AM-5:00 PM America/Chicago. After-hours and weekend items roll into business-time handling so the audit is less strict than a plain clock timer.
 
-- Welcome Packet: welcome letter / bienvenida communication sent within 1 business hour of a new matter being created.
+- Welcome Letter: welcome letter / bienvenida communication sent within 2 business hours of a new matter being created.
 - Attorney Call: attorney/client call calendar event scheduled within 1 business hour of a new matter being created.
 - Court Date Added: court, hearing, status, or continuance calendar event added within 1 business hour when the court date is known.
 - Client Contact: outgoing client contact completed by the next business day at 5:00 PM.
