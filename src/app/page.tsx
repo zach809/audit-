@@ -6,7 +6,6 @@ import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
 import { APP_TZ } from "@/lib/config";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
-import { ThemeToggle } from "./theme-toggle";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import {
   actionFor,
@@ -364,7 +363,6 @@ function DashboardUnavailable({ message, connected }: { message: string; connect
           </div>
         </div>
         <div className="actions header-actions">
-          <ThemeToggle />
           {connected ? <span className="badge Pass">Clio Connected</span> : <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>}
           <a className="button" href="/logout">Log Out</a>
         </div>
@@ -582,7 +580,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
         </div>
         <div className="actions header-actions">
-          <ThemeToggle />
           {connected ? (
             <span className="badge Pass">Clio Connected</span>
           ) : (

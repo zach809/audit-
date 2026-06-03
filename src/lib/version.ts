@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-welcome-letter-outbound-fallback-2026-06-03";
+export const APP_VERSION = "cwca-single-ui-welcome-reuse-communication-2026-06-03";
