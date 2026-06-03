@@ -12,7 +12,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     label: "Welcome Letter",
     goal: "Send within 2 business hours of a new matter being created.",
     missing: "Welcome letter still needs proof in Clio.",
-    action: "Check or send the Welcome Letter / Carta de bienvenida template.",
+    action: "Check or send the Welcome Letter / Carta de bienvenida / Welcome to Hirsch Law Group template.",
     late: "Welcome letter was found, but it was completed after the 2-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the welcome letter from Clio.",
   },
