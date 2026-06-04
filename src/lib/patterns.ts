@@ -43,9 +43,6 @@ export const TEMPLATE_PATTERNS = {
     "bienvenida a hirsch law group",
     "bienvenido a hirsch",
     "bienvenida a hirsch",
-    "welcome packet",
-    "bienvenida",
-    "paquete de bienvenida",
   ],
   appearance: [
     "court appearance has been filed notification",

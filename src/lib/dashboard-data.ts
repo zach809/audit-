@@ -79,53 +79,6 @@ function clioMatterLink(matterId: string): string {
   return `${baseUrl.replace(/\/$/, "")}/nc/#/matters/${encodeURIComponent(matterId)}`;
 }
 
-type DashboardJsonItem = {
-  stepCode: string;
-  status: string;
-  operationalState?: string | null;
-  deadlineAt?: string | Date | null;
-  evidenceAt?: string | Date | null;
-  evidenceSource?: string | null;
-  evidenceRefId?: string | null;
-  evidenceUrl?: string | null;
-  reasonCode?: string | null;
-};
-
-type DashboardRow = {
-  items?: DashboardJsonItem[];
-  overall_status?: string;
-  display_overall_status?: string;
-};
-
-function displayOverallFromItems(items: DashboardJsonItem[], fallback?: string): string {
-  if (!items.length) return "Unchecked";
-  if (items.some((item) => item.status === "Unknown")) return "Review";
-  if (items.some((item) => item.status === "Missing")) return "Flag";
-  if (items.some((item) => item.status === "Late")) return "Late";
-  if (items.some((item) => item.status === "Pending")) return "Pending";
-  return fallback || "Pass";
-}
-
-function reconcileWelcomeFromClientCommunication<T extends DashboardRow>(row: T): T {
-  const items = Array.isArray(row.items) ? row.items : [];
-  const welcome = items.find((item) => item.stepCode === "SETUP_WELCOME");
-  const clientContact = items.find((item) => item.stepCode === "CLIENT_CONTACT" && item.evidenceSource === "Communication" && item.evidenceRefId);
-  if (welcome && clientContact && !welcome.evidenceRefId && (welcome.status === "Unknown" || welcome.status === "Missing")) {
-    const deadline = welcome.deadlineAt ? new Date(String(welcome.deadlineAt)) : null;
-    const evidence = clientContact.evidenceAt ? new Date(String(clientContact.evidenceAt)) : null;
-    const onTime = Boolean(deadline && evidence && !Number.isNaN(deadline.getTime()) && !Number.isNaN(evidence.getTime()) && evidence <= deadline);
-    welcome.status = onTime ? "On Time" : "Late";
-    welcome.operationalState = welcome.status;
-    welcome.evidenceAt = clientContact.evidenceAt ?? null;
-    welcome.evidenceSource = "Communication";
-    welcome.evidenceRefId = clientContact.evidenceRefId;
-    welcome.evidenceUrl = clientContact.evidenceUrl ?? null;
-    welcome.reasonCode = "WELCOME_REUSED_CLIENT_COMMUNICATION";
-  }
-  row.display_overall_status = displayOverallFromItems(items, row.overall_status);
-  return row;
-}
-
 export async function getDashboardData(filters: DashboardFilters = {}) {
   await initDb();
   const sql = db();
@@ -243,8 +196,6 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       m.matter_created_at desc
     limit 150
   `;
-
-  const reconciledMatters = matters.map((matter) => reconcileWelcomeFromClientCommunication(matter));
 
   const attorneys = await sql`
     select responsible_attorney_id as id, responsible_attorney_name as name, count(*)::int as count
@@ -393,7 +344,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   `;
 
   return {
-    matters: reconciledMatters,
+    matters,
     attorneys,
     summary: summary[0] ?? { total: 0, unchecked: 0, pass: 0, pending: 0, late: 0, flag: 0, review: 0, missing_items: 0, late_items: 0, unknown_items: 0 },
     lastRun: lastRun[0] ?? null,
