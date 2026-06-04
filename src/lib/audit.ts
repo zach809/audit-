@@ -22,6 +22,7 @@ import type {
   StepCode,
 } from "./types";
 import { appConfig } from "./config";
+import { APP_VERSION } from "./version";
 
 type Evidence<T> = { item: T; at: Date; source: AuditItemResult["evidenceSource"]; url: string };
 type EvidenceErrors = {
@@ -63,9 +64,9 @@ function commDate(comm: ClioCommunication): Date | null {
   return parseDate(comm.date ?? comm.received_at ?? comm.created_at);
 }
 
-function communicationSearchText(comm: ClioCommunication): string {
+function communicationSearchText(comm: ClioCommunication, includeBody = false): string {
   const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
-  return haystack(comm.subject, comm.type, ...externalValues);
+  return haystack(comm.subject, comm.type, ...externalValues, includeBody ? comm.body : null);
 }
 
 function isOutbound(comm: ClioCommunication, clientId: string | null): boolean | null {
@@ -227,13 +228,13 @@ async function upsertItems(matterId: string, items: AuditItemResult[], overallSt
     await sql`
       insert into audit_item (
         matter_id, step_code, status, operational_state, deadline_at, corrective_deadline_at,
-        evidence_at, evidence_source, evidence_ref_id, evidence_url, reason_code, last_evaluated_at
+        evidence_at, evidence_source, evidence_ref_id, evidence_url, reason_code, audit_version, last_evaluated_at
       )
       values (
         ${matterId}, ${item.stepCode}, ${item.status}, ${item.operationalState},
         ${item.deadlineAt}, ${item.correctiveDeadlineAt}, ${item.evidenceAt},
         ${item.evidenceSource}, ${item.evidenceRefId}, ${item.evidenceUrl},
-        ${item.reasonCode}, now()
+        ${item.reasonCode}, ${APP_VERSION}, now()
       )
       on conflict (matter_id, step_code) do update set
         status = excluded.status,
@@ -245,6 +246,7 @@ async function upsertItems(matterId: string, items: AuditItemResult[], overallSt
         evidence_ref_id = excluded.evidence_ref_id,
         evidence_url = excluded.evidence_url,
         reason_code = excluded.reason_code,
+        audit_version = excluded.audit_version,
         last_evaluated_at = now()
     `;
   }
@@ -277,7 +279,7 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
   const to = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
   const [communicationsResult, calendarsResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
-      fields: "id,subject,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}",
+      fields: "id,subject,body,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}",
       matter_id: matter.matter_id,
     }),
     client.list<ClioCalendarEntry>("/calendar_entries.json", {
@@ -304,13 +306,13 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
 
-  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date, options: { allowUnclearDirection?: boolean; allowAnyDirection?: boolean } = {}) =>
+  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date, options: { allowUnclearDirection?: boolean; allowAnyDirection?: boolean; includeBodyText?: boolean } = {}) =>
     earliest(
       evidence.communications
         .map((comm): Evidence<ClioCommunication> | null => {
           const at = commDate(comm);
           if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
-          const text = communicationSearchText(comm);
+          const text = communicationSearchText(comm, options.includeBodyText);
           if (!matcher(text)) return null;
           const direction = isOutbound(comm, record.client_id);
           if (options.allowAnyDirection) return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
@@ -406,7 +408,10 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
 
-  const welcomeEvidence = communicationEvidence(isWelcomeTemplate, record.matter_created_at, { allowUnclearDirection: true });
+  const welcomeEvidence = communicationEvidence(isWelcomeTemplate, record.matter_created_at, {
+    allowUnclearDirection: true,
+    includeBodyText: true,
+  });
 
   const clientContactCommunication = evidence.communications
       .map((comm): Evidence<ClioCommunication> | null => {
@@ -453,7 +458,6 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       operationalState: "Needs Welcome Letter",
       unknown: Boolean(commError),
       reasonCode: commError,
-      missingAsReview: true,
       now,
     }),
     classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
@@ -522,7 +526,7 @@ export async function auditNextBatch(
       await sleep(waitSeconds * 1000);
     }
   }
-  const runRows = await sql`insert into audit_run(status) values ('running') returning id`;
+  const runRows = await sql`insert into audit_run(status, app_version) values ('running', ${APP_VERSION}) returning id`;
   const runId = runRows[0].id;
   let discovered = 0;
   let audited = 0;

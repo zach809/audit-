@@ -38,6 +38,12 @@ type DashboardItem = {
   evidenceSource?: string;
   evidenceRefId?: string;
   evidenceUrl?: string;
+  auditVersion?: string | null;
+  lastEvaluatedAt?: string | null;
+  reviewDecision?: string | null;
+  reviewNote?: string | null;
+  reviewProofReference?: string | null;
+  reviewUpdatedAt?: string | null;
 };
 
 type WorkspaceRow = {
@@ -46,11 +52,17 @@ type WorkspaceRow = {
   clientName: string;
   stepCode: string;
   status: string;
+  reasonCode?: string | null;
   deadlineAt?: string | null;
   evidenceAt?: string | null;
   evidenceSource?: string;
   evidenceRefId?: string;
   evidenceUrl?: string;
+  auditVersion?: string | null;
+  reviewDecision?: string | null;
+  reviewNote?: string | null;
+  reviewProofReference?: string | null;
+  reviewUpdatedAt?: string | null;
 };
 
 function evidencePath(item: DashboardItem): string {
@@ -71,6 +83,17 @@ function evidenceLabel(item: DashboardItem): string {
 function needsMatterRefresh(items: DashboardItem[]): boolean {
   const genericApiProblems = items.filter((item) => item.status === "Unknown" && isGenericApiError(item.reasonCode));
   return genericApiProblems.length >= Math.max(3, items.length - 1);
+}
+
+function isLegacyWelcomeReview(item: DashboardItem): boolean {
+  return item.stepCode === "SETUP_WELCOME" && item.status === "Unknown" && item.reasonCode === "EVIDENCE_NOT_CONFIRMED";
+}
+
+function displayItemStatus(item: DashboardItem | WorkspaceRow): string {
+  if (item.stepCode === "SETUP_WELCOME" && item.status === "Unknown" && "reasonCode" in item && item.reasonCode === "EVIDENCE_NOT_CONFIRMED") {
+    return "Needs Follow-Up";
+  }
+  return displayAuditStatus(item.status, "reasonCode" in item ? item.reasonCode : undefined);
 }
 
 function stepDetail(item: DashboardItem | undefined, status: string): string {
@@ -103,7 +126,7 @@ function stepCell(items: DashboardItem[], code: string) {
     );
   }
   const status = item?.status ?? "Pending";
-  const displayStatus = displayAuditStatus(status, item?.reasonCode);
+  const displayStatus = displayItemStatus(item);
   const detail = stepDetail(item, status);
   const href = item ? evidencePath(item) : "";
   return (
@@ -125,6 +148,9 @@ function problemText(item: DashboardItem): string {
   if (item.status === "Missing") return `${info.missing} ${info.action}`;
   if (item.status === "Late") return info.late;
   if (item.status === "Unknown") {
+    if (isLegacyWelcomeReview(item)) {
+      return "Welcome letter communication was not confirmed in Clio. Check or send the Welcome Letter / Carta de bienvenida / Welcome to Hirsch Law Group template.";
+    }
     if (isGenericApiError(item.reasonCode)) {
       return "This row came from an older incomplete audit result. Refresh this matter so the app can re-check the Clio communication and calendar evidence.";
     }
@@ -170,12 +196,17 @@ function problemList(items: DashboardItem[]) {
       {visibleProblems.map((item) => {
         const href = evidencePath(item);
         return (
-          <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
+            <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
             <div className="problem-title">
-              {badge(item.status)}
+              {badge(displayItemStatus(item))}
               <strong>{workflowLabel(item.stepCode)}</strong>
             </div>
             <p>{problemText(item)}</p>
+            {item.reviewDecision || item.reviewNote ? (
+              <p className="review-note-inline">
+                <b>Human review:</b> {item.reviewDecision || "Pending"}{item.reviewNote ? ` - ${item.reviewNote}` : ""}
+              </p>
+            ) : null}
             <div className="problem-meta">
               {item.deadlineAt ? <span>Due: {formatLocal(item.deadlineAt)}</span> : null}
               {item.evidenceAt ? <span>Found: {formatLocal(item.evidenceAt)}</span> : null}
@@ -435,11 +466,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       clientName: `${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`.trim() || "Unnamed Client",
       stepCode: item.step_code,
       status: workspaceStatus(item.item_status, item.reason_code),
+      reasonCode: item.reason_code,
       deadlineAt: item.deadline_at ? String(item.deadline_at) : null,
       evidenceAt: item.evidence_at ? String(item.evidence_at) : null,
       evidenceSource: item.evidence_source ?? undefined,
       evidenceRefId: item.evidence_ref_id ?? undefined,
       evidenceUrl: item.evidence_url ?? undefined,
+      auditVersion: item.audit_version,
+      reviewDecision: item.review_decision,
+      reviewNote: item.review_note,
+      reviewProofReference: item.proof_reference,
+      reviewUpdatedAt: item.review_updated_at ? String(item.review_updated_at) : null,
     } satisfies WorkspaceRow,
   }));
   const focusedWorkspaceRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter));
@@ -492,7 +529,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
     .slice(0, 100)
     .map((item) => ({
-      id: `${item.row.matterId}-${item.row.stepCode}-${item.row.status}`,
+      id: `${item.row.matterId}-${item.row.stepCode}`,
+      matterId: item.row.matterId,
+      stepCode: item.row.stepCode,
       attorney: item.attorney,
       clientName: item.row.clientName,
       matterNumber: item.row.matterNumber,
@@ -504,6 +543,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       found: item.row.evidenceAt ? formatLocal(item.row.evidenceAt) : null,
       clioUrl: clioMatterPath(item.row.matterId),
       proofUrl: item.row.evidenceUrl ?? null,
+      auditVersion: item.row.auditVersion,
+      reviewDecision: item.row.reviewDecision,
+      reviewNote: item.row.reviewNote,
+      reviewProofReference: item.row.reviewProofReference,
+      reviewUpdatedAt: item.row.reviewUpdatedAt,
     }));
   const statusChart = [
     { label: "Needs Follow-Up", value: needsFollowUpCount, className: "followup" },
@@ -1270,7 +1314,7 @@ Items Still Needing Action
                           <small>{row.matterNumber}</small>
                         </span>
                         <span>{workflowLabel(row.stepCode)}</span>
-                        <span>{badge(row.status)}</span>
+                        <span>{badge(displayItemStatus(row))}</span>
                         <span>
                           {row.deadlineAt ? <small>Due: {formatLocal(row.deadlineAt)}</small> : null}
                           {row.evidenceAt ? <small>Found: {formatLocal(row.evidenceAt)}</small> : null}

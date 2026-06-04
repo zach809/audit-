@@ -80,6 +80,7 @@ create table if not exists audit_item (
   evidence_ref_id text,
   evidence_url text,
   reason_code text,
+  audit_version text,
   last_evaluated_at timestamptz not null default now(),
   primary key (matter_id, step_code)
 );
@@ -91,7 +92,20 @@ create table if not exists audit_run (
   status text not null default 'running',
   matters_discovered integer not null default 0,
   matters_audited integer not null default 0,
+  app_version text,
   message text
+);
+
+create table if not exists audit_review (
+  matter_id text not null references audit_matter(matter_id) on delete cascade,
+  step_code text not null,
+  review_decision text not null default 'Pending',
+  review_note text not null default '',
+  proof_reference text not null default '',
+  reviewed_by text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (matter_id, step_code)
 );
 
 create table if not exists audit_metric_snapshot (
@@ -121,6 +135,11 @@ create index if not exists audit_matter_attorney_idx on audit_matter(responsible
 create index if not exists audit_matter_created_idx on audit_matter(matter_created_at);
 create index if not exists audit_matter_last_audited_idx on audit_matter(last_audited_at);
 create index if not exists audit_item_status_idx on audit_item(status);
+create index if not exists audit_item_audit_version_idx on audit_item(audit_version);
+create index if not exists audit_review_decision_idx on audit_review(review_decision);
+
+alter table if exists audit_item add column if not exists audit_version text;
+alter table if exists audit_run add column if not exists app_version text;
 `;
 
 export async function initDb(): Promise<void> {

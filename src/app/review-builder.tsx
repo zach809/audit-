@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { REVIEW_DECISIONS, type ReviewDecision, normalizeReviewDecision, reviewResult } from "@/lib/review-shared";
 
 export type ReviewBuilderItem = {
   id: string;
+  matterId: string;
+  stepCode: string;
   attorney: string;
   clientName: string;
   matterNumber: string;
@@ -15,24 +18,19 @@ export type ReviewBuilderItem = {
   found?: string | null;
   clioUrl: string;
   proofUrl?: string | null;
+  auditVersion?: string | null;
+  reviewDecision?: string | null;
+  reviewNote?: string | null;
+  reviewProofReference?: string | null;
+  reviewUpdatedAt?: string | null;
 };
-
-type Decision = "Resolved" | "Resolved, proof not linked" | "In progress" | "Pending" | "Not applicable" | "Needs attorney review";
 
 type ReviewState = {
-  decision: Decision;
+  decision: ReviewDecision;
   note: string;
   proof: string;
+  savedAt?: string;
 };
-
-const decisions: Decision[] = [
-  "Resolved",
-  "Resolved, proof not linked",
-  "In progress",
-  "Pending",
-  "Not applicable",
-  "Needs attorney review",
-];
 
 function defaultReview(): ReviewState {
   return { decision: "Pending", note: "", proof: "" };
@@ -85,36 +83,37 @@ function displayRange(from: string, to: string): string {
   return "Date range not selected";
 }
 
-function resultSummary(decision: Decision): string {
-  if (decision === "Resolved" || decision === "Resolved, proof not linked" || decision === "Not applicable") {
-    return "Resolved";
-  }
-  if (decision === "In progress" || decision === "Needs attorney review") {
-    return "In progress";
-  }
-  return "Pending";
-}
-
-function defaultNextStep(decision: Decision, nextStep: string): string {
-  if (decision === "Resolved") {
+function defaultNextStep(decision: ReviewDecision, nextStep: string): string {
+  if (decision === "Complete" || decision === "False Alarm") {
     return "No follow-up needed.";
   }
-  if (decision === "Resolved, proof not linked") {
-    return "Add or link the proof in Clio so the file is easy to verify.";
-  }
-  if (decision === "Not applicable") {
-    return "No follow-up needed for this item.";
-  }
-  if (decision === "Needs attorney review") {
+  if (decision === "Needs Attorney Review") {
     return "Ask the responsible attorney to confirm the next step.";
   }
   return nextStep;
 }
 
+function initialReviews(items: ReviewBuilderItem[]): Record<string, ReviewState> {
+  return Object.fromEntries(
+    items
+      .filter((item) => item.reviewDecision || item.reviewNote || item.reviewProofReference)
+      .map((item) => [
+        item.id,
+        {
+          decision: normalizeReviewDecision(item.reviewDecision),
+          note: item.reviewNote ?? "",
+          proof: item.reviewProofReference ?? "",
+          savedAt: item.reviewUpdatedAt ?? "",
+        },
+      ]),
+  );
+}
+
 export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { items: ReviewBuilderItem[]; initialFrom?: string; initialTo?: string }) {
   const defaultRange = defaultWeekRange();
   const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
-  const [reviews, setReviews] = useState<Record<string, ReviewState>>({});
+  const [reviews, setReviews] = useState<Record<string, ReviewState>>(() => initialReviews(items));
+  const [saveStatus, setSaveStatus] = useState("");
   const [reportFrom, setReportFrom] = useState(initialFrom || defaultRange.from);
   const [reportTo, setReportTo] = useState(initialTo || defaultRange.to);
 
@@ -123,17 +122,46 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
   const rangeLabel = displayRange(reportFrom, reportTo);
 
   function updateReview(id: string, patch: Partial<ReviewState>) {
+    setSaveStatus("");
     setReviews((current) => ({
       ...current,
       [id]: { ...defaultReview(), ...current[id], ...patch },
     }));
   }
 
+  async function saveSelectedReview() {
+    if (!selected) return;
+    const review = reviews[selected.id] ?? defaultReview();
+    setSaveStatus("Saving...");
+    const response = await fetch("/api/reviews", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        matterId: selected.matterId,
+        stepCode: selected.stepCode,
+        decision: review.decision,
+        note: review.note,
+        proofReference: review.proof,
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      setSaveStatus(body?.error || "Could not save review.");
+      return;
+    }
+    const savedAt = new Date().toLocaleString();
+    setReviews((current) => ({
+      ...current,
+      [selected.id]: { ...review, savedAt },
+    }));
+    setSaveStatus("Saved.");
+  }
+
   const reportText = useMemo(() => {
     const reviewedItems = items.filter((item) => reviews[item.id]);
-    const pendingItems = reviewedItems.filter((item) => resultSummary(reviews[item.id].decision) === "Pending");
-    const inProgressItems = reviewedItems.filter((item) => resultSummary(reviews[item.id].decision) === "In progress");
-    const resolvedItems = reviewedItems.filter((item) => resultSummary(reviews[item.id].decision) === "Resolved");
+    const pendingItems = reviewedItems.filter((item) => reviewResult(reviews[item.id].decision) === "Pending");
+    const inProgressItems = reviewedItems.filter((item) => reviewResult(reviews[item.id].decision) === "In Progress");
+    const resolvedItems = reviewedItems.filter((item) => reviewResult(reviews[item.id].decision) === "Resolved");
 
     const lines = [
       "End-of-Week Clio Audit Review",
@@ -158,7 +186,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
 
     reviewedItems.forEach((item, index) => {
       const review = reviews[item.id];
-      const summary = resultSummary(review.decision);
+      const summary = reviewResult(review.decision);
       lines.push(`${index + 1}. Matter: ${item.clientName}`);
       lines.push(`   Attorney: ${item.attorney}`);
       lines.push(`   Matter Number: ${item.matterNumber}`);
@@ -180,7 +208,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
       lines.push("* None based on the editor selections in this draft.");
     } else {
       [...pendingItems, ...inProgressItems].forEach((item) => {
-        lines.push(`* ${item.clientName} - ${item.auditItem}: ${resultSummary(reviews[item.id].decision)}`);
+        lines.push(`* ${item.clientName} - ${item.auditItem}: ${reviewResult(reviews[item.id].decision)}`);
       });
     }
 
@@ -268,7 +296,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
                 onClick={() => setSelectedId(item.id)}
                 type="button"
               >
-                <span>{review ? resultSummary(review.decision) : item.status}</span>
+                <span>{review ? reviewResult(review.decision) : item.status}</span>
                 <strong>{item.clientName}</strong>
                 <small>{item.auditItem} - {item.attorney}</small>
               </button>
@@ -294,7 +322,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
             </div>
 
             <div className="review-decision-buttons" aria-label="Current result">
-              {decisions.map((decision) => (
+              {REVIEW_DECISIONS.map((decision) => (
                 <button
                   className={reviews[selected.id]?.decision === decision ? "active" : ""}
                   key={decision}
@@ -323,6 +351,10 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
                 onChange={(event) => updateReview(selected.id, { proof: event.target.value })}
               />
             </label>
+            <div className="review-save-row">
+              <button className="primary compact" type="button" onClick={saveSelectedReview}>Save Review</button>
+              <span className="review-save-status">{saveStatus || (reviews[selected.id]?.savedAt ? `Saved: ${reviews[selected.id]?.savedAt}` : "Keep case details in Clio. Add only a short workflow note here.")}</span>
+            </div>
           </div>
         ) : null}
 

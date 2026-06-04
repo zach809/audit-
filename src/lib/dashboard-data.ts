@@ -2,6 +2,7 @@ import { APP_TZ } from "./config";
 import { initDb, db } from "./db";
 import { workflowLabel } from "./workflow-rules";
 import { actionFor, displayAuditStatus, priorityFor, timingGoalFor, whyFlagged } from "./audit-display";
+import { reviewResult } from "./review-shared";
 
 export type DashboardFilters = {
   attorney?: string;
@@ -25,6 +26,11 @@ type ActionCsvRow = {
   evidence_source: string | null;
   evidence_ref_id: string | null;
   reason_code: string | null;
+  audit_version: string | null;
+  review_decision: string | null;
+  review_note: string | null;
+  proof_reference: string | null;
+  review_updated_at: string | Date | null;
 };
 
 export type WorkspaceAuditItem = {
@@ -42,6 +48,11 @@ export type WorkspaceAuditItem = {
   evidence_ref_id: string | null;
   evidence_url: string | null;
   reason_code: string | null;
+  audit_version: string | null;
+  review_decision: string | null;
+  review_note: string | null;
+  proof_reference: string | null;
+  review_updated_at: string | Date | null;
 };
 
 function csvCell(value: unknown): string {
@@ -173,6 +184,12 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
           'evidenceSource', i.evidence_source,
           'evidenceRefId', i.evidence_ref_id,
           'evidenceUrl', i.evidence_url,
+          'auditVersion', i.audit_version,
+          'lastEvaluatedAt', i.last_evaluated_at,
+          'reviewDecision', r.review_decision,
+          'reviewNote', r.review_note,
+          'reviewProofReference', r.proof_reference,
+          'reviewUpdatedAt', r.updated_at,
           'reasonCode',
             case
               when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -184,6 +201,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       ) filter (where i.step_code is not null), '[]') as items
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
+    left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
     where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       and exists (
         select 1
@@ -319,6 +337,11 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       i.evidence_source,
       i.evidence_ref_id,
       i.evidence_url,
+      i.audit_version,
+      r.review_decision,
+      r.review_note,
+      r.proof_reference,
+      r.updated_at as review_updated_at,
       case
         when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
           then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
@@ -326,6 +349,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       end as reason_code
     from audit_matter m
     join audit_item i on i.matter_id = m.matter_id
+    left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
     where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
     order by
       m.responsible_attorney_name,
@@ -435,6 +459,11 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
         i.evidence_at,
         i.evidence_source,
         i.evidence_ref_id,
+        i.audit_version,
+        r.review_decision,
+        r.review_note,
+        r.proof_reference,
+        r.updated_at as review_updated_at,
         case
           when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
             then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
@@ -442,6 +471,7 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
         end as reason_code
       from audit_matter m
       join audit_item i on i.matter_id = m.matter_id
+      left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
       where lower(coalesce(m.matter_status, '')) <> 'closed'
         and ${filters.attorney ? sql`m.responsible_attorney_id = ${filters.attorney}` : sql`true`}
         and ${overallCondition}
@@ -474,6 +504,9 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
     "Overall",
     "Improvement Area",
     "Status",
+    "Human Review Status",
+    "Human Review Note",
+    "Review Proof Or Reference",
     "What The Case Manager Should Do In Clio",
     "Timeliness Goal",
     "Due",
@@ -499,6 +532,9 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
       row.overall_status,
       workflowLabel(row.step_code),
       humanStatus(status),
+      row.review_decision || "Pending",
+      row.review_note || "",
+      row.proof_reference || "",
       actionFor(row.step_code, status, row.reason_code),
       timingGoalFor(row.step_code),
       formatCsvDate(row.deadline_at),
@@ -536,7 +572,7 @@ function matterMissingItemLabel(stepCode: string, attorneyName?: string | null):
     case "SETUP_ATTY_CALL":
       return "Calendar event missing";
     case "SETUP_WELCOME":
-      return "Welcome packet not found";
+      return "Welcome letter not found";
     case "APPEARANCE_FILING":
       return "Appearance filing follow-up needed";
     case "COURT_RESULTS":
@@ -598,6 +634,14 @@ function whatHappened(row: ActionCsvRow): string {
 }
 
 function whatTeamDid(row: ActionCsvRow, origin: string): string {
+  const reviewNote = row.review_note?.trim();
+  const reviewProof = row.proof_reference?.trim();
+  if (reviewNote || reviewProof) {
+    return [
+      reviewNote ? `Reviewer note: ${reviewNote}` : "",
+      reviewProof ? `Proof/reference: ${reviewProof}` : "",
+    ].filter(Boolean).join(" ");
+  }
   const proof = proofPath(origin, row.evidence_source, row.evidence_ref_id);
   if (row.evidence_at) {
     const found = formatCsvDate(row.evidence_at);
@@ -612,6 +656,13 @@ function whatTeamDid(row: ActionCsvRow, origin: string): string {
 }
 
 function currentStatus(row: ActionCsvRow): "Complete" | "Pending" | "Still Needs Action" | "In Progress" {
+  if (row.review_decision) {
+    const result = reviewResult(row.review_decision);
+    if (result === "Resolved") return "Complete";
+    if (result === "In Progress") return "In Progress";
+    if (row.review_decision === "Still Needs Action") return "Still Needs Action";
+    return "Pending";
+  }
   const status = String(row.item_status ?? "");
   if (row.evidence_at || status === "Late") return "Complete";
   if (status === "Unknown") return "Pending";

@@ -47,6 +47,7 @@ export type ClioMatter = {
 export type ClioCommunication = {
   id: number;
   subject?: string | null;
+  body?: string | null;
   type?: string | null;
   date?: string | null;
   created_at?: string | null;
