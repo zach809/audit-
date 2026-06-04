@@ -131,15 +131,48 @@ create table if not exists audit_metric_snapshot (
   created_at timestamptz not null default now()
 );
 
+alter table if exists audit_item add column if not exists audit_version text;
+alter table if exists audit_item add column if not exists last_evaluated_at timestamptz;
+update audit_item set last_evaluated_at = now() where last_evaluated_at is null;
+alter table if exists audit_item alter column last_evaluated_at set default now();
+alter table if exists audit_item alter column last_evaluated_at set not null;
+alter table if exists audit_run add column if not exists app_version text;
+alter table if exists audit_review add column if not exists review_decision text;
+alter table if exists audit_review add column if not exists review_note text;
+alter table if exists audit_review add column if not exists proof_reference text;
+alter table if exists audit_review add column if not exists reviewed_by text;
+alter table if exists audit_review add column if not exists created_at timestamptz;
+alter table if exists audit_review add column if not exists updated_at timestamptz;
+update audit_review
+set review_decision = coalesce(review_decision, 'Pending'),
+    review_note = coalesce(review_note, ''),
+    proof_reference = coalesce(proof_reference, ''),
+    reviewed_by = coalesce(reviewed_by, ''),
+    created_at = coalesce(created_at, now()),
+    updated_at = coalesce(updated_at, now());
+alter table if exists audit_review alter column review_decision set default 'Pending';
+alter table if exists audit_review alter column review_note set default '';
+alter table if exists audit_review alter column proof_reference set default '';
+alter table if exists audit_review alter column reviewed_by set default '';
+alter table if exists audit_review alter column created_at set default now();
+alter table if exists audit_review alter column updated_at set default now();
+alter table if exists audit_review alter column review_decision set not null;
+alter table if exists audit_review alter column review_note set not null;
+alter table if exists audit_review alter column proof_reference set not null;
+alter table if exists audit_review alter column reviewed_by set not null;
+alter table if exists audit_review alter column created_at set not null;
+alter table if exists audit_review alter column updated_at set not null;
+alter table if exists audit_metric_snapshot add column if not exists logged_call_count integer;
+update audit_metric_snapshot set logged_call_count = 0 where logged_call_count is null;
+alter table if exists audit_metric_snapshot alter column logged_call_count set default 0;
+alter table if exists audit_metric_snapshot alter column logged_call_count set not null;
+
 create index if not exists audit_matter_attorney_idx on audit_matter(responsible_attorney_id);
 create index if not exists audit_matter_created_idx on audit_matter(matter_created_at);
 create index if not exists audit_matter_last_audited_idx on audit_matter(last_audited_at);
 create index if not exists audit_item_status_idx on audit_item(status);
 create index if not exists audit_item_audit_version_idx on audit_item(audit_version);
 create index if not exists audit_review_decision_idx on audit_review(review_decision);
-
-alter table if exists audit_item add column if not exists audit_version text;
-alter table if exists audit_run add column if not exists app_version text;
 `;
 
 export async function initDb(): Promise<void> {

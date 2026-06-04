@@ -411,6 +411,18 @@ function DashboardUnavailable({ message, connected }: { message: string; connect
   );
 }
 
+function dashboardErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const message = raw.replace(/postgres:\/\/[^@\s]+@/gi, "postgres://***@").slice(0, 260);
+  if (message.includes("CONNECT_TIMEOUT") || message.toLowerCase().includes("connection timed out")) {
+    return "The dashboard could not reach the database. Check DATABASE_URL in Vercel and make sure the database is awake and accepting connections.";
+  }
+  if (message.includes("does not exist") || message.includes("column") || message.includes("relation")) {
+    return `The database needs one automatic setup pass. Try Again once. If it stays here, open /api/health and check this message: ${message}`;
+  }
+  return `The dashboard could not load the database data. Open /api/health for details. Message: ${message}`;
+}
+
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   if (!hasDashboardSession()) redirect("/login");
   const connected = await hasClioConnection().catch(() => false);
@@ -427,16 +439,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const monthStart = monthStartInput(new Date());
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
+  let dataError = "";
   try {
     data = await getDashboardData(filters);
-  } catch {
+  } catch (error) {
     data = null;
+    dataError = dashboardErrorMessage(error);
   }
   if (!data) {
     return (
       <DashboardUnavailable
         connected={connected}
-        message="The dashboard could not reach the database. Check DATABASE_URL in Vercel and make sure the database is awake and accepting connections."
+        message={dataError || "The dashboard could not reach the database. Check DATABASE_URL in Vercel and make sure the database is awake and accepting connections."}
       />
     );
   }

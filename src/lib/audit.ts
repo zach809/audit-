@@ -180,7 +180,7 @@ function evidenceUrl(type: "communications" | "calendar_entries", id: number): s
 }
 
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
 async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
