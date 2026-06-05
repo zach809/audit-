@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, effectiveIntake, setupDeadlines } from "./business-time";
+import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, setupDeadlines } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -67,6 +67,10 @@ function commDate(comm: ClioCommunication): Date | null {
 function communicationSearchText(comm: ClioCommunication, includeBody = false): string {
   const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
   return haystack(comm.subject, comm.type, ...externalValues, includeBody ? comm.body : null);
+}
+
+function isReplySubject(subject?: string | null): boolean {
+  return /^\s*(re|fw|fwd)\s*:/i.test(subject ?? "");
 }
 
 function isOutbound(comm: ClioCommunication, clientId: string | null): boolean | null {
@@ -302,7 +306,7 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
 function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
   const setup = setupDeadlines(record.matter_created_at);
   const clientDeadline = addBusinessDaysDeadline(record.effective_intake_at, 1);
-  const appearanceDeadline = addBusinessDaysDeadline(record.effective_intake_at, 2);
+  const appearanceDeadline = addWeekdayHours(record.matter_created_at, 48);
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
 
@@ -318,6 +322,25 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           if (options.allowAnyDirection) return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
           if (direction !== true && !options.allowUnclearDirection) return null;
           if (direction === false) return null;
+          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+        })
+        .filter(Boolean) as Evidence<ClioCommunication>[],
+    );
+
+  const templateCommunicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date) =>
+    earliest(
+      evidence.communications
+        .map((comm): Evidence<ClioCommunication> | null => {
+          const at = commDate(comm);
+          if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
+          const direction = isOutbound(comm, record.client_id);
+          if (direction === false || isReplySubject(comm.subject)) return null;
+
+          const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
+          const subjectText = haystack(comm.subject, ...externalValues);
+          const fullText = communicationSearchText(comm, true);
+          if (!matcher(subjectText) && !(direction === true && matcher(fullText))) return null;
+
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
         })
         .filter(Boolean) as Evidence<ClioCommunication>[],
@@ -367,7 +390,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 
   const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
-  const courtResult = lastCourtEnd ? communicationEvidence(isCourtResultTemplate, lastCourtEnd) : null;
+  const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
@@ -408,8 +431,11 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
 
-  const welcomeEvidence = communicationEvidence(isWelcomeTemplate, record.matter_created_at, {
-    allowUnclearDirection: true,
+  const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
+  const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart, {
+    includeBodyText: true,
+  });
+  const appearanceEvidence = templateCommunicationEvidence(isAppearanceTemplate, welcomeWindowStart) ?? communicationEvidence(isAppearanceTemplate, welcomeWindowStart, {
     includeBodyText: true,
   });
 
@@ -481,9 +507,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: commError || "DIRECTION_UNCLEAR",
       now,
     }),
-    classify("APPEARANCE_FILING", communicationEvidence(isAppearanceTemplate), appearanceDeadline, {
+    classify("APPEARANCE_FILING", appearanceEvidence, appearanceDeadline, {
       operationalState: "Needs Appearance Filing",
-      unknown: Boolean(commError),
+      unknown: Boolean(commError && now > appearanceDeadline),
       reasonCode: commError,
       missingAsReview: true,
       now,

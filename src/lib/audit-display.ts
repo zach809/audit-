@@ -64,7 +64,7 @@ export function actionFor(stepCode: string, status: string, reasonCode?: string 
       return "Recheck the matter before coaching. This is an audit visibility issue, not proof that work was missed.";
     }
     if (reasonCode === "EVIDENCE_NOT_CONFIRMED") {
-      return "Review the matter in Clio and confirm whether the proof exists before coaching the team.";
+      return "Review the matter's Communications tab and confirm whether the matching email subject exists before coaching the team.";
     }
     return info?.unknown ?? "Review this item in Clio. The app could not verify it from API-visible evidence.";
   }
@@ -82,7 +82,7 @@ export function whyFlagged(stepCode: string, status: string, reasonCode?: string
   if (status === "Missing") return `${workflowLabel(stepCode)} needs follow-up because CWCA did not find matching proof in Clio.`;
   if (status === "Late") return `${workflowLabel(stepCode)} was found, but after the expected timeliness goal.`;
   if (status === "Unknown" || status === "Needs Recheck") {
-    if (reasonCode === "EVIDENCE_NOT_CONFIRMED") return "CWCA could not confidently confirm this proof from read-only Clio evidence.";
+    if (reasonCode === "EVIDENCE_NOT_CONFIRMED") return "CWCA could not confidently confirm this proof from the matter's Communications tab.";
     if (reasonCode && !isInternalPlaceholder(reasonCode)) return `The auditor could not confirm this item from Clio: ${reasonCode}`;
     return "The auditor could not confirm this item from Clio-visible evidence.";
   }

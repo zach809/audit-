@@ -42,10 +42,10 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   APPEARANCE_FILING: {
     label: "Appearance Filed",
-    goal: "Complete by the second business day at 5:00 PM.",
+    goal: "Confirm 48 hours after the matter was created, skipping non-business days.",
     missing: "Appearance filing still needs proof in Clio.",
     action: "Check or send the appearance filing notification template.",
-    late: "Appearance filing was found, but it was completed after the second-business-day 5:00 PM goal.",
+    late: "Appearance filing was found, but it was completed after the 48-hour business-day goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm appearance filing from Clio.",
   },
   COURT_RESULTS: {

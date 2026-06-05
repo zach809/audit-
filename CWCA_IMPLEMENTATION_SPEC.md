@@ -195,7 +195,7 @@ If communication direction cannot be proven from API-visible senders/receivers/u
 
 ### Step 4: Appearance Filing Audit
 
-Deadline: second business day by 5:00 PM.
+Deadline: 48 hours after the matter was created, skipping non-business days.
 
 Evidence:
 

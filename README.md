@@ -24,10 +24,12 @@ CWCA checks open matters using Illinois business time: Monday-Friday, 8:00 AM-5:
 - Attorney Call: attorney/client call calendar event scheduled within 1 business hour of a new matter being created.
 - Court Date Added: court, hearing, status, or continuance calendar event added within 1 business hour when the court date is known.
 - Client Contact: outgoing client contact completed by the next business day at 5:00 PM.
-- Appearance Filed: appearance filing notification or template evidence completed by the second business day at 5:00 PM.
+- Appearance Filed: appearance filing notification or template evidence checked after 48 hours from matter creation, skipping non-business days.
 - Court Results: court result communication sent by the next business day at 5:00 PM after court.
 - Post-Court Call: post-court attorney/client call scheduled by the next business day at 5:00 PM after court when the case continues.
 - Client Follow-Up: flags when 2 or more inbound client messages appear before a firm response.
+
+Template proof is checked from matter-linked Clio Communications. CWCA looks at the email subject line for templates like Welcome Letter, Carta de bienvenida, Welcome to Hirsch Law Group, Court Appearance Has Been Filed Notification, and Court Result / Resultado messages.
 
 ## Compliance And Data Handling
 

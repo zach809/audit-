@@ -171,7 +171,7 @@ function problemText(item: DashboardItem): string {
       return "This row came from an older incomplete audit result. Refresh this matter so the app can re-check the Clio communication and calendar evidence.";
     }
     if (item.reasonCode === "EVIDENCE_NOT_CONFIRMED") {
-      return "CWCA could not confidently confirm this proof from read-only Clio evidence. Review the matter before treating it as missed work.";
+      return "CWCA could not confidently confirm this proof from read-only Clio evidence. Check the matter's Communications tab for the matching email subject before coaching the team.";
     }
     const reason = !isInternalPlaceholder(item.reasonCode) ? ` ${item.reasonCode}` : "";
     return `Could not verify this from the Clio API.${reason}`;
