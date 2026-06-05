@@ -27,6 +27,281 @@
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.weekly-review-builder {
+  display: grid;
+  gap: 14px;
+}
+
+.review-builder-title {
+  align-items: flex-start;
+}
+
+.review-progress-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.review-progress-grid div {
+  background: rgba(12, 11, 10, 0.42);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.review-progress-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.review-progress-grid strong {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.review-completion-message {
+  align-items: center;
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.review-completion-message.attention {
+  background: rgba(197, 138, 84, 0.12);
+  border: 1px solid rgba(197, 138, 84, 0.34);
+}
+
+.review-completion-message.done {
+  background: rgba(143, 179, 154, 0.12);
+  border: 1px solid rgba(143, 179, 154, 0.34);
+}
+
+.review-completion-message span {
+  color: var(--muted);
+}
+
+.review-queue-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.review-queue-filters {
+  background: rgba(12, 11, 10, 0.42);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.review-queue-filters input,
+.review-queue-filters select,
+.review-form-grid input,
+.review-form-grid select,
+.include-toggle select {
+  background: rgba(5, 5, 4, 0.74);
+  border-color: var(--line-soft);
+  color: var(--text);
+}
+
+.review-item {
+  border-left: 4px solid var(--purple);
+}
+
+.review-item.status-Resolved,
+.review-item.status-No-Action-Needed {
+  border-left-color: var(--green);
+}
+
+.review-item.status-Still-Needs-Action,
+.review-item.status-Unable-to-Confirm {
+  border-left-color: var(--amber);
+}
+
+.review-item.status-In-Progress,
+.review-item.status-Approved-Exception {
+  border-left-color: var(--blue);
+}
+
+.review-item.status-Skipped-for-Now {
+  border-left-color: var(--muted);
+  opacity: 0.84;
+}
+
+.selected-matter-grid,
+.review-form-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.selected-matter-grid span {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+  padding: 10px;
+}
+
+.selected-matter-grid b {
+  color: var(--text);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.review-editor label small {
+  color: var(--muted);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.review-decision-buttons button.status-Resolved.active,
+.review-decision-buttons button.status-No-Action-Needed.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #07110b;
+}
+
+.review-decision-buttons button.status-Still-Needs-Action.active,
+.review-decision-buttons button.status-Unable-to-Confirm.active {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #120b05;
+}
+
+.review-decision-buttons button.status-In-Progress.active,
+.review-decision-buttons button.status-Approved-Exception.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #071018;
+}
+
+.review-decision-buttons button.status-Skipped-for-Now.active {
+  background: var(--charcoal);
+  border-color: var(--charcoal);
+  color: var(--text);
+}
+
+.review-save-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-save-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.review-history {
+  background: rgba(12, 11, 10, 0.42);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+}
+
+.history-entry {
+  border-left: 3px solid var(--blue);
+  padding-left: 10px;
+}
+
+.history-entry strong {
+  color: var(--text);
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.history-entry p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 3px 0;
+}
+
+.report-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.review-preview-head small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.download-warning {
+  background: rgba(197, 138, 84, 0.12);
+  border: 1px solid rgba(197, 138, 84, 0.36);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.download-warning p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.download-warning div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .review-builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-progress-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .review-item-list {
+    max-height: 360px;
+  }
+}
+
+@media (max-width: 720px) {
+  .review-progress-grid,
+  .selected-matter-grid,
+  .review-form-grid,
+  .review-range-card {
+    grid-template-columns: 1fr;
+  }
+
+  .review-preview-head,
+  .review-editor-head {
+    display: grid;
+  }
+
+  .report-button-row {
+    justify-content: flex-start;
+  }
+}
+
 * { box-sizing: border-box; }
 
 @keyframes cwca-fade-up {
@@ -3866,5 +4141,254 @@ th,
   .report-preview pre,
   .review-preview pre {
     max-height: 420px;
+  }
+}
+
+/* End-of-week review builder final overrides */
+.weekly-review-builder {
+  display: grid;
+  gap: 14px;
+}
+
+.weekly-review-builder .review-builder-grid {
+  grid-template-columns: minmax(240px, 0.75fr) minmax(340px, 1fr) minmax(380px, 1.15fr);
+}
+
+.weekly-review-builder .review-range-card {
+  grid-template-columns: minmax(190px, 0.7fr) minmax(150px, 0.42fr) minmax(150px, 0.42fr) auto;
+}
+
+.weekly-review-builder .review-progress-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.weekly-review-builder .review-progress-grid div {
+  background: rgba(12, 11, 10, 0.42);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.weekly-review-builder .review-progress-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.weekly-review-builder .review-progress-grid strong {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.review-completion-message {
+  align-items: center;
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.review-completion-message.attention {
+  background: rgba(197, 138, 84, 0.12);
+  border: 1px solid rgba(197, 138, 84, 0.34);
+}
+
+.review-completion-message.done {
+  background: rgba(143, 179, 154, 0.12);
+  border: 1px solid rgba(143, 179, 154, 0.34);
+}
+
+.review-completion-message span {
+  color: var(--muted);
+}
+
+.review-queue-panel,
+.review-history {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.review-queue-filters,
+.review-history {
+  background: rgba(12, 11, 10, 0.42);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.review-queue-filters {
+  display: grid;
+  gap: 8px;
+}
+
+.review-queue-filters input,
+.review-queue-filters select,
+.review-form-grid input,
+.review-form-grid select,
+.include-toggle select {
+  background: rgba(5, 5, 4, 0.74);
+  border-color: var(--line-soft);
+  color: var(--text);
+}
+
+.weekly-review-builder .review-item {
+  border-left: 4px solid var(--purple);
+}
+
+.weekly-review-builder .review-item.status-Resolved,
+.weekly-review-builder .review-item.status-No-Action-Needed {
+  border-left-color: var(--green);
+}
+
+.weekly-review-builder .review-item.status-Still-Needs-Action,
+.weekly-review-builder .review-item.status-Unable-to-Confirm {
+  border-left-color: var(--amber);
+}
+
+.weekly-review-builder .review-item.status-In-Progress,
+.weekly-review-builder .review-item.status-Approved-Exception {
+  border-left-color: var(--blue);
+}
+
+.weekly-review-builder .review-item.status-Skipped-for-Now {
+  border-left-color: var(--muted);
+  opacity: 0.84;
+}
+
+.selected-matter-grid,
+.review-form-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.selected-matter-grid span {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 4px;
+  padding: 10px;
+}
+
+.selected-matter-grid b {
+  color: var(--text);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.weekly-review-builder .review-editor label small {
+  color: var(--muted);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.review-decision-buttons button.status-Resolved.active,
+.review-decision-buttons button.status-No-Action-Needed.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #07110b;
+}
+
+.review-decision-buttons button.status-Still-Needs-Action.active,
+.review-decision-buttons button.status-Unable-to-Confirm.active {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #120b05;
+}
+
+.review-decision-buttons button.status-In-Progress.active,
+.review-decision-buttons button.status-Approved-Exception.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #071018;
+}
+
+.review-decision-buttons button.status-Skipped-for-Now.active {
+  background: var(--charcoal);
+  border-color: var(--charcoal);
+  color: var(--text);
+}
+
+.history-entry {
+  border-left: 3px solid var(--blue);
+  padding-left: 10px;
+}
+
+.history-entry strong {
+  color: var(--text);
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.history-entry p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 3px 0;
+}
+
+.report-button-row,
+.download-warning div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.review-preview-head small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.download-warning {
+  background: rgba(197, 138, 84, 0.12);
+  border: 1px solid rgba(197, 138, 84, 0.36);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.download-warning p {
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (max-width: 1200px) {
+  .weekly-review-builder .review-builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .weekly-review-builder .review-progress-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .weekly-review-builder .review-progress-grid,
+  .selected-matter-grid,
+  .review-form-grid,
+  .weekly-review-builder .review-range-card {
+    grid-template-columns: 1fr;
+  }
+
+  .report-button-row {
+    justify-content: flex-start;
   }
 }

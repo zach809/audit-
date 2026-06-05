@@ -29,8 +29,16 @@ type ActionCsvRow = {
   audit_version: string | null;
   review_decision: string | null;
   review_note: string | null;
+  proof_type: string | null;
   proof_reference: string | null;
+  next_step: string | null;
+  report_summary: string | null;
+  internal_notes: string | null;
+  include_in_report: boolean | null;
+  reviewed_by: string | null;
+  review_completed_at: string | Date | null;
   review_updated_at: string | Date | null;
+  review_history: unknown;
 };
 
 export type WorkspaceAuditItem = {
@@ -51,8 +59,16 @@ export type WorkspaceAuditItem = {
   audit_version: string | null;
   review_decision: string | null;
   review_note: string | null;
+  proof_type: string | null;
   proof_reference: string | null;
+  next_step: string | null;
+  report_summary: string | null;
+  internal_notes: string | null;
+  include_in_report: boolean | null;
+  reviewed_by: string | null;
+  review_completed_at: string | Date | null;
   review_updated_at: string | Date | null;
+  review_history: unknown;
 };
 
 function csvCell(value: unknown): string {
@@ -188,8 +204,34 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
           'lastEvaluatedAt', i.last_evaluated_at,
           'reviewDecision', r.review_decision,
           'reviewNote', r.review_note,
+          'proofType', r.proof_type,
           'reviewProofReference', r.proof_reference,
+          'nextStep', r.next_step,
+          'reportSummary', r.report_summary,
+          'internalNotes', r.internal_notes,
+          'includeInReport', r.include_in_report,
+          'reviewedBy', r.reviewed_by,
+          'reviewCompletedAt', r.review_completed_at,
           'reviewUpdatedAt', r.updated_at,
+          'reviewHistory', coalesce((
+            select json_agg(
+              json_build_object(
+                'historyId', h.history_id,
+                'updatedAt', h.updated_at,
+                'updatedBy', h.updated_by,
+                'previousDecision', h.previous_decision,
+                'decision', h.review_decision,
+                'resultsDetails', h.results_details,
+                'proofType', h.proof_type,
+                'proofReference', h.proof_reference,
+                'nextStep', h.next_step,
+                'reportSummary', h.report_summary
+              )
+              order by h.updated_at desc, h.history_id desc
+            )
+            from audit_review_history h
+            where h.matter_id = i.matter_id and h.step_code = i.step_code
+          ), '[]'::json),
           'reasonCode',
             case
               when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -340,8 +382,34 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       i.audit_version,
       r.review_decision,
       r.review_note,
+      r.proof_type,
       r.proof_reference,
+      r.next_step,
+      r.report_summary,
+      r.internal_notes,
+      r.include_in_report,
+      r.reviewed_by,
+      r.review_completed_at,
       r.updated_at as review_updated_at,
+      coalesce((
+        select json_agg(
+          json_build_object(
+            'historyId', h.history_id,
+            'updatedAt', h.updated_at,
+            'updatedBy', h.updated_by,
+            'previousDecision', h.previous_decision,
+            'decision', h.review_decision,
+            'resultsDetails', h.results_details,
+            'proofType', h.proof_type,
+            'proofReference', h.proof_reference,
+            'nextStep', h.next_step,
+            'reportSummary', h.report_summary
+          )
+          order by h.updated_at desc, h.history_id desc
+        )
+        from audit_review_history h
+        where h.matter_id = i.matter_id and h.step_code = i.step_code
+      ), '[]'::json) as review_history,
       case
         when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
           then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
@@ -462,8 +530,34 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
         i.audit_version,
         r.review_decision,
         r.review_note,
+        r.proof_type,
         r.proof_reference,
+        r.next_step,
+        r.report_summary,
+        r.internal_notes,
+        r.include_in_report,
+        r.reviewed_by,
+        r.review_completed_at,
         r.updated_at as review_updated_at,
+        coalesce((
+          select json_agg(
+            json_build_object(
+              'historyId', h.history_id,
+              'updatedAt', h.updated_at,
+              'updatedBy', h.updated_by,
+              'previousDecision', h.previous_decision,
+              'decision', h.review_decision,
+              'resultsDetails', h.results_details,
+              'proofType', h.proof_type,
+              'proofReference', h.proof_reference,
+              'nextStep', h.next_step,
+              'reportSummary', h.report_summary
+            )
+            order by h.updated_at desc, h.history_id desc
+          )
+          from audit_review_history h
+          where h.matter_id = i.matter_id and h.step_code = i.step_code
+        ), '[]'::json) as review_history,
         case
           when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
             then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end

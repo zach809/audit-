@@ -99,13 +99,34 @@ create table if not exists audit_run (
 create table if not exists audit_review (
   matter_id text not null references audit_matter(matter_id) on delete cascade,
   step_code text not null,
-  review_decision text not null default 'Pending',
+  review_decision text not null default 'Needs Review',
   review_note text not null default '',
+  proof_type text not null default 'None Available',
   proof_reference text not null default '',
+  next_step text not null default '',
+  report_summary text not null default '',
+  internal_notes text not null default '',
+  include_in_report boolean not null default true,
   reviewed_by text not null default '',
+  review_completed_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (matter_id, step_code)
+);
+
+create table if not exists audit_review_history (
+  history_id bigserial primary key,
+  matter_id text not null references audit_matter(matter_id) on delete cascade,
+  step_code text not null,
+  previous_decision text,
+  review_decision text not null,
+  results_details text not null default '',
+  proof_type text not null default 'None Available',
+  proof_reference text not null default '',
+  next_step text not null default '',
+  report_summary text not null default '',
+  updated_by text not null default '',
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists audit_metric_snapshot (
@@ -139,26 +160,47 @@ alter table if exists audit_item alter column last_evaluated_at set not null;
 alter table if exists audit_run add column if not exists app_version text;
 alter table if exists audit_review add column if not exists review_decision text;
 alter table if exists audit_review add column if not exists review_note text;
+alter table if exists audit_review add column if not exists proof_type text;
 alter table if exists audit_review add column if not exists proof_reference text;
+alter table if exists audit_review add column if not exists next_step text;
+alter table if exists audit_review add column if not exists report_summary text;
+alter table if exists audit_review add column if not exists internal_notes text;
+alter table if exists audit_review add column if not exists include_in_report boolean;
 alter table if exists audit_review add column if not exists reviewed_by text;
+alter table if exists audit_review add column if not exists review_completed_at timestamptz;
 alter table if exists audit_review add column if not exists created_at timestamptz;
 alter table if exists audit_review add column if not exists updated_at timestamptz;
 update audit_review
-set review_decision = coalesce(review_decision, 'Pending'),
+set review_decision = coalesce(nullif(review_decision, 'Pending'), 'Needs Review'),
     review_note = coalesce(review_note, ''),
+    proof_type = coalesce(proof_type, 'None Available'),
     proof_reference = coalesce(proof_reference, ''),
+    next_step = coalesce(next_step, ''),
+    report_summary = coalesce(report_summary, ''),
+    internal_notes = coalesce(internal_notes, ''),
+    include_in_report = coalesce(include_in_report, true),
     reviewed_by = coalesce(reviewed_by, ''),
     created_at = coalesce(created_at, now()),
     updated_at = coalesce(updated_at, now());
-alter table if exists audit_review alter column review_decision set default 'Pending';
+alter table if exists audit_review alter column review_decision set default 'Needs Review';
 alter table if exists audit_review alter column review_note set default '';
+alter table if exists audit_review alter column proof_type set default 'None Available';
 alter table if exists audit_review alter column proof_reference set default '';
+alter table if exists audit_review alter column next_step set default '';
+alter table if exists audit_review alter column report_summary set default '';
+alter table if exists audit_review alter column internal_notes set default '';
+alter table if exists audit_review alter column include_in_report set default true;
 alter table if exists audit_review alter column reviewed_by set default '';
 alter table if exists audit_review alter column created_at set default now();
 alter table if exists audit_review alter column updated_at set default now();
 alter table if exists audit_review alter column review_decision set not null;
 alter table if exists audit_review alter column review_note set not null;
+alter table if exists audit_review alter column proof_type set not null;
 alter table if exists audit_review alter column proof_reference set not null;
+alter table if exists audit_review alter column next_step set not null;
+alter table if exists audit_review alter column report_summary set not null;
+alter table if exists audit_review alter column internal_notes set not null;
+alter table if exists audit_review alter column include_in_report set not null;
 alter table if exists audit_review alter column reviewed_by set not null;
 alter table if exists audit_review alter column created_at set not null;
 alter table if exists audit_review alter column updated_at set not null;
@@ -173,6 +215,7 @@ create index if not exists audit_matter_last_audited_idx on audit_matter(last_au
 create index if not exists audit_item_status_idx on audit_item(status);
 create index if not exists audit_item_audit_version_idx on audit_item(audit_version);
 create index if not exists audit_review_decision_idx on audit_review(review_decision);
+create index if not exists audit_review_history_matter_idx on audit_review_history(matter_id, step_code, updated_at desc);
 `;
 
 export async function initDb(): Promise<void> {

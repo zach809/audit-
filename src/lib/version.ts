@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-audit-route-stability-welcome-body-check-2026-06-04";
+export const APP_VERSION = "cwca-weekly-review-queue-report-builder-2026-06-05";

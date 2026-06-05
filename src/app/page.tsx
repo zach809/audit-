@@ -42,8 +42,16 @@ type DashboardItem = {
   lastEvaluatedAt?: string | null;
   reviewDecision?: string | null;
   reviewNote?: string | null;
+  proofType?: string | null;
   reviewProofReference?: string | null;
+  nextStep?: string | null;
+  reportSummary?: string | null;
+  internalNotes?: string | null;
+  includeInReport?: boolean | null;
+  reviewedBy?: string | null;
+  reviewCompletedAt?: string | null;
   reviewUpdatedAt?: string | null;
+  reviewHistory?: unknown;
 };
 
 type WorkspaceRow = {
@@ -61,8 +69,16 @@ type WorkspaceRow = {
   auditVersion?: string | null;
   reviewDecision?: string | null;
   reviewNote?: string | null;
+  proofType?: string | null;
   reviewProofReference?: string | null;
+  nextStep?: string | null;
+  reportSummary?: string | null;
+  internalNotes?: string | null;
+  includeInReport?: boolean | null;
+  reviewedBy?: string | null;
+  reviewCompletedAt?: string | null;
   reviewUpdatedAt?: string | null;
+  reviewHistory?: unknown;
 };
 
 function evidencePath(item: DashboardItem): string {
@@ -332,7 +348,7 @@ const GUIDE_STATUS_CARDS = [
   {
     color: "red",
     title: "Needs Follow-Up",
-    text: "Start here. These are missing, late, or review items that a case manager or attorney should check in Clio.",
+    text: "Start here. These are alerted, late, or review items that a case manager or attorney should check in Clio.",
   },
   {
     color: "green",
@@ -489,8 +505,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       auditVersion: item.audit_version,
       reviewDecision: item.review_decision,
       reviewNote: item.review_note,
+      proofType: item.proof_type,
       reviewProofReference: item.proof_reference,
+      nextStep: item.next_step,
+      reportSummary: item.report_summary,
+      internalNotes: item.internal_notes,
+      includeInReport: item.include_in_report,
+      reviewedBy: item.reviewed_by,
+      reviewCompletedAt: item.review_completed_at ? String(item.review_completed_at) : null,
       reviewUpdatedAt: item.review_updated_at ? String(item.review_updated_at) : null,
+      reviewHistory: item.review_history,
     } satisfies WorkspaceRow,
   }));
   const focusedWorkspaceRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter));
@@ -552,7 +576,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       auditItem: workflowLabel(item.row.stepCode),
       status: displayAuditStatus(item.row.status),
       why: actionFor(item.row.stepCode, item.row.status),
-      nextStep: actionFor(item.row.stepCode, item.row.status),
       due: item.row.deadlineAt ? formatLocal(item.row.deadlineAt) : null,
       found: item.row.evidenceAt ? formatLocal(item.row.evidenceAt) : null,
       clioUrl: clioMatterPath(item.row.matterId),
@@ -560,8 +583,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       auditVersion: item.row.auditVersion,
       reviewDecision: item.row.reviewDecision,
       reviewNote: item.row.reviewNote,
+      proofType: item.row.proofType,
       reviewProofReference: item.row.reviewProofReference,
+      nextStep: item.row.nextStep,
+      reportSummary: item.row.reportSummary,
+      internalNotes: item.row.internalNotes,
+      includeInReport: item.row.includeInReport,
+      reviewedBy: item.row.reviewedBy,
+      reviewCompletedAt: item.row.reviewCompletedAt,
       reviewUpdatedAt: item.row.reviewUpdatedAt,
+      reviewHistory: item.row.reviewHistory,
     }));
   const statusChart = [
     { label: "Needs Follow-Up", value: needsFollowUpCount, className: "followup" },
@@ -659,11 +690,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
       </div>
 
-      <section className="deployment-proof sr-only">
+      <section className="deployment-proof">
         <div>
           <span className="label">Deployment Proof</span>
-          <strong>Updated court audit logic is active</strong>
-          <p>Version {APP_VERSION}: court results use the 48-hour window, post-court calls wait for court results, and vague matter-linked calendar entries can count as possible court events.</p>
+          <strong>Weekly review builder is active</strong>
+          <p>Version {APP_VERSION}: Reports now include the one-by-one weekly flagged matter queue, saved results details, next steps, and review history.</p>
         </div>
         <a className="button compact" href="/api/health" target="_blank" rel="noreferrer">Check Version</a>
       </section>
@@ -941,7 +972,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         ) : (
           <div className="chart-empty">
             <strong>No priority follow-up items found.</strong>
-            <p>When missing, late, or review items appear, the top priorities will show here.</p>
+            <p>When alerted, late, or review items appear, the top priorities will show here.</p>
           </div>
         )}
       </section>
@@ -1058,7 +1089,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div><strong>1. Start with Matters.</strong><span>Use the matter cards to see what needs follow-up and open the proof links.</span></div>
             <div><strong>2. Verify in Clio.</strong><span>Open the Clio link and proof link before deciding whether coaching is needed.</span></div>
             <div><strong>3. Set the report range.</strong><span>Use Reports to choose the exact dates you want covered before downloading.</span></div>
-            <div><strong>4. Send the case-manager list.</strong><span>Download the missing-items review when you need a clean follow-up handoff.</span></div>
+            <div><strong>4. Send the case-manager list.</strong><span>Download the flagged-matters review when you need a clean follow-up handoff.</span></div>
             <div><strong>5. Keep it coaching-focused.</strong><span>Use CWCA as a visibility tool, not as discipline by itself.</span></div>
           </div>
         </section>
@@ -1111,7 +1142,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
               <span className="label">Main Report</span>
-              <strong>End-of-Week Case Manager Audit Report</strong>
+              <strong>End of the week Case manager clio audit report</strong>
               <p>Plain text report with alerts, flagged matters, current status, and next steps.</p>
               <div className="report-date-row">
                 <label>
@@ -1147,7 +1178,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
         <div className="report-preview">
           <span className="label">Report Format Preview</span>
-          <pre>{`End-of-Week Clio Case Manager Audit Report
+          <pre>{`End of the week Case manager clio audit report
 
 Priority Summary
 * Flagged matters reviewed: 3
@@ -1166,7 +1197,7 @@ Flagged Matters
    Flagged Matter & What Happened:
    Welcome Letter is still flagged because CWCA did not find matching proof in Clio.
 
-   What the Team Did:
+   Results Details:
    No proof of completion has been found yet.
 
    Current Status:
@@ -1415,7 +1446,7 @@ Items Still Needing Action
               {refreshNeeded ? (
                 <div className="refresh-needed">
                   <strong>This matter needs one fresh Clio check.</strong>
-                  <span>The saved result is from an older failed API run, so it is not evidence of missing work yet.</span>
+                  <span>The saved result is from an older incomplete API run, so it is not proof of undone work yet.</span>
                 </div>
               ) : (
                 <div className="step-grid">
