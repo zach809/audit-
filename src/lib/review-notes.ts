@@ -11,6 +11,7 @@ export async function saveAuditReview(input: {
   decision: unknown;
   note: unknown;
   resultsDetails?: unknown;
+  caseManagerName?: unknown;
   proofType?: unknown;
   proofReference: unknown;
   nextStep?: unknown;
@@ -26,6 +27,7 @@ export async function saveAuditReview(input: {
 
   const decision = normalizeReviewDecision(input.decision);
   const note = cleanText(input.resultsDetails ?? input.note, 1200);
+  const caseManagerName = cleanText(input.caseManagerName, 160);
   const proofType = normalizeProofType(input.proofType);
   const proofReference = cleanText(input.proofReference, 500);
   const nextStep = normalizeNextStep(input.nextStep);
@@ -45,18 +47,19 @@ export async function saveAuditReview(input: {
 
   const rows = await db()`
     insert into audit_review (
-      matter_id, step_code, review_decision, review_note, proof_type, proof_reference,
+      matter_id, step_code, review_decision, review_note, case_manager_name, proof_type, proof_reference,
       next_step, report_summary, internal_notes, include_in_report, reviewed_by,
       review_completed_at, updated_at
     )
     values (
-      ${matterId}, ${stepCode}, ${decision}, ${note}, ${proofType}, ${proofReference},
+      ${matterId}, ${stepCode}, ${decision}, ${note}, ${caseManagerName}, ${proofType}, ${proofReference},
       ${nextStep}, ${reportSummary}, ${internalNotes}, ${includeInReport}, ${reviewedBy},
       ${completed ? new Date() : null}, now()
     )
     on conflict (matter_id, step_code) do update set
       review_decision = excluded.review_decision,
       review_note = excluded.review_note,
+      case_manager_name = excluded.case_manager_name,
       proof_type = excluded.proof_type,
       proof_reference = excluded.proof_reference,
       next_step = excluded.next_step,
@@ -66,7 +69,7 @@ export async function saveAuditReview(input: {
       reviewed_by = excluded.reviewed_by,
       review_completed_at = excluded.review_completed_at,
       updated_at = now()
-    returning matter_id, step_code, review_decision, review_note, proof_type, proof_reference,
+    returning matter_id, step_code, review_decision, review_note, case_manager_name, proof_type, proof_reference,
       next_step, report_summary, internal_notes, include_in_report, reviewed_by,
       review_completed_at, updated_at
   `;
@@ -74,13 +77,13 @@ export async function saveAuditReview(input: {
   const historyRows = await db()`
     insert into audit_review_history (
       matter_id, step_code, previous_decision, review_decision, results_details,
-      proof_type, proof_reference, next_step, report_summary, updated_by, updated_at
+      case_manager_name, proof_type, proof_reference, next_step, report_summary, updated_by, updated_at
     )
     values (
       ${matterId}, ${stepCode}, ${previousDecision}, ${decision}, ${note},
-      ${proofType}, ${proofReference}, ${nextStep}, ${reportSummary}, ${reviewedBy}, now()
+      ${caseManagerName}, ${proofType}, ${proofReference}, ${nextStep}, ${reportSummary}, ${reviewedBy}, now()
     )
-    returning history_id, previous_decision, review_decision, results_details, proof_type,
+    returning history_id, previous_decision, review_decision, results_details, case_manager_name, proof_type,
       proof_reference, next_step, report_summary, updated_by, updated_at
   `;
   return { ...rows[0], history: historyRows[0] };

@@ -145,7 +145,8 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.selected-matter-grid span {
+.selected-matter-grid span,
+.selected-matter-grid .selected-matter-field {
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--line-soft);
   border-radius: 10px;
@@ -156,10 +157,26 @@
   padding: 10px;
 }
 
-.selected-matter-grid b {
+.selected-matter-grid b,
+.selected-matter-grid .selected-matter-field b {
   color: var(--text);
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.selected-matter-grid .selected-matter-field {
+  margin: 0;
+}
+
+.selected-matter-grid .selected-matter-field input {
+  background: rgba(5, 5, 4, 0.74);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  min-height: 32px;
+  padding: 7px 9px;
+  width: 100%;
 }
 
 .review-editor label small {
@@ -5258,6 +5275,36 @@ th,
 .weekly-review-builder .review-queue-empty strong {
   color: var(--text);
   font-size: 13px;
+}
+
+.weekly-review-builder .selected-matter-grid .selected-matter-field {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 6px;
+  margin: 0;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.weekly-review-builder .selected-matter-grid .selected-matter-field b {
+  color: var(--text);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.weekly-review-builder .selected-matter-grid .selected-matter-field input {
+  background: rgba(12, 19, 29, 0.96);
+  border: 1px solid rgba(222, 235, 248, 0.16);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 12px;
+  min-height: 34px;
+  padding: 7px 10px;
+  width: 100%;
 }
 
 /* Matters tab spacing cleanup */

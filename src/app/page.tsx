@@ -42,6 +42,7 @@ type DashboardItem = {
   lastEvaluatedAt?: string | null;
   reviewDecision?: string | null;
   reviewNote?: string | null;
+  caseManagerName?: string | null;
   proofType?: string | null;
   reviewProofReference?: string | null;
   nextStep?: string | null;
@@ -69,6 +70,7 @@ type WorkspaceRow = {
   auditVersion?: string | null;
   reviewDecision?: string | null;
   reviewNote?: string | null;
+  caseManagerName?: string | null;
   proofType?: string | null;
   reviewProofReference?: string | null;
   nextStep?: string | null;
@@ -505,6 +507,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       auditVersion: item.audit_version,
       reviewDecision: item.review_decision,
       reviewNote: item.review_note,
+      caseManagerName: item.case_manager_name,
       proofType: item.proof_type,
       reviewProofReference: item.proof_reference,
       nextStep: item.next_step,
@@ -565,12 +568,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const reviewBuilderItems: ReviewBuilderItem[] = allWorkspaceRows
     .filter((item) => isFollowUpStatus(item.row.status))
     .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
-    .slice(0, 100)
     .map((item) => ({
       id: `${item.row.matterId}-${item.row.stepCode}`,
       matterId: item.row.matterId,
       stepCode: item.row.stepCode,
       attorney: item.attorney,
+      caseManager: item.row.caseManagerName || null,
+      reviewCaseManager: item.row.caseManagerName || null,
       clientName: item.row.clientName,
       matterNumber: item.row.matterNumber,
       auditItem: workflowLabel(item.row.stepCode),

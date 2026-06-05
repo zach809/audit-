@@ -29,6 +29,7 @@ type ActionCsvRow = {
   audit_version: string | null;
   review_decision: string | null;
   review_note: string | null;
+  case_manager_name: string | null;
   proof_type: string | null;
   proof_reference: string | null;
   next_step: string | null;
@@ -59,6 +60,7 @@ export type WorkspaceAuditItem = {
   audit_version: string | null;
   review_decision: string | null;
   review_note: string | null;
+  case_manager_name: string | null;
   proof_type: string | null;
   proof_reference: string | null;
   next_step: string | null;
@@ -204,6 +206,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
           'lastEvaluatedAt', i.last_evaluated_at,
           'reviewDecision', r.review_decision,
           'reviewNote', r.review_note,
+          'caseManagerName', r.case_manager_name,
           'proofType', r.proof_type,
           'reviewProofReference', r.proof_reference,
           'nextStep', r.next_step,
@@ -222,6 +225,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
                 'previousDecision', h.previous_decision,
                 'decision', h.review_decision,
                 'resultsDetails', h.results_details,
+                'caseManagerName', h.case_manager_name,
                 'proofType', h.proof_type,
                 'proofReference', h.proof_reference,
                 'nextStep', h.next_step,
@@ -382,6 +386,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       i.audit_version,
       r.review_decision,
       r.review_note,
+      r.case_manager_name,
       r.proof_type,
       r.proof_reference,
       r.next_step,
@@ -400,6 +405,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
             'previousDecision', h.previous_decision,
             'decision', h.review_decision,
             'resultsDetails', h.results_details,
+            'caseManagerName', h.case_manager_name,
             'proofType', h.proof_type,
             'proofReference', h.proof_reference,
             'nextStep', h.next_step,
@@ -530,6 +536,7 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
         i.audit_version,
         r.review_decision,
         r.review_note,
+        r.case_manager_name,
         r.proof_type,
         r.proof_reference,
         r.next_step,
@@ -548,6 +555,7 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
               'previousDecision', h.previous_decision,
               'decision', h.review_decision,
               'resultsDetails', h.results_details,
+              'caseManagerName', h.case_manager_name,
               'proofType', h.proof_type,
               'proofReference', h.proof_reference,
               'nextStep', h.next_step,
@@ -592,6 +600,7 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
   const rows = await getActionRows(filters);
   const headers = [
     "Attorney",
+    "Case Manager",
     "Priority",
     "Client",
     "Matter",
@@ -620,6 +629,7 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
         : "";
     return [
       row.responsible_attorney_name || "Unassigned",
+      row.case_manager_name || "",
       priorityFor(status),
       `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim(),
       row.matter_number,
@@ -830,8 +840,10 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
     reportIndex += 1;
     const first = matterRows[0];
     const attorney = first.responsible_attorney_name || "Unassigned";
+    const caseManager = first.case_manager_name || "Not entered";
     lines.push(`${reportIndex}. Matter: ${clientMatterName(first)}`);
     lines.push(`   Attorney: ${attorney}`);
+    lines.push(`   Case Manager: ${caseManager}`);
     lines.push(`   Matter Number: ${first.matter_number}`);
     lines.push(`   Clio Link: ${clioMatterLink(String(first.matter_id))}`);
     lines.push("");

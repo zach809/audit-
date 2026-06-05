@@ -22,6 +22,7 @@ type ReviewHistoryEntry = {
   previousDecision?: string | null;
   decision?: string | null;
   resultsDetails?: string | null;
+  caseManagerName?: string | null;
   proofType?: string | null;
   proofReference?: string | null;
   nextStep?: string | null;
@@ -34,6 +35,7 @@ export type ReviewBuilderItem = {
   stepCode: string;
   attorney: string;
   caseManager?: string | null;
+  reviewCaseManager?: string | null;
   clientName: string;
   matterNumber: string;
   auditItem: string;
@@ -60,6 +62,7 @@ export type ReviewBuilderItem = {
 
 type ReviewState = {
   decision: ReviewDecision;
+  caseManagerName: string;
   resultsDetails: string;
   proofType: ProofType;
   proofReference: string;
@@ -92,6 +95,7 @@ const ALERT_TYPE_FILTERS = [
 function defaultReview(): ReviewState {
   return {
     decision: "Needs Review",
+    caseManagerName: "",
     resultsDetails: "",
     proofType: "None Available",
     proofReference: "",
@@ -161,11 +165,12 @@ function cleanHistory(value: unknown): ReviewHistoryEntry[] {
 function initialReviews(items: ReviewBuilderItem[]): Record<string, ReviewState> {
   return Object.fromEntries(
     items
-      .filter((item) => item.reviewDecision || item.reviewNote || item.reviewProofReference || item.nextStep || item.reportSummary || item.reviewUpdatedAt)
+      .filter((item) => item.reviewDecision || item.reviewNote || item.reviewCaseManager || item.reviewProofReference || item.nextStep || item.reportSummary || item.reviewUpdatedAt)
       .map((item) => [
         item.id,
         {
           decision: normalizeReviewDecision(item.reviewDecision),
+          caseManagerName: item.reviewCaseManager ?? item.caseManager ?? "",
           resultsDetails: item.reviewNote ?? "",
           proofType: normalizeProofType(item.proofType),
           proofReference: item.reviewProofReference ?? "",
@@ -184,6 +189,10 @@ function initialReviews(items: ReviewBuilderItem[]): Record<string, ReviewState>
 
 function statusForItem(item: ReviewBuilderItem, reviews: Record<string, ReviewState>): ReviewDecision {
   return reviews[item.id]?.decision ?? "Needs Review";
+}
+
+function caseManagerForItem(item: ReviewBuilderItem, reviews: Record<string, ReviewState>): string {
+  return reviews[item.id]?.caseManagerName?.trim() || item.caseManager?.trim() || "";
 }
 
 function reviewReady(review: ReviewState | undefined): boolean {
@@ -221,8 +230,8 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>("All");
   const [alertFilter, setAlertFilter] = useState<(typeof ALERT_TYPE_FILTERS)[number]>("All");
-  const [attorneyFilter, setAttorneyFilter] = useState("All");
-  const [caseManagerFilter, setCaseManagerFilter] = useState("All");
+  const [attorneyFilter, setAttorneyFilter] = useState("");
+  const [caseManagerFilter, setCaseManagerFilter] = useState("");
   const [preparedBy, setPreparedBy] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [pendingDownload, setPendingDownload] = useState<DownloadType | null>(null);
@@ -238,23 +247,26 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
   );
   const rangeLabel = displayRange(reportFrom, reportTo);
 
-  const attorneyOptions = useMemo(() => ["All", ...Array.from(new Set(queueItems.map((item) => item.attorney || "Unassigned"))).sort()], [queueItems]);
+  const attorneyOptions = useMemo(() => Array.from(new Set(items.map((item) => item.attorney || "Unassigned"))).sort(), [items]);
   const caseManagerOptions = useMemo(
-    () => ["All", ...Array.from(new Set(queueItems.map((item) => item.caseManager || "Not available"))).sort()],
-    [queueItems],
+    () => Array.from(new Set(items.map((item) => caseManagerForItem(item, reviews)).filter(Boolean))).sort(),
+    [items, reviews],
   );
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const attorneyQuery = attorneyFilter.trim().toLowerCase();
+    const caseManagerQuery = caseManagerFilter.trim().toLowerCase();
     return queueItems
       .filter((item) => {
         const status = statusForItem(item, reviews);
-        const caseManager = item.caseManager || "Not available";
+        const attorney = item.attorney || "Unassigned";
+        const caseManager = caseManagerForItem(item, reviews) || "Not available";
         const matchesSearch = !query || [item.clientName, item.matterNumber, item.attorney, caseManager].join(" ").toLowerCase().includes(query);
         const matchesStatus = statusFilter === "All" || status === statusFilter;
         const matchesAlert = alertFilter === "All" || item.auditItem === alertFilter || (alertFilter === "Court Date" && item.auditItem === "Court Date Added");
-        const matchesAttorney = attorneyFilter === "All" || item.attorney === attorneyFilter;
-        const matchesCaseManager = caseManagerFilter === "All" || caseManager === caseManagerFilter;
+        const matchesAttorney = !attorneyQuery || attorney.toLowerCase().includes(attorneyQuery);
+        const matchesCaseManager = !caseManagerQuery || caseManager.toLowerCase().includes(caseManagerQuery);
         return matchesSearch && matchesStatus && matchesAlert && matchesAttorney && matchesCaseManager;
       })
       .sort((a, b) => {
@@ -277,6 +289,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
     weeklyItems[0] ??
     null;
   const selectedReview = selected ? reviews[selected.id] ?? defaultReview() : defaultReview();
+  const selectedCaseManagerName = selected ? selectedReview.caseManagerName || selected.caseManager || "" : "";
 
   const reviewedItems = weeklyItems.filter((item) => reviewReady(reviews[item.id]));
   const remainingItems = weeklyItems.filter((item) => !reviewReady(reviews[item.id]));
@@ -332,6 +345,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
         matterId: selected.matterId,
         stepCode: selected.stepCode,
         decision: review.decision,
+        caseManagerName: review.caseManagerName || selected.caseManager || "",
         resultsDetails: review.resultsDetails,
         proofType: review.proofType,
         proofReference: review.proofReference,
@@ -355,6 +369,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
       ...review,
       savedAt,
       completedAt: reviewReady(review) ? savedAt : "",
+      caseManagerName: review.caseManagerName || selected.caseManager || "",
       reviewedBy: review.reviewedBy || preparedBy,
       history: body?.review?.history ? [body.review.history, ...(review.history ?? [])] : review.history,
     };
@@ -417,7 +432,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
         lines.push(`${item.clientName}`);
         lines.push("");
         lines.push(`Attorney: ${reportLineValue(item.attorney)}`);
-        lines.push(`Case Manager: ${reportLineValue(item.caseManager)}`);
+        lines.push(`Case Manager: ${reportLineValue(caseManagerForItem(item, reviews))}`);
         lines.push(`Alert Type: ${item.auditItem}`);
         lines.push(`Status: ${review.decision}`);
         lines.push("");
@@ -634,16 +649,18 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
             </label>
             <label className="queue-filter">
               <span>Attorney</span>
-              <select value={attorneyFilter} onChange={(event) => setAttorneyFilter(event.target.value)}>
-                {attorneyOptions.map((attorney) => <option key={attorney}>{attorney}</option>)}
-              </select>
+              <input list="review-attorney-options" value={attorneyFilter} onChange={(event) => setAttorneyFilter(event.target.value)} placeholder="Type attorney name..." />
             </label>
+            <datalist id="review-attorney-options">
+              {attorneyOptions.map((attorney) => <option key={attorney} value={attorney} />)}
+            </datalist>
             <label className="queue-filter">
               <span>Case Manager</span>
-              <select value={caseManagerFilter} onChange={(event) => setCaseManagerFilter(event.target.value)}>
-                {caseManagerOptions.map((caseManager) => <option key={caseManager}>{caseManager}</option>)}
-              </select>
+              <input list="review-case-manager-options" value={caseManagerFilter} onChange={(event) => setCaseManagerFilter(event.target.value)} placeholder="Type case manager name..." />
             </label>
+            <datalist id="review-case-manager-options">
+              {caseManagerOptions.map((caseManager) => <option key={caseManager} value={caseManager} />)}
+            </datalist>
           </div>
 
           <div className="review-item-list" aria-label="Flagged matters review queue">
@@ -661,7 +678,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
                   <strong>{item.clientName}</strong>
                   <small>Alert: {item.auditItem}</small>
                   <small>Attorney: {item.attorney || "Unassigned"}</small>
-                  <small>Case Manager: {item.caseManager || "Not available"}</small>
+                  <small>Case Manager: {caseManagerForItem(item, reviews) || "Not entered yet"}</small>
                   {item.due ? <small>Due: {item.due}</small> : null}
                   <small>Last Update: {review?.savedAt ? review.savedAt : "Not reviewed yet"}</small>
                 </button>
@@ -687,7 +704,10 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
             </div>
 
             <div className="selected-matter-grid">
-              <span><b>Case Manager</b>{selected.caseManager || "Not available"}</span>
+              <label className="selected-matter-field">
+                <b>Case Manager</b>
+                <input value={selectedCaseManagerName} onChange={(event) => updateReview(selected.id, { caseManagerName: event.target.value })} placeholder="Type case manager name" />
+              </label>
               <span><b>Attorney</b>{selected.attorney || "Unassigned"}</span>
               <span><b>Alert Type</b>{selected.auditItem}</span>
               <span><b>Date Alerted</b>{selected.found || selected.due || "Not available"}</span>

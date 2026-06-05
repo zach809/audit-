@@ -101,6 +101,7 @@ create table if not exists audit_review (
   step_code text not null,
   review_decision text not null default 'Needs Review',
   review_note text not null default '',
+  case_manager_name text not null default '',
   proof_type text not null default 'None Available',
   proof_reference text not null default '',
   next_step text not null default '',
@@ -121,6 +122,7 @@ create table if not exists audit_review_history (
   previous_decision text,
   review_decision text not null,
   results_details text not null default '',
+  case_manager_name text not null default '',
   proof_type text not null default 'None Available',
   proof_reference text not null default '',
   next_step text not null default '',
@@ -160,6 +162,7 @@ alter table if exists audit_item alter column last_evaluated_at set not null;
 alter table if exists audit_run add column if not exists app_version text;
 alter table if exists audit_review add column if not exists review_decision text;
 alter table if exists audit_review add column if not exists review_note text;
+alter table if exists audit_review add column if not exists case_manager_name text;
 alter table if exists audit_review add column if not exists proof_type text;
 alter table if exists audit_review add column if not exists proof_reference text;
 alter table if exists audit_review add column if not exists next_step text;
@@ -173,6 +176,7 @@ alter table if exists audit_review add column if not exists updated_at timestamp
 update audit_review
 set review_decision = coalesce(nullif(review_decision, 'Pending'), 'Needs Review'),
     review_note = coalesce(review_note, ''),
+    case_manager_name = coalesce(case_manager_name, ''),
     proof_type = coalesce(proof_type, 'None Available'),
     proof_reference = coalesce(proof_reference, ''),
     next_step = coalesce(next_step, ''),
@@ -184,6 +188,7 @@ set review_decision = coalesce(nullif(review_decision, 'Pending'), 'Needs Review
     updated_at = coalesce(updated_at, now());
 alter table if exists audit_review alter column review_decision set default 'Needs Review';
 alter table if exists audit_review alter column review_note set default '';
+alter table if exists audit_review alter column case_manager_name set default '';
 alter table if exists audit_review alter column proof_type set default 'None Available';
 alter table if exists audit_review alter column proof_reference set default '';
 alter table if exists audit_review alter column next_step set default '';
@@ -195,6 +200,7 @@ alter table if exists audit_review alter column created_at set default now();
 alter table if exists audit_review alter column updated_at set default now();
 alter table if exists audit_review alter column review_decision set not null;
 alter table if exists audit_review alter column review_note set not null;
+alter table if exists audit_review alter column case_manager_name set not null;
 alter table if exists audit_review alter column proof_type set not null;
 alter table if exists audit_review alter column proof_reference set not null;
 alter table if exists audit_review alter column next_step set not null;
@@ -204,6 +210,10 @@ alter table if exists audit_review alter column include_in_report set not null;
 alter table if exists audit_review alter column reviewed_by set not null;
 alter table if exists audit_review alter column created_at set not null;
 alter table if exists audit_review alter column updated_at set not null;
+alter table if exists audit_review_history add column if not exists case_manager_name text;
+update audit_review_history set case_manager_name = coalesce(case_manager_name, '');
+alter table if exists audit_review_history alter column case_manager_name set default '';
+alter table if exists audit_review_history alter column case_manager_name set not null;
 alter table if exists audit_metric_snapshot add column if not exists logged_call_count integer;
 update audit_metric_snapshot set logged_call_count = 0 where logged_call_count is null;
 alter table if exists audit_metric_snapshot alter column logged_call_count set default 0;
