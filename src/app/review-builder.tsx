@@ -589,20 +589,42 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
 
       <div className="review-builder-grid">
         <div className="review-queue-panel">
+          <div className="review-queue-head">
+            <div>
+              <span className="label">Review Queue</span>
+              <strong>{filteredItems.length} flagged matters</strong>
+            </div>
+            <small>{remainingItems.length} left</small>
+          </div>
           <div className="review-queue-filters">
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search client, matter number, attorney, or case manager" />
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTERS)[number])}>
-              {STATUS_FILTERS.map((status) => <option key={status}>{status}</option>)}
-            </select>
-            <select value={alertFilter} onChange={(event) => setAlertFilter(event.target.value as (typeof ALERT_TYPE_FILTERS)[number])}>
-              {ALERT_TYPE_FILTERS.map((alert) => <option key={alert}>{alert}</option>)}
-            </select>
-            <select value={attorneyFilter} onChange={(event) => setAttorneyFilter(event.target.value)}>
-              {attorneyOptions.map((attorney) => <option key={attorney}>{attorney}</option>)}
-            </select>
-            <select value={caseManagerFilter} onChange={(event) => setCaseManagerFilter(event.target.value)}>
-              {caseManagerOptions.map((caseManager) => <option key={caseManager}>{caseManager}</option>)}
-            </select>
+            <label className="queue-filter queue-filter-search">
+              <span>Search</span>
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Client, matter, attorney..." />
+            </label>
+            <label className="queue-filter">
+              <span>Status</span>
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as (typeof STATUS_FILTERS)[number])}>
+                {STATUS_FILTERS.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            </label>
+            <label className="queue-filter">
+              <span>Alert Type</span>
+              <select value={alertFilter} onChange={(event) => setAlertFilter(event.target.value as (typeof ALERT_TYPE_FILTERS)[number])}>
+                {ALERT_TYPE_FILTERS.map((alert) => <option key={alert}>{alert}</option>)}
+              </select>
+            </label>
+            <label className="queue-filter">
+              <span>Attorney</span>
+              <select value={attorneyFilter} onChange={(event) => setAttorneyFilter(event.target.value)}>
+                {attorneyOptions.map((attorney) => <option key={attorney}>{attorney}</option>)}
+              </select>
+            </label>
+            <label className="queue-filter">
+              <span>Case Manager</span>
+              <select value={caseManagerFilter} onChange={(event) => setCaseManagerFilter(event.target.value)}>
+                {caseManagerOptions.map((caseManager) => <option key={caseManager}>{caseManager}</option>)}
+              </select>
+            </label>
           </div>
 
           <div className="review-item-list" aria-label="Flagged matters review queue">
