@@ -5245,6 +5245,44 @@ th,
   text-overflow: ellipsis;
 }
 
+.weekly-review-builder .review-queue-empty {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px dashed rgba(222, 235, 248, 0.18);
+  border-radius: 14px;
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.weekly-review-builder .review-queue-empty strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* Matters tab spacing cleanup */
+.shell > .dashboard-tabs {
+  margin-bottom: 0 !important;
+}
+
+.shell > .dashboard-tabs + .filter-panel,
+.shell > .dashboard-tabs + section.panel.filter-panel {
+  margin-top: 0 !important;
+}
+
+.shell > .filter-panel {
+  margin-top: 0 !important;
+}
+
+.dashboard-tabs + .filter-panel {
+  transform: translateY(-4px);
+}
+
+.weekly-review-builder .review-queue-empty small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 @media (min-width: 901px) {
   .weekly-review-builder .review-queue-panel {
     position: relative;

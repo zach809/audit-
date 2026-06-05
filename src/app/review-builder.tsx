@@ -142,7 +142,7 @@ function displayRange(from: string, to: string): string {
   if (from && to) return `${from} through ${to}`;
   if (from) return `${from} and later`;
   if (to) return `through ${to}`;
-  return "Date range not selected";
+  return "All available dates";
 }
 
 function dateInRange(value: string | null | undefined, from: string, to: string): boolean {
@@ -232,21 +232,22 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
     () => items.filter((item) => dateInRange(item.due ?? item.found, reportFrom, reportTo)),
     [items, reportFrom, reportTo],
   );
-  const selected = weeklyItems.find((item) => item.id === selectedId) ?? weeklyItems[0] ?? null;
-  const selectedReview = selected ? reviews[selected.id] ?? defaultReview() : defaultReview();
+  const queueItems = useMemo(
+    () => weeklyItems.filter((item) => !reviewReady(reviews[item.id])),
+    [reviews, weeklyItems],
+  );
   const rangeLabel = displayRange(reportFrom, reportTo);
 
-  const attorneyOptions = useMemo(() => ["All", ...Array.from(new Set(weeklyItems.map((item) => item.attorney || "Unassigned"))).sort()], [weeklyItems]);
+  const attorneyOptions = useMemo(() => ["All", ...Array.from(new Set(queueItems.map((item) => item.attorney || "Unassigned"))).sort()], [queueItems]);
   const caseManagerOptions = useMemo(
-    () => ["All", ...Array.from(new Set(weeklyItems.map((item) => item.caseManager || "Not available"))).sort()],
-    [weeklyItems],
+    () => ["All", ...Array.from(new Set(queueItems.map((item) => item.caseManager || "Not available"))).sort()],
+    [queueItems],
   );
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return weeklyItems
+    return queueItems
       .filter((item) => {
-        const review = reviews[item.id];
         const status = statusForItem(item, reviews);
         const caseManager = item.caseManager || "Not available";
         const matchesSearch = !query || [item.clientName, item.matterNumber, item.attorney, caseManager].join(" ").toLowerCase().includes(query);
@@ -265,7 +266,17 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
         const bReady = reviewReady(bReview) ? 1 : 0;
         return aSkipped - bSkipped || aReady - bReady || a.clientName.localeCompare(b.clientName);
       });
-  }, [alertFilter, attorneyFilter, caseManagerFilter, reviews, search, statusFilter, weeklyItems]);
+  }, [alertFilter, attorneyFilter, caseManagerFilter, queueItems, reviews, search, statusFilter]);
+
+  const selected =
+    filteredItems.find((item) => item.id === selectedId) ??
+    queueItems.find((item) => item.id === selectedId) ??
+    weeklyItems.find((item) => item.id === selectedId) ??
+    filteredItems[0] ??
+    queueItems[0] ??
+    weeklyItems[0] ??
+    null;
+  const selectedReview = selected ? reviews[selected.id] ?? defaultReview() : defaultReview();
 
   const reviewedItems = weeklyItems.filter((item) => reviewReady(reviews[item.id]));
   const remainingItems = weeklyItems.filter((item) => !reviewReady(reviews[item.id]));
@@ -289,7 +300,11 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
   }
 
   function nextUnresolvedItem(currentId: string, nextReviews: Record<string, ReviewState>): ReviewBuilderItem | null {
-    return weeklyItems.find((item) => item.id !== currentId && !reviewReady(nextReviews[item.id])) ?? weeklyItems.find((item) => item.id !== currentId) ?? null;
+    return (
+      weeklyItems.find((item) => item.id !== currentId && !reviewReady(nextReviews[item.id])) ??
+      weeklyItems.find((item) => item.id !== currentId) ??
+      null
+    );
   }
 
   async function saveReview(options: { moveNext?: boolean; skip?: boolean } = {}) {
@@ -394,7 +409,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
     ];
 
     if (!includedReviewed.length) {
-      lines.push("No flagged matters have been reviewed for this week yet.");
+      lines.push("No flagged matters have been reviewed for this date range yet.");
       lines.push("");
     } else {
       includedReviewed.forEach((item) => {
@@ -565,6 +580,10 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
             setReportFrom(range.from);
             setReportTo(range.to);
           }}>Last Week</button>
+          <button type="button" onClick={() => {
+            setReportFrom("");
+            setReportTo("");
+          }}>All Dates</button>
         </div>
       </div>
 
@@ -582,8 +601,8 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
         <strong>Review Progress: {reviewedItems.length} of {weeklyItems.length} flagged matters reviewed</strong>
         <span>
           {remainingItems.length
-            ? `There are still ${remainingItems.length} flagged matters left to review for this week.`
-            : "All flagged matters for this week have been reviewed."}
+            ? `There are still ${remainingItems.length} flagged matters left to review for this date range.`
+            : "All flagged matters for this date range have been reviewed."}
         </span>
       </div>
 
@@ -591,10 +610,10 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
         <div className="review-queue-panel">
           <div className="review-queue-head">
             <div>
-              <span className="label">Review Queue</span>
-              <strong>{filteredItems.length} flagged matters</strong>
+              <span className="label">Needs Review</span>
+              <strong>{filteredItems.length} matters need review</strong>
             </div>
-            <small>{remainingItems.length} left</small>
+            <small>{queueItems.length} left</small>
           </div>
           <div className="review-queue-filters">
             <label className="queue-filter queue-filter-search">
@@ -628,7 +647,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
           </div>
 
           <div className="review-item-list" aria-label="Flagged matters review queue">
-            {filteredItems.map((item) => {
+            {filteredItems.length ? filteredItems.map((item) => {
               const review = reviews[item.id];
               const status = statusForItem(item, reviews);
               return (
@@ -647,7 +666,12 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
                   <small>Last Update: {review?.savedAt ? review.savedAt : "Not reviewed yet"}</small>
                 </button>
               );
-            })}
+            }) : (
+              <div className="review-queue-empty">
+                <strong>No matters need review for this date range.</strong>
+                <small>Change the date range or clear filters to see more.</small>
+              </div>
+            )}
           </div>
         </div>
 
@@ -802,7 +826,7 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
 
           {pendingDownload ? (
             <div className="download-warning">
-              <strong>There are still {remainingItems.length} flagged matters that have not been reviewed for this week.</strong>
+              <strong>There are still {remainingItems.length} flagged matters that have not been reviewed for this date range.</strong>
               <p>Do you still want to download the draft report?</p>
               <div>
                 <button className="primary compact" type="button" onClick={() => performDownload(pendingDownload)}>Continue Download</button>
