@@ -5262,20 +5262,22 @@ th,
 
 /* Matters tab spacing cleanup */
 .shell > .dashboard-tabs {
+  align-self: stretch !important;
+  display: grid !important;
+  flex-direction: initial !important;
+  grid-column: 1 !important;
+  grid-row: auto !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   margin-bottom: 0 !important;
-}
-
-.shell > .dashboard-tabs + .filter-panel,
-.shell > .dashboard-tabs + section.panel.filter-panel {
-  margin-top: 0 !important;
+  position: relative !important;
+  top: auto !important;
 }
 
 .shell > .filter-panel {
+  grid-column: 1 !important;
+  grid-row: auto !important;
   margin-top: 0 !important;
-}
-
-.dashboard-tabs + .filter-panel {
-  transform: translateY(-4px);
+  transform: none !important;
 }
 
 .weekly-review-builder .review-queue-empty small {
