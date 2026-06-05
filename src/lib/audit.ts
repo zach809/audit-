@@ -122,7 +122,7 @@ function classify(
   }
   if (!evidence) {
     const corrective = options.correctiveDeadlineAt ?? deadlineAt;
-    const stillPending = corrective && now <= corrective;
+    const stillPending = deadlineAt && now <= deadlineAt;
     if (!stillPending && options.missingAsReview) {
       return base(stepCode, "Unknown", "Needs Review", deadlineAt, corrective, options.reasonCode ?? "EVIDENCE_NOT_CONFIRMED");
     }
@@ -432,12 +432,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           : base("POST_COURT_CALL", "N/A", "", null, null);
 
   const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
-  const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart, {
-    includeBodyText: true,
-  });
-  const appearanceEvidence = templateCommunicationEvidence(isAppearanceTemplate, welcomeWindowStart) ?? communicationEvidence(isAppearanceTemplate, welcomeWindowStart, {
-    includeBodyText: true,
-  });
+  const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart);
+  const appearanceEvidence = templateCommunicationEvidence(isAppearanceTemplate, welcomeWindowStart) ?? communicationEvidence(isAppearanceTemplate, welcomeWindowStart);
 
   const clientContactCommunication = evidence.communications
       .map((comm): Evidence<ClioCommunication> | null => {
@@ -479,9 +475,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     );
 
   const items: AuditItemResult[] = [
-    classify("SETUP_WELCOME", welcomeEvidence, setup.onTime, {
-      correctiveDeadlineAt: setup.corrective,
-      operationalState: "Needs Welcome Letter",
+    classify("SETUP_WELCOME", welcomeEvidence, setup.twoBusinessHours, {
+      correctiveDeadlineAt: setup.twoBusinessHoursCorrective,
+      operationalState: "Waiting for Welcome Letter deadline",
       unknown: Boolean(commError),
       reasonCode: commError,
       now,
@@ -494,9 +490,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: calendarError,
       now,
     }),
-    classify("SETUP_COURT_DATE", courtAdded, setup.onTime, {
-      correctiveDeadlineAt: setup.corrective,
-      operationalState: "Needs Court Date",
+    classify("SETUP_COURT_DATE", courtAdded, setup.twoBusinessHours, {
+      correctiveDeadlineAt: setup.twoBusinessHoursCorrective,
+      operationalState: "Waiting for Court Date deadline",
       unknown: Boolean(calendarError),
       reasonCode: calendarError,
       now,
@@ -508,7 +504,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       now,
     }),
     classify("APPEARANCE_FILING", appearanceEvidence, appearanceDeadline, {
-      operationalState: "Needs Appearance Filing",
+      operationalState: "Waiting for 48-hour review window",
       unknown: Boolean(commError && now > appearanceDeadline),
       reasonCode: commError,
       missingAsReview: true,

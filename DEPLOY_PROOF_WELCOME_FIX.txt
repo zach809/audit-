@@ -1,0 +1,17 @@
+CWCA Welcome Letter Fix
+
+This package should be copied into the ROOT of the GitHub/Vercel repo.
+
+The live app should show this version:
+cwca-welcome-letter-check-restored-2026-06-05
+
+If the deployed app still shows an older version, Vercel is not deploying these files.
+
+Correct repo layout after copying:
+src/lib/version.ts
+src/lib/audit.ts
+src/lib/patterns.ts
+package.json
+
+Incorrect:
+CWCA_REPO_ROOT_CONTENTS_ONLY_.../src/lib/version.ts inside the repo.

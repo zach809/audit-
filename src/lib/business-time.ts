@@ -159,10 +159,13 @@ export function addWeekdayHours(start: Date, hours: number): Date {
 export function setupDeadlines(createdAt: Date) {
   const effective = effectiveIntake(createdAt);
   const onTime = addBusinessMinutes(effective, 60);
+  const twoBusinessHours = addBusinessMinutes(effective, 120);
   return {
     effective,
     onTime,
+    twoBusinessHours,
     corrective: businessDayEnd(onTime),
+    twoBusinessHoursCorrective: businessDayEnd(twoBusinessHours),
   };
 }
 

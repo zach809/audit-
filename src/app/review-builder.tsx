@@ -760,31 +760,12 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
             </div>
 
             <label>
-              Proof or Reference
-              <input
-                placeholder="Paste a Clio link, Teams note, proof link, screenshot reference, or short explanation."
-                value={selectedReview.proofReference}
-                onChange={(event) => updateReview(selected.id, { proofReference: event.target.value })}
-              />
-            </label>
-
-            <label>
               Report Summary
               <small>Write the clean version that should appear in the weekly report.</small>
               <textarea
                 placeholder="Example: Ivan confirmed that the client was contacted before ICD. The matter was reviewed and marked resolved."
                 value={selectedReview.reportSummary}
                 onChange={(event) => updateReview(selected.id, { reportSummary: event.target.value })}
-              />
-            </label>
-
-            <label>
-              Internal Auditor Notes
-              <small>Private working notes for the auditor. These should not appear in the final report unless manually included.</small>
-              <textarea
-                placeholder="Private note for the auditor."
-                value={selectedReview.internalNotes}
-                onChange={(event) => updateReview(selected.id, { internalNotes: event.target.value })}
               />
             </label>
 
