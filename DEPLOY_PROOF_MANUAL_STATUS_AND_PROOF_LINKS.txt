@@ -1,15 +1,17 @@
 CWCA update proof
 
 Version marker:
-cwca-matter-tab-manual-status-proof-links-2026-06-09
+cwca-resolved-card-cleanup-direct-proof-2026-06-09
 
 What changed:
 - Matters tab now has inline Auditor Status controls on flagged/problem items.
 - Saving an Auditor Status writes only to CWCA's audit_review tables.
 - Clio remains read-only. No Clio create/update/delete actions were added.
 - Closed human review decisions are treated as no longer open on the matter card.
-- Proof links open CWCA's exact evidence-detail page by Clio proof ID.
-- Evidence-detail pages now show the proof ID and a Clio matter-tab link.
+- After save, the matter card refreshes so resolved/no-action items disappear from Problems.
+- The top matter badge is based on open items after human review.
+- Dashboard proof links now redirect immediately to the matching Clio matter evidence area.
+- Opening an evidence page directly still shows the proof ID and evidence details.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.

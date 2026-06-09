@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-matter-tab-manual-status-proof-links-2026-06-09";
+export const APP_VERSION = "cwca-resolved-card-cleanup-direct-proof-2026-06-09";

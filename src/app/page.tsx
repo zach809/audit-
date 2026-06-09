@@ -84,9 +84,10 @@ type WorkspaceRow = {
   reviewHistory?: unknown;
 };
 
-function evidencePath(item: DashboardItem): string {
-  if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}`;
-  if (item.evidenceRefId && item.evidenceSource === "Calendar") return `/evidence/calendar_entries/${item.evidenceRefId}`;
+function evidencePath(item: DashboardItem, directToClio = false): string {
+  const suffix = directToClio ? "?open=clio" : "";
+  if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}${suffix}`;
+  if (item.evidenceRefId && item.evidenceSource === "Calendar") return `/evidence/calendar_entries/${item.evidenceRefId}${suffix}`;
   return item.evidenceUrl ?? "";
 }
 
@@ -137,6 +138,16 @@ function currentItemStatus(item: DashboardItem | WorkspaceRow): string {
   return reviewStatus(item) ?? displayItemStatus(item);
 }
 
+function matterCardStatus(items: DashboardItem[], fallback: string): string {
+  const activeItems = items.filter(itemNeedsAttention);
+  if (activeItems.some((item) => item.status === "Missing")) return "Needs Follow-Up";
+  if (activeItems.some((item) => item.status === "Unknown")) return "Needs Review";
+  if (activeItems.some((item) => item.status === "Late")) return "Late";
+  if (items.some(isClosedByReview)) return "Resolved";
+  if (items.some((item) => item.status === "Pending")) return "Not Due Yet";
+  return displayAuditStatus(fallback);
+}
+
 function stepDetail(item: DashboardItem | undefined, status: string): string {
   if (!item) return status === "Pending" ? "Waiting for audit" : "";
   if (status === "Pending") {
@@ -169,7 +180,7 @@ function stepCell(items: DashboardItem[], code: string) {
   const status = item?.status ?? "Pending";
   const displayStatus = currentItemStatus(item);
   const detail = stepDetail(item, status);
-  const href = item ? evidencePath(item) : "";
+  const href = item ? evidencePath(item, true) : "";
   return (
     <div className="step-cell">
       {badge(displayStatus)}
@@ -239,7 +250,7 @@ function problemList(matterId: string, items: DashboardItem[]) {
         </div>
       ) : null}
       {visibleProblems.map((item) => {
-        const href = evidencePath(item);
+        const href = evidencePath(item, true);
         return (
             <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
             <div className="problem-title">
@@ -619,7 +630,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       due: item.row.deadlineAt ? formatLocal(item.row.deadlineAt) : null,
       found: item.row.evidenceAt ? formatLocal(item.row.evidenceAt) : null,
       clioUrl: clioMatterPath(item.row.matterId),
-      proofUrl: evidencePath(item.row as DashboardItem) || null,
+      proofUrl: evidencePath(item.row as DashboardItem, true) || null,
       auditVersion: item.row.auditVersion,
       reviewDecision: item.row.reviewDecision,
       reviewNote: item.row.reviewNote,
@@ -993,7 +1004,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         {todaysPriorities.length ? (
           <div className="priority-list">
             {todaysPriorities.map((item) => {
-              const href = evidencePath(item.row as DashboardItem);
+              const href = evidencePath(item.row as DashboardItem, true);
               return (
                 <div className={`priority-row status-row-${statusClass(item.row.status)}`} key={`${item.attorney}-${item.row.matterId}-${item.row.stepCode}`}>
                   <span>{badge(item.row.status)}</span>
@@ -1391,7 +1402,7 @@ Items Still Needing Action
                     <span>Links</span>
                   </div>
                   {section.rows.map((row) => {
-                    const href = evidencePath(row as DashboardItem);
+                    const href = evidencePath(row as DashboardItem, true);
                     return (
                       <div className={`workspace-row status-row-${statusClass(row.status)}`} key={`${section.attorney}-${row.matterId}-${row.stepCode}`}>
                         <span>
@@ -1435,6 +1446,7 @@ Items Still Needing Action
             .filter(itemNeedsAttention)
             .sort((a, b) => auditItemPriority(a.status) - auditItemPriority(b.status));
           const nextAction = attentionItems[0];
+          const matterStatus = matterCardStatus(items, String(m.display_overall_status ?? m.overall_status));
           return (
             <article className="matter-card" key={m.matter_id}>
               <div className="matter-head">
@@ -1455,7 +1467,7 @@ Items Still Needing Action
                   <strong>{formatLocal(m.last_court_date) || "None"}</strong>
                 </div>
                 <div className="matter-actions">
-                  {badge(m.display_overall_status ?? m.overall_status)}
+                  {badge(matterStatus)}
                   <a className="button compact" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
                   <form action="/api/audit/run" method="post">
                     <input type="hidden" name="matter_id" value={m.matter_id} />
@@ -1478,7 +1490,7 @@ Items Still Needing Action
                   <p><b>Why?</b> {problemText(nextAction)}</p>
                   <div className="next-action-links">
                     <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
-                    {evidencePath(nextAction) ? <a className="button compact" href={evidencePath(nextAction)} target="_blank" rel="noreferrer">Open Proof</a> : null}
+                    {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof</a> : null}
                   </div>
                 </section>
               ) : null}
@@ -1499,11 +1511,13 @@ Items Still Needing Action
                 </div>
               )}
 
-              <div className="matter-foot">
-                <div>
-                  <span className="label">Problems</span>
-                  {problemList(String(m.matter_id), items)}
-                </div>
+              <div className={`matter-foot ${attentionItems.length ? "" : "evidence-only"}`}>
+                {attentionItems.length ? (
+                  <div>
+                    <span className="label">Problems</span>
+                    {problemList(String(m.matter_id), items)}
+                  </div>
+                ) : null}
                 <div>
                   <span className="label">Evidence</span>
                   <p className="evidence-links">
@@ -1514,7 +1528,7 @@ Items Still Needing Action
                     evidenceItems.map((i) => (
                       <p className="evidence-links" key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
                         <span>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</span>
-                        <a href={evidencePath(i)} target="_blank" rel="noreferrer">Proof Details</a>
+                        <a href={evidencePath(i, true)} target="_blank" rel="noreferrer">Proof Details</a>
                       </p>
                     ))
                   ) : (

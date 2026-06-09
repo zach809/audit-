@@ -78,8 +78,11 @@ export function MatterReviewControls({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Could not save this review.");
       setSaveState("saved");
-      setMessage("Saved to CWCA. Clio was not changed.");
+      setMessage("Saved to CWCA. Updating this card...");
       router.refresh();
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 350);
     } catch (error) {
       setSaveState("error");
       setMessage(error instanceof Error ? error.message : "Could not save this review.");

@@ -5436,6 +5436,14 @@ th,
   margin: 0;
 }
 
+.matter-foot.evidence-only {
+  grid-template-columns: 1fr;
+}
+
+.matter-foot.evidence-only > div {
+  max-width: 760px;
+}
+
 .Resolved,
 .Approved-Exception,
 .No-Action-Needed {

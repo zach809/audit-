@@ -91,13 +91,22 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
   throw new Error("This evidence type is not supported yet.");
 }
 
-export default async function EvidencePage({ params }: { params: { type: string; id: string } }) {
+export default async function EvidencePage({
+  params,
+  searchParams,
+}: {
+  params: { type: string; id: string };
+  searchParams?: { open?: string };
+}) {
   if (!hasDashboardSession()) redirect("/login");
   let evidence: { label: string; clioUrl: string; clioLabel: string; rows: Array<[string, string]> } | null = null;
   let error = "";
 
   try {
     evidence = await loadEvidence(params.type, params.id);
+    if (searchParams?.open === "clio") {
+      redirect(evidence.clioUrl);
+    }
   } catch (err) {
     if (err instanceof ClioApiError) {
       error = `Clio could not load this evidence record (${err.status}).`;
