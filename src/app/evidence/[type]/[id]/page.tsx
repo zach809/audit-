@@ -31,12 +31,15 @@ function dateText(value: unknown): string {
   return formatLocal(date);
 }
 
-function clioMatterUrl(matterId: unknown): string {
+function clioMatterUrl(matterId: unknown, type?: string): string {
   if (!matterId) return clioManageUrl("/nc/");
-  return clioManageUrl(`/nc/#/matters/${encodeURIComponent(String(matterId))}`);
+  const encodedMatterId = encodeURIComponent(String(matterId));
+  if (type === "communications") return clioManageUrl(`/nc/#/matters/${encodedMatterId}/communications`);
+  if (type === "calendar_entries") return clioManageUrl(`/nc/#/matters/${encodedMatterId}/calendar`);
+  return clioManageUrl(`/nc/#/matters/${encodedMatterId}`);
 }
 
-async function loadEvidence(type: string, id: string): Promise<{ label: string; clioUrl: string; rows: Array<[string, string]> }> {
+async function loadEvidence(type: string, id: string): Promise<{ label: string; clioUrl: string; clioLabel: string; rows: Array<[string, string]> }> {
   const client = new ClioClient();
 
   if (type === "communications") {
@@ -47,8 +50,10 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
     const matter = data.matter as Record<string, unknown> | undefined;
     return {
       label: `Communication #${id}`,
-      clioUrl: clioMatterUrl(matter?.id),
+      clioUrl: clioMatterUrl(matter?.id, type),
+      clioLabel: "Open Matter Communications in Clio Manage",
       rows: [
+        ["Proof ID", id],
         ["Subject", text(data.subject)],
         ["Type", text(data.type)],
         ["Date", dateText(data.date ?? data.created_at ?? data.received_at)],
@@ -68,8 +73,10 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
     const matter = data.matter as Record<string, unknown> | undefined;
     return {
       label: `Calendar Entry #${id}`,
-      clioUrl: clioMatterUrl(matter?.id),
+      clioUrl: clioMatterUrl(matter?.id, type),
+      clioLabel: "Open Matter Calendar in Clio Manage",
       rows: [
+        ["Proof ID", id],
         ["Summary", text(data.summary)],
         ["Type", text((data.calendar_entry_event_type as Record<string, unknown> | undefined)?.name)],
         ["Starts", dateText(data.start_at)],
@@ -86,7 +93,7 @@ async function loadEvidence(type: string, id: string): Promise<{ label: string; 
 
 export default async function EvidencePage({ params }: { params: { type: string; id: string } }) {
   if (!hasDashboardSession()) redirect("/login");
-  let evidence: { label: string; clioUrl: string; rows: Array<[string, string]> } | null = null;
+  let evidence: { label: string; clioUrl: string; clioLabel: string; rows: Array<[string, string]> } | null = null;
   let error = "";
 
   try {
@@ -116,8 +123,11 @@ export default async function EvidencePage({ params }: { params: { type: string;
       {evidence ? (
         <section className="panel">
           <h2>{evidence.label}</h2>
+          <p className="muted">
+            This is the exact read-only proof record CWCA used for the audit result.
+          </p>
           <p>
-            <a className="button primary" href={evidence.clioUrl} target="_blank" rel="noreferrer">Open Matter in Clio Manage</a>
+            <a className="button primary" href={evidence.clioUrl} target="_blank" rel="noreferrer">{evidence.clioLabel}</a>
           </p>
           <table className="evidence-table">
             <tbody>

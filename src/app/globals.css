@@ -5353,3 +5353,118 @@ th,
     max-height: none;
   }
 }
+
+/* Inline matter review controls */
+.matter-review-controls {
+  background:
+    linear-gradient(145deg, rgba(190, 221, 255, 0.08), rgba(255, 255, 255, 0.025)),
+    rgba(12, 19, 29, 0.74);
+  border: 1px solid rgba(222, 235, 248, 0.14);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+}
+
+.matter-review-controls-head,
+.matter-review-footer {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.matter-review-controls-head strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.matter-review-controls-head span,
+.matter-review-message {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.matter-review-controls-head span.error,
+.matter-review-message.error {
+  color: var(--amber);
+}
+
+.matter-review-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+.matter-review-controls label {
+  color: rgba(236, 245, 255, 0.68);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.matter-review-controls input,
+.matter-review-controls select,
+.matter-review-controls textarea {
+  background: rgba(7, 12, 19, 0.92);
+  border: 1px solid rgba(222, 235, 248, 0.18);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  min-height: 38px;
+  width: 100%;
+}
+
+.matter-review-controls textarea {
+  line-height: 1.45;
+  min-height: 84px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.matter-review-footer label {
+  flex: 1;
+}
+
+.matter-review-footer button {
+  min-width: 128px;
+}
+
+.matter-review-message {
+  margin: 0;
+}
+
+.Resolved,
+.Approved-Exception,
+.No-Action-Needed {
+  background: var(--green-soft);
+  border-color: rgba(151, 200, 173, 0.3);
+  color: var(--green);
+}
+
+.In-Progress,
+.Needs-Attorney-Review {
+  background: var(--blue-soft);
+  border-color: rgba(90, 176, 232, 0.3);
+  color: var(--blue);
+}
+
+.Still-Needs-Follow-Up {
+  background: var(--amber-soft);
+  border-color: rgba(217, 138, 26, 0.34);
+  color: var(--amber);
+}
+
+@media (max-width: 760px) {
+  .matter-review-grid,
+  .matter-review-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .matter-review-footer button {
+    width: 100%;
+  }
+}

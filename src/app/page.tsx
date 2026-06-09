@@ -7,6 +7,7 @@ import { APP_VERSION } from "@/lib/version";
 import { APP_TZ } from "@/lib/config";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
+import { MatterReviewControls } from "./matter-review-controls";
 import {
   actionFor,
   auditItemPriority,
@@ -114,6 +115,28 @@ function displayItemStatus(item: DashboardItem | WorkspaceRow): string {
   return displayAuditStatus(item.status, "reasonCode" in item ? item.reasonCode : undefined);
 }
 
+function reviewStatus(item: DashboardItem | WorkspaceRow): string | null {
+  if (item.reviewDecision === "Resolved" || item.reviewDecision === "No Action Needed") return "Resolved";
+  if (item.reviewDecision === "Approved Exception") return "Approved Exception";
+  if (item.reviewDecision === "In Progress") return "In Progress";
+  if (item.reviewDecision === "Still Needs Action" || item.reviewDecision === "Unable to Confirm") return "Still Needs Follow-Up";
+  if (item.reviewDecision === "Needs Attorney Review") return "Needs Attorney Review";
+  return null;
+}
+
+function isClosedByReview(item: DashboardItem | WorkspaceRow): boolean {
+  return item.reviewDecision === "Resolved" || item.reviewDecision === "No Action Needed" || item.reviewDecision === "Approved Exception";
+}
+
+function itemNeedsAttention(item: DashboardItem | WorkspaceRow): boolean {
+  if (isClosedByReview(item)) return false;
+  return ["Missing", "Late", "Unknown", "Needs Recheck", "Needs Review"].includes(item.status);
+}
+
+function currentItemStatus(item: DashboardItem | WorkspaceRow): string {
+  return reviewStatus(item) ?? displayItemStatus(item);
+}
+
 function stepDetail(item: DashboardItem | undefined, status: string): string {
   if (!item) return status === "Pending" ? "Waiting for audit" : "";
   if (status === "Pending") {
@@ -144,14 +167,14 @@ function stepCell(items: DashboardItem[], code: string) {
     );
   }
   const status = item?.status ?? "Pending";
-  const displayStatus = displayItemStatus(item);
+  const displayStatus = currentItemStatus(item);
   const detail = stepDetail(item, status);
   const href = item ? evidencePath(item) : "";
   return (
     <div className="step-cell">
       {badge(displayStatus)}
       {detail && detail !== displayStatus ? <div className="detail">{detail}</div> : null}
-      {href ? <a className="evidence-link" href={href}>{evidenceLabel(item!)}</a> : null}
+      {href ? <a className="evidence-link" href={href} target="_blank" rel="noreferrer">{evidenceLabel(item!)}</a> : null}
     </div>
   );
 }
@@ -181,13 +204,17 @@ function problemText(item: DashboardItem): string {
   return "";
 }
 
-function problemList(items: DashboardItem[]) {
+function problemList(matterId: string, items: DashboardItem[]) {
   if (!items.length) {
     return <p>Not checked yet. Click Recheck Matter for this one case, or Run Audit Batch to continue safely through the queue.</p>;
   }
-  const problems = items.filter((i) => ["Missing", "Late", "Unknown"].includes(i.status));
+  const problems = items.filter(itemNeedsAttention);
   if (!problems.length) {
+    const reviewed = items.some(isClosedByReview);
     const pending = items.some((i) => i.status === "Pending");
+    if (reviewed) {
+      return <p>The flagged items on this matter have been reviewed in CWCA. No open follow-up is showing on this card right now.</p>;
+    }
     return pending ? (
       <p>No problem yet. These steps are still pending because the deadline has not passed or the matter has not needed that step yet.</p>
     ) : (
@@ -216,7 +243,7 @@ function problemList(items: DashboardItem[]) {
         return (
             <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
             <div className="problem-title">
-              {badge(displayItemStatus(item))}
+              {badge(currentItemStatus(item))}
               <strong>{workflowLabel(item.stepCode)}</strong>
             </div>
             <p>{problemText(item)}</p>
@@ -225,10 +252,19 @@ function problemList(items: DashboardItem[]) {
                 <b>Human review:</b> {item.reviewDecision || "Pending"}{item.reviewNote ? ` - ${item.reviewNote}` : ""}
               </p>
             ) : null}
+            <MatterReviewControls
+              matterId={matterId}
+              stepCode={item.stepCode}
+              auditItemLabel={workflowLabel(item.stepCode)}
+              currentDecision={item.reviewDecision}
+              currentNote={item.reviewNote}
+              currentNextStep={item.nextStep}
+              currentReviewedBy={item.reviewedBy}
+            />
             <div className="problem-meta">
               {item.deadlineAt ? <span>Due: {formatLocal(item.deadlineAt)}</span> : null}
               {item.evidenceAt ? <span>Found: {formatLocal(item.evidenceAt)}</span> : null}
-              {href ? <a href={href}>{evidenceLabel(item)}</a> : null}
+              {href ? <a href={href} target="_blank" rel="noreferrer">{evidenceLabel(item)}</a> : null}
             </div>
           </div>
         );
@@ -583,7 +619,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       due: item.row.deadlineAt ? formatLocal(item.row.deadlineAt) : null,
       found: item.row.evidenceAt ? formatLocal(item.row.evidenceAt) : null,
       clioUrl: clioMatterPath(item.row.matterId),
-      proofUrl: item.row.evidenceUrl ?? null,
+      proofUrl: evidencePath(item.row as DashboardItem) || null,
       auditVersion: item.row.auditVersion,
       reviewDecision: item.row.reviewDecision,
       reviewNote: item.row.reviewNote,
@@ -967,7 +1003,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   </div>
                   <div className="priority-links">
                     <a href={clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Clio</a>
-                    {href ? <a href={href}>Proof</a> : null}
+                    {href ? <a href={href} target="_blank" rel="noreferrer">Proof</a> : null}
                   </div>
                 </div>
               );
@@ -1363,7 +1399,7 @@ Items Still Needing Action
                           <small>{row.matterNumber}</small>
                         </span>
                         <span>{workflowLabel(row.stepCode)}</span>
-                        <span>{badge(displayItemStatus(row))}</span>
+                        <span>{badge(currentItemStatus(row))}</span>
                         <span>
                           {row.deadlineAt ? <small>Due: {formatLocal(row.deadlineAt)}</small> : null}
                           {row.evidenceAt ? <small>Found: {formatLocal(row.evidenceAt)}</small> : null}
@@ -1371,7 +1407,7 @@ Items Still Needing Action
                         </span>
                         <span className="workspace-links">
                           <a href={clioMatterPath(row.matterId)} target="_blank" rel="noreferrer">Clio</a>
-                          {href ? <a href={href}>Proof</a> : null}
+                          {href ? <a href={href} target="_blank" rel="noreferrer">Proof</a> : null}
                         </span>
                       </div>
                     );
@@ -1396,7 +1432,7 @@ Items Still Needing Action
           const evidenceItems = items.filter((i) => evidencePath(i));
           const refreshNeeded = needsMatterRefresh(items);
           const attentionItems = items
-            .filter((i) => ["Missing", "Late", "Unknown"].includes(i.status))
+            .filter(itemNeedsAttention)
             .sort((a, b) => auditItemPriority(a.status) - auditItemPriority(b.status));
           const nextAction = attentionItems[0];
           return (
@@ -1436,13 +1472,13 @@ Items Still Needing Action
               </div>
 
               {!refreshNeeded && nextAction ? (
-                <section className={`next-action-card status-row-${statusClass(displayAuditStatus(nextAction.status, nextAction.reasonCode))}`}>
+                <section className={`next-action-card status-row-${statusClass(currentItemStatus(nextAction))}`}>
                   <span className="label">Next Best Action</span>
                   <strong>{actionFor(nextAction.stepCode, nextAction.status, nextAction.reasonCode)}</strong>
                   <p><b>Why?</b> {problemText(nextAction)}</p>
                   <div className="next-action-links">
                     <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
-                    {evidencePath(nextAction) ? <a className="button compact" href={evidencePath(nextAction)}>Open Proof</a> : null}
+                    {evidencePath(nextAction) ? <a className="button compact" href={evidencePath(nextAction)} target="_blank" rel="noreferrer">Open Proof</a> : null}
                   </div>
                 </section>
               ) : null}
@@ -1466,7 +1502,7 @@ Items Still Needing Action
               <div className="matter-foot">
                 <div>
                   <span className="label">Problems</span>
-                  {problemList(items)}
+                  {problemList(String(m.matter_id), items)}
                 </div>
                 <div>
                   <span className="label">Evidence</span>
@@ -1478,7 +1514,7 @@ Items Still Needing Action
                     evidenceItems.map((i) => (
                       <p className="evidence-links" key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
                         <span>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</span>
-                        <a href={evidencePath(i)}>Proof Details</a>
+                        <a href={evidencePath(i)} target="_blank" rel="noreferrer">Proof Details</a>
                       </p>
                     ))
                   ) : (
