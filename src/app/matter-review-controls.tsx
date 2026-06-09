@@ -52,6 +52,8 @@ export function MatterReviewControls({
   const [reviewedBy, setReviewedBy] = useState(currentReviewedBy ?? "");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const hasReview = Boolean(currentDecision || currentNote || currentReviewedBy);
 
   async function saveReview() {
     setSaveState("saving");
@@ -79,6 +81,7 @@ export function MatterReviewControls({
       if (!response.ok) throw new Error(result.error || "Could not save this review.");
       setSaveState("saved");
       setMessage("Saved to CWCA. Updating this card...");
+      setExpanded(false);
       router.refresh();
       window.setTimeout(() => {
         window.location.reload();
@@ -90,56 +93,66 @@ export function MatterReviewControls({
   }
 
   return (
-    <div className="matter-review-controls">
+    <div className={`matter-review-controls ${expanded ? "is-open" : "is-collapsed"}`}>
       <div className="matter-review-controls-head">
-        <strong>Auditor Status</strong>
-        {saveState === "saved" ? <span>Saved</span> : null}
-        {saveState === "error" ? <span className="error">Check again</span> : null}
-      </div>
-      <div className="matter-review-grid">
-        <label>
-          Status
-          <select
-            value={decision}
-            onChange={(event) => {
-              const nextDecision = normalizeReviewDecision(event.target.value);
-              setDecision(nextDecision);
-              setNextStep(suggestedNextStep(nextDecision));
-            }}
-          >
-            {REVIEW_DECISIONS.filter((value) => value !== "Skipped for Now").map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Next Step
-          <select value={nextStep} onChange={(event) => setNextStep(event.target.value as ReviewNextStep)}>
-            {NEXT_STEPS.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <label>
-        What happened?
-        <textarea
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder={`Example: ${auditItemLabel} was checked in Clio and the item was resolved.`}
-          rows={3}
-        />
-      </label>
-      <div className="matter-review-footer">
-        <label>
-          Reviewed By
-          <input value={reviewedBy} onChange={(event) => setReviewedBy(event.target.value)} placeholder="Name" />
-        </label>
-        <button type="button" onClick={saveReview} disabled={saveState === "saving"}>
-          {saveState === "saving" ? "Saving..." : "Save Status"}
+        <div className="matter-review-summary">
+          <strong>Auditor Status</strong>
+          <span>{hasReview ? decision : "Not reviewed yet"}</span>
+          {hasReview && note ? <small>{note}</small> : null}
+          {!hasReview ? <small>Click to add the auditor decision.</small> : null}
+          {message ? <small className={saveState === "error" ? "error" : "success"}>{message}</small> : null}
+        </div>
+        <button className="matter-review-toggle" type="button" onClick={() => setExpanded((value) => !value)}>
+          {expanded ? "Hide" : hasReview ? "Edit Status" : "Update Status"}
         </button>
       </div>
-      {message ? <p className={`matter-review-message ${saveState === "error" ? "error" : ""}`}>{message}</p> : null}
+      {expanded ? (
+        <div className="matter-review-form">
+          <div className="matter-review-grid">
+            <label>
+              Status
+              <select
+                value={decision}
+                onChange={(event) => {
+                  const nextDecision = normalizeReviewDecision(event.target.value);
+                  setDecision(nextDecision);
+                  setNextStep(suggestedNextStep(nextDecision));
+                }}
+              >
+                {REVIEW_DECISIONS.filter((value) => value !== "Skipped for Now").map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Next Step
+              <select value={nextStep} onChange={(event) => setNextStep(event.target.value as ReviewNextStep)}>
+                {NEXT_STEPS.map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label>
+            What happened?
+            <textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder={`Example: ${auditItemLabel} was checked in Clio and the item was resolved.`}
+              rows={3}
+            />
+          </label>
+          <div className="matter-review-footer">
+            <label>
+              Reviewed By
+              <input value={reviewedBy} onChange={(event) => setReviewedBy(event.target.value)} placeholder="Name" />
+            </label>
+            <button type="button" onClick={saveReview} disabled={saveState === "saving"}>
+              {saveState === "saving" ? "Saving..." : "Save Status"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

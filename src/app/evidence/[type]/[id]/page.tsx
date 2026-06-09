@@ -96,7 +96,7 @@ export default async function EvidencePage({
   searchParams,
 }: {
   params: { type: string; id: string };
-  searchParams?: { open?: string };
+  searchParams?: { details?: string; open?: string };
 }) {
   if (!hasDashboardSession()) redirect("/login");
   let evidence: { label: string; clioUrl: string; clioLabel: string; rows: Array<[string, string]> } | null = null;
@@ -104,15 +104,16 @@ export default async function EvidencePage({
 
   try {
     evidence = await loadEvidence(params.type, params.id);
-    if (searchParams?.open === "clio") {
-      redirect(evidence.clioUrl);
-    }
   } catch (err) {
     if (err instanceof ClioApiError) {
       error = `Clio could not load this evidence record (${err.status}).`;
     } else {
       error = err instanceof Error ? err.message : "Could not load this evidence record.";
     }
+  }
+
+  if (evidence && searchParams?.details !== "1") {
+    redirect(evidence.clioUrl);
   }
 
   return (
