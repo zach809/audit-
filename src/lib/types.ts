@@ -9,7 +9,8 @@ export type StepCode =
   | "APPEARANCE_FILING"
   | "COURT_RESULTS"
   | "POST_COURT_CALL"
-  | "CLIENT_FOLLOWUP";
+  | "CLIENT_FOLLOWUP"
+  | "WEEKLY_CLIENT_CHECKIN";
 
 export type EvidenceSource = "Communication" | "Calendar" | "Note" | "Activity" | "System";
 

@@ -215,6 +215,22 @@ export const CALENDAR_PATTERNS = {
     "email enviado",
     "mensaje al cliente",
   ],
+  weeklyClientCheckIn: [
+    "weekly client follow-up call",
+    "weekly client follow up call",
+    "weekly follow-up call",
+    "weekly follow up call",
+    "weekly client check-in",
+    "weekly client check in",
+    "weekly check-in",
+    "weekly check in",
+    "weekly courtesy call",
+    "client weekly call",
+    "client courtesy call",
+    "courtesy call",
+    "llamada semanal",
+    "seguimiento semanal",
+  ],
 };
 
 export function isWelcomeTemplate(text: string): boolean {
@@ -283,4 +299,30 @@ export function isCalendarEmailContact(text: string): boolean {
   if (!includesAny(normalized, CALENDAR_PATTERNS.emailContact)) return false;
   if (isCourtEvent(normalized) || isCourtReminderTemplate(normalized)) return false;
   return true;
+}
+
+export function isWeeklyClientCheckIn(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (!includesAny(normalized, CALENDAR_PATTERNS.weeklyClientCheckIn)) return false;
+  if (isCourtEvent(normalized) || isCourtReminderTemplate(normalized)) return false;
+  return true;
+}
+
+export function isPhoneCallCommunication(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (includesAny(normalized, ["missed inbound call", "missed call", "inbound sms", "outbound sms", "sms", "text message"])) {
+    return false;
+  }
+  return includesAny(normalized, [
+    "phonecommunication",
+    "outbound call",
+    "phone call",
+    "telephone call",
+    "telephonic call",
+    "client call",
+    "call client",
+    "call with client",
+    "call to client",
+    "llamada",
+  ]);
 }

@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, setupDeadlines } from "./business-time";
+import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -9,7 +9,9 @@ import {
   isCourtEvent,
   isCourtResultTemplate,
   isPossibleCourtEvent,
+  isPhoneCallCommunication,
   isWelcomeTemplate,
+  isWeeklyClientCheckIn,
 } from "./patterns";
 import type {
   AuditItemResult,
@@ -96,6 +98,26 @@ function isPettyTrafficMatter(record: MatterRecord): boolean {
 
 function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
+}
+
+function localDateKey(date: Date): string {
+  const parts = localParts(date);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function endOfLocalDay(date: Date): Date {
+  const parts = localParts(date);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 23, 59, 59);
+}
+
+function withEvidence<T extends { id: number }>(result: AuditItemResult, evidence: Evidence<T>): AuditItemResult {
+  return {
+    ...result,
+    evidenceAt: evidence.at,
+    evidenceSource: evidence.source,
+    evidenceRefId: String(evidence.item.id),
+    evidenceUrl: evidence.url,
+  };
 }
 
 function classify(
@@ -307,6 +329,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const setup = setupDeadlines(record.matter_created_at);
   const clientDeadline = addBusinessDaysDeadline(record.effective_intake_at, 1);
   const appearanceDeadline = addWeekdayHours(record.matter_created_at, 48);
+  const firstWeeklyCheckInDeadline = addBusinessDaysDeadline(record.effective_intake_at, 5);
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
 
@@ -356,6 +379,59 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       })
       .filter(Boolean) as Evidence<ClioCalendarEntry>[],
   );
+
+  const weeklyCheckInEvents = evidence.calendars
+    .map((cal): Evidence<ClioCalendarEntry> | null => {
+      const at = parseDate(cal.start_at);
+      if (!at) return null;
+      if (!isWeeklyClientCheckIn(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
+      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
+
+  const pastOrTodayWeeklyCheckIn = weeklyCheckInEvents
+    .filter((event) => event.at <= now)
+    .sort((a, b) => b.at.getTime() - a.at.getTime())[0] ?? null;
+  const nextWeeklyCheckIn = weeklyCheckInEvents
+    .filter((event) => event.at > now)
+    .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
+  const weeklyCheckInEvent = pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
+  const weeklyCheckInDeadline = weeklyCheckInEvent ? endOfLocalDay(weeklyCheckInEvent.at) : firstWeeklyCheckInDeadline;
+  const weeklyCheckInCall = weeklyCheckInEvent
+    ? earliest(
+        evidence.communications
+          .map((comm): Evidence<ClioCommunication> | null => {
+            const at = commDate(comm);
+            if (!at || localDateKey(at) !== localDateKey(weeklyCheckInEvent.at)) return null;
+            const direction = isOutbound(comm, record.client_id);
+            if (direction === false) return null;
+            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
+            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+          })
+          .filter(Boolean) as Evidence<ClioCommunication>[],
+      )
+    : null;
+  const weeklyCheckInItem = (() => {
+    if (calendarError) {
+      return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
+    }
+    if (!weeklyCheckInEvent) {
+      return classify("WEEKLY_CLIENT_CHECKIN", null, firstWeeklyCheckInDeadline, {
+        operationalState: "Waiting for weekly check-in window",
+        now,
+      });
+    }
+    if (weeklyCheckInCall) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null), weeklyCheckInCall);
+    }
+    if (now <= weeklyCheckInDeadline) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Waiting for same-day call proof", weeklyCheckInDeadline, null), weeklyCheckInEvent);
+    }
+    if (commError) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError), weeklyCheckInEvent);
+    }
+    return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "CALL_NOT_FOUND_SAME_DAY"), weeklyCheckInEvent);
+  })();
 
   const courtEvents = evidence.calendars
     .map((cal): Evidence<ClioCalendarEntry> | null => {
@@ -517,6 +593,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       : inboundStreak.max >= 2
       ? base("CLIENT_FOLLOWUP", "Missing", "Client Follow-Up Risk", null, null, "TWO_INBOUND_BEFORE_RESPONSE")
       : base("CLIENT_FOLLOWUP", unknownDirection ? "Unknown" : "On Time", unknownDirection ? "Unknown" : "No Risk", null, null, unknownDirection ? "DIRECTION_UNCLEAR" : null),
+    weeklyCheckInItem,
   ];
 
   return {
@@ -643,6 +720,7 @@ export async function auditNextBatch(
           "COURT_RESULTS",
           "POST_COURT_CALL",
           "CLIENT_FOLLOWUP",
+          "WEEKLY_CLIENT_CHECKIN",
         ].map((step) => base(step as StepCode, "Unknown", "Unknown", null, null, status));
         await upsertItems(matter.matter_id, items, "Review", { last: null, next: null });
         audited += 1;
@@ -705,6 +783,7 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
       "COURT_RESULTS",
       "POST_COURT_CALL",
       "CLIENT_FOLLOWUP",
+      "WEEKLY_CLIENT_CHECKIN",
     ].map((step) => base(step as StepCode, "Unknown", "Unknown", null, null, status));
     await upsertItems(matter.matter_id, items, "Review", { last: null, next: null });
     throw error;

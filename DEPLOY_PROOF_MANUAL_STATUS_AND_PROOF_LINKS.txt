@@ -1,9 +1,12 @@
 CWCA update proof
 
 Version marker:
-cwca-collapsed-review-direct-clio-proof-2026-06-09
+cwca-weekly-client-checkin-same-day-call-2026-06-17
 
 What changed:
+- Added Weekly Client Check-In as a new calendar-and-call audit item.
+- Weekly Client Check-In only passes when a weekly check-in/courtesy/follow-up calendar event exists and a phone-call communication exists on that same Illinois-local date.
+- Upcoming weekly check-ins show as not due yet until the same-day call window has passed.
 - Matters tab now has inline Auditor Status controls on flagged/problem items.
 - Auditor Status controls are collapsed by default and open only when clicked.
 - Saving an Auditor Status writes only to CWCA's audit_review tables.

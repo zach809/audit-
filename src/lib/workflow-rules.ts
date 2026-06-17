@@ -72,6 +72,14 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     late: "Client follow-up was handled late.",
     unknown: "Please recheck this matter before coaching. The app could not confirm follow-up risk from Clio.",
   },
+  WEEKLY_CLIENT_CHECKIN: {
+    label: "Weekly Client Check-In",
+    goal: "Verify a weekly client check-in/courtesy call calendar event and a same-day client call communication.",
+    missing: "Weekly client check-in still needs same-day call proof in Clio.",
+    action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists on that same day.",
+    late: "Weekly client check-in call proof was found after the expected same-day window.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the weekly check-in call from Clio.",
+  },
 };
 
 export const WORKFLOW_COLUMNS = Object.entries(WORKFLOW_RULES).map(([code, rule]) => [code, rule.label] as [string, string]);

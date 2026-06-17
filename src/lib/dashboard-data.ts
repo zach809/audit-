@@ -466,6 +466,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     "Court Results",
     "Post-Court Call",
     "Client Follow-Up",
+    "Weekly Client Check-In",
     "Matter Created Date",
     "Last Court Date",
     "Problem Details",
@@ -491,6 +492,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
       getWithReason("COURT_RESULTS"),
       getWithReason("POST_COURT_CALL"),
       getWithReason("CLIENT_FOLLOWUP"),
+      getWithReason("WEEKLY_CLIENT_CHECKIN"),
       m.matter_created_at,
       m.last_court_date,
       `Late: ${labels("Late")}; Missing: ${labels("Missing")}; Unknown: ${labels("Unknown")}`,
@@ -689,6 +691,8 @@ function matterMissingItemLabel(stepCode: string, attorneyName?: string | null):
       return "Post-court call missing";
     case "CLIENT_FOLLOWUP":
       return "Client follow-up review needed";
+    case "WEEKLY_CLIENT_CHECKIN":
+      return "Weekly client check-in call proof needed";
     default:
       return `${workflowLabel(stepCode)} follow-up needed`;
   }
@@ -712,6 +716,8 @@ function matterActionItem(stepCode: string): string {
       return "Schedule or verify the post-court attorney call";
     case "CLIENT_FOLLOWUP":
       return "Review the message thread and respond or coach as needed";
+    case "WEEKLY_CLIENT_CHECKIN":
+      return "Verify the weekly check-in calendar event and confirm the same-day client call";
     default:
       return actionFor(stepCode, "Missing");
   }

@@ -390,7 +390,7 @@ const WORKSPACE_FOCUS_FILTERS = [
 const WORKSPACE_FOCUS_STEPS: Record<string, string[]> = {
   "initial-client-setup": ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE", "CLIENT_CONTACT", "APPEARANCE_FILING"],
   "court-follow-up": ["COURT_RESULTS", "POST_COURT_CALL"],
-  "client-follow-up": ["CLIENT_FOLLOWUP"],
+  "client-follow-up": ["CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN"],
 };
 
 const GUIDE_STATUS_CARDS = [
