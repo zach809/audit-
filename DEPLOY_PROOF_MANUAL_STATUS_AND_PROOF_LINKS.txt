@@ -1,15 +1,11 @@
 CWCA update proof
 
 Version marker:
-cwca-weekly-checkin-backfill-appearance-template-2026-06-17
+cwca-weekly-client-checkin-same-day-call-2026-06-17
 
 What changed:
 - Added Weekly Client Check-In as a new calendar-and-call audit item.
 - Weekly Client Check-In only passes when a weekly check-in/courtesy/follow-up calendar event exists and a phone-call communication exists on that same Illinois-local date.
-- Existing matters that were audited before this new item was added now get pulled back into the safe batch queue so the Weekly Client Check-In row is filled in.
-- Weekly Client Check-In no longer counts as the initial Attorney Call.
-- Same-day weekly check-in phone proof can be an inbound or outbound real phone communication, but not a missed call or SMS.
-- Appearance Filed matching now recognizes the current appearance filing notification template subjects more broadly.
 - Upcoming weekly check-ins show as not due yet until the same-day call window has passed.
 - Matters tab now has inline Auditor Status controls on flagged/problem items.
 - Auditor Status controls are collapsed by default and open only when clicked.

@@ -205,18 +205,6 @@ function evidenceUrl(type: "communications" | "calendar_entries", id: number): s
   return `/evidence/${type}/${id}`;
 }
 
-const AUDIT_STEP_CODES: StepCode[] = [
-  "SETUP_WELCOME",
-  "SETUP_ATTY_CALL",
-  "SETUP_COURT_DATE",
-  "CLIENT_CONTACT",
-  "APPEARANCE_FILING",
-  "COURT_RESULTS",
-  "POST_COURT_CALL",
-  "CLIENT_FOLLOWUP",
-  "WEEKLY_CLIENT_CHECKIN",
-];
-
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
@@ -415,6 +403,8 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .map((comm): Evidence<ClioCommunication> | null => {
             const at = commDate(comm);
             if (!at || localDateKey(at) !== localDateKey(weeklyCheckInEvent.at)) return null;
+            const direction = isOutbound(comm, record.client_id);
+            if (direction === false) return null;
             if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
             return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
           })
@@ -519,10 +509,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
 
   const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
   const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart);
-  const appearanceWindowStart = new Date(record.matter_created_at.getTime() - 24 * 60 * 60 * 1000);
-  const appearanceEvidence =
-    templateCommunicationEvidence(isAppearanceTemplate, appearanceWindowStart) ??
-    communicationEvidence(isAppearanceTemplate, appearanceWindowStart, { allowUnclearDirection: true, includeBodyText: true });
+  const appearanceEvidence = templateCommunicationEvidence(isAppearanceTemplate, welcomeWindowStart) ?? communicationEvidence(isAppearanceTemplate, welcomeWindowStart);
 
   const clientContactCommunication = evidence.communications
       .map((comm): Evidence<ClioCommunication> | null => {
@@ -671,12 +658,6 @@ export async function auditNextBatch(
                   from audit_item ai_unchecked
                   where ai_unchecked.matter_id = m.matter_id
                 ) then 0
-                when not exists (
-                  select 1
-                  from audit_item ai_missing_weekly
-                  where ai_missing_weekly.matter_id = m.matter_id
-                    and ai_missing_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
-                ) then 0
                 when exists (
                   select 1
                   from audit_item ai
@@ -702,12 +683,6 @@ export async function auditNextBatch(
                   select 1
                   from audit_item ai_unchecked
                   where ai_unchecked.matter_id = m.matter_id
-                ) then 0
-                when not exists (
-                  select 1
-                  from audit_item ai_missing_weekly
-                  where ai_missing_weekly.matter_id = m.matter_id
-                    and ai_missing_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
                 ) then 0
                 when exists (
                   select 1
@@ -736,7 +711,17 @@ export async function auditNextBatch(
         audited += 1;
       } catch (error) {
         const status = apiReason(error, "matter");
-        const items = AUDIT_STEP_CODES.map((step) => base(step, "Unknown", "Unknown", null, null, status));
+        const items: AuditItemResult[] = [
+          "SETUP_WELCOME",
+          "SETUP_ATTY_CALL",
+          "SETUP_COURT_DATE",
+          "CLIENT_CONTACT",
+          "APPEARANCE_FILING",
+          "COURT_RESULTS",
+          "POST_COURT_CALL",
+          "CLIENT_FOLLOWUP",
+          "WEEKLY_CLIENT_CHECKIN",
+        ].map((step) => base(step as StepCode, "Unknown", "Unknown", null, null, status));
         await upsertItems(matter.matter_id, items, "Review", { last: null, next: null });
         audited += 1;
       }
@@ -747,18 +732,10 @@ export async function auditNextBatch(
       select count(*)::int as count
       from audit_matter m
       where ${batchConditions[0]} and ${batchConditions[1]} and ${batchConditions[2]} and ${batchConditions[3]}
-        and (
-          not exists (
-            select 1
-            from audit_item i
-            where i.matter_id = m.matter_id
-          )
-          or not exists (
-            select 1
-            from audit_item weekly_item
-            where weekly_item.matter_id = m.matter_id
-              and weekly_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
-          )
+        and not exists (
+          select 1
+          from audit_item i
+          where i.matter_id = m.matter_id
         )
     `;
     const remainingUnchecked = Number(remainingRows[0]?.count ?? 0);
@@ -797,7 +774,17 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
     await upsertItems(matter.matter_id, result.items, result.overallStatus, result.court);
   } catch (error) {
     const status = apiReason(error, "matter");
-    const items = AUDIT_STEP_CODES.map((step) => base(step, "Unknown", "Unknown", null, null, status));
+    const items: AuditItemResult[] = [
+      "SETUP_WELCOME",
+      "SETUP_ATTY_CALL",
+      "SETUP_COURT_DATE",
+      "CLIENT_CONTACT",
+      "APPEARANCE_FILING",
+      "COURT_RESULTS",
+      "POST_COURT_CALL",
+      "CLIENT_FOLLOWUP",
+      "WEEKLY_CLIENT_CHECKIN",
+    ].map((step) => base(step as StepCode, "Unknown", "Unknown", null, null, status));
     await upsertItems(matter.matter_id, items, "Review", { last: null, next: null });
     throw error;
   }
@@ -808,18 +795,10 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
     select count(*)::int as count
     from audit_matter m
     where lower(coalesce(m.matter_status, '')) <> 'closed'
-      and (
-        not exists (
-          select 1
-          from audit_item i
-          where i.matter_id = m.matter_id
-        )
-        or not exists (
-          select 1
-          from audit_item weekly_item
-          where weekly_item.matter_id = m.matter_id
-            and weekly_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
-        )
+      and not exists (
+        select 1
+        from audit_item i
+        where i.matter_id = m.matter_id
       )
   `;
   const name = `${matter.client_first_name} ${matter.client_last_name}`.trim() || matter.matter_number;

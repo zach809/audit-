@@ -113,17 +113,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const sql = db();
   const overallCondition =
     filters.overall === "Unchecked"
-      ? sql`
-        (
-          not exists (select 1 from audit_item filter_item where filter_item.matter_id = m.matter_id)
-          or not exists (
-            select 1
-            from audit_item weekly_filter_item
-            where weekly_filter_item.matter_id = m.matter_id
-              and weekly_filter_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
-          )
-        )
-        `
+      ? sql`not exists (select 1 from audit_item filter_item where filter_item.matter_id = m.matter_id)`
       : filters.overall
         ? sql`
             m.overall_status = ${filters.overall}
@@ -161,7 +151,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     select
       m.*,
       case
-        when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 'Unchecked'
+        when count(i.*) = 0 then 'Unchecked'
         when count(*) filter (where (
           case
             when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -295,7 +285,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       select
         m.matter_id,
         case
-          when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 'Unchecked'
+          when count(i.*) = 0 then 'Unchecked'
           when count(*) filter (where (
             case
               when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'

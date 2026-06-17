@@ -47,20 +47,9 @@ export const TEMPLATE_PATTERNS = {
   appearance: [
     "court appearance has been filed notification",
     "court appearance has been filed",
-    "court appearance filed notification",
-    "court appearance filed",
-    "appearance has been filed notification",
-    "appearance has been filed",
-    "appearance filing notification",
-    "appearance filed notification",
     "notificacion de presentacion en la corte",
-    "notificacion de presentacion en corte",
-    "notificacion de presentacion",
     "notificación de presentación en la corte",
     "notice of appearance",
-    "appearance notice",
-    "presentacion en la corte",
-    "presentacion en corte",
     "filed appearance",
     "e-filed",
     "appearance",
@@ -251,11 +240,7 @@ export function isWelcomeTemplate(text: string): boolean {
 
 export function isAppearanceTemplate(text: string): boolean {
   const normalized = normalizeText(text);
-  return normalized.startsWith("court appearance has been filed notification") ||
-    normalized.startsWith("court appearance filed") ||
-    normalized.startsWith("appearance has been filed") ||
-    normalized.startsWith("notificacion de presentacion") ||
-    includesAny(normalized, TEMPLATE_PATTERNS.appearance);
+  return normalized.startsWith("court appearance has been filed notification") || normalized.startsWith("notificacion de presentacion en la corte") || includesAny(normalized, TEMPLATE_PATTERNS.appearance);
 }
 
 export function isCourtResultTemplate(text: string): boolean {
@@ -270,7 +255,6 @@ export function isCourtReminderTemplate(text: string): boolean {
 
 export function isAttorneyCall(text: string): boolean {
   const normalized = normalizeText(text);
-  if (includesAny(normalized, CALENDAR_PATTERNS.weeklyClientCheckIn)) return false;
   if (!includesAny(normalized, CALENDAR_PATTERNS.attorneyCall)) return false;
 
   const phoneSpecific = includesAny(normalized, [
@@ -332,7 +316,6 @@ export function isPhoneCallCommunication(text: string): boolean {
   return includesAny(normalized, [
     "phonecommunication",
     "outbound call",
-    "inbound call",
     "phone call",
     "telephone call",
     "telephonic call",
