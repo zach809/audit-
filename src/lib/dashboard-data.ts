@@ -113,7 +113,17 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const sql = db();
   const overallCondition =
     filters.overall === "Unchecked"
-      ? sql`not exists (select 1 from audit_item filter_item where filter_item.matter_id = m.matter_id)`
+      ? sql`
+        (
+          not exists (select 1 from audit_item filter_item where filter_item.matter_id = m.matter_id)
+          or not exists (
+            select 1
+            from audit_item weekly_filter_item
+            where weekly_filter_item.matter_id = m.matter_id
+              and weekly_filter_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
+          )
+        )
+        `
       : filters.overall
         ? sql`
             m.overall_status = ${filters.overall}
@@ -146,57 +156,56 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       )
     `,
   ];
+  const normalizedItemStatus = sql`
+    case
+      when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+      when i.step_code = 'APPEARANCE_FILING'
+        and i.status = 'Unknown'
+        and i.reason_code = 'EVIDENCE_NOT_CONFIRMED'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+      else i.status
+    end
+  `;
+  const normalizedOperationalState = sql`
+    case
+      when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Needs Court Results' else 'Overdue' end
+      when i.step_code = 'APPEARANCE_FILING'
+        and i.status = 'Unknown'
+        and i.reason_code = 'EVIDENCE_NOT_CONFIRMED'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Waiting for 48-hour review window' else 'Overdue' end
+      else i.operational_state
+    end
+  `;
+  const normalizedReasonCode = sql`
+    case
+      when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
+      when i.step_code = 'APPEARANCE_FILING'
+        and i.status = 'Unknown'
+        and i.reason_code = 'EVIDENCE_NOT_CONFIRMED'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
+      else i.reason_code
+    end
+  `;
 
   const matters = await sql`
     select
       m.*,
       case
-        when count(i.*) = 0 then 'Unchecked'
-        when count(*) filter (where (
-          case
-            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-            else i.status
-          end
-        ) = 'Unknown') > 0 then 'Review'
-        when count(*) filter (where (
-          case
-            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-            else i.status
-          end
-        ) = 'Missing') > 0 then 'Flag'
-        when count(*) filter (where (
-          case
-            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-            else i.status
-          end
-        ) = 'Late') > 0 then 'Late'
-        when count(*) filter (where (
-          case
-            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-            else i.status
-          end
-        ) = 'Pending') > 0 then 'Pending'
+        when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 'Unchecked'
+        when count(*) filter (where (${normalizedItemStatus}) = 'Unknown') > 0 then 'Review'
+        when count(*) filter (where (${normalizedItemStatus}) = 'Missing') > 0 then 'Flag'
+        when count(*) filter (where (${normalizedItemStatus}) = 'Late') > 0 then 'Late'
+        when count(*) filter (where (${normalizedItemStatus}) = 'Pending') > 0 then 'Pending'
         else m.overall_status
       end as display_overall_status,
       coalesce(json_agg(
         json_build_object(
           'stepCode', i.step_code,
-          'status',
-            case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-              else i.status
-            end,
-          'operationalState',
-            case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Needs Court Results' else 'Overdue' end
-              else i.operational_state
-            end,
+          'status', ${normalizedItemStatus},
+          'operationalState', ${normalizedOperationalState},
           'deadlineAt', i.deadline_at,
           'evidenceAt', i.evidence_at,
           'evidenceSource', i.evidence_source,
@@ -236,12 +245,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
             from audit_review_history h
             where h.matter_id = i.matter_id and h.step_code = i.step_code
           ), '[]'::json),
-          'reasonCode',
-            case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-                then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
-              else i.reason_code
-            end
+          'reasonCode', ${normalizedReasonCode}
         )
         order by i.step_code
       ) filter (where i.step_code is not null), '[]') as items
@@ -285,58 +289,16 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       select
         m.matter_id,
         case
-          when count(i.*) = 0 then 'Unchecked'
-          when count(*) filter (where (
-            case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-              else i.status
-            end
-          ) = 'Unknown') > 0 then 'Review'
-          when count(*) filter (where (
-            case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-              else i.status
-            end
-          ) = 'Missing') > 0 then 'Flag'
-          when count(*) filter (where (
-            case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-              else i.status
-            end
-          ) = 'Late') > 0 then 'Late'
-          when count(*) filter (where (
-            case
-              when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-                then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-              else i.status
-            end
-          ) = 'Pending') > 0 then 'Pending'
+          when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 'Unchecked'
+          when count(*) filter (where (${normalizedItemStatus}) = 'Unknown') > 0 then 'Review'
+          when count(*) filter (where (${normalizedItemStatus}) = 'Missing') > 0 then 'Flag'
+          when count(*) filter (where (${normalizedItemStatus}) = 'Late') > 0 then 'Late'
+          when count(*) filter (where (${normalizedItemStatus}) = 'Pending') > 0 then 'Pending'
           else m.overall_status
         end as display_overall_status,
-        count(i.*) filter (where (
-          case
-            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-            else i.status
-          end
-        ) = 'Missing')::int as missing_items,
-        count(i.*) filter (where (
-          case
-            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-            else i.status
-          end
-        ) = 'Late')::int as late_items,
-        count(i.*) filter (where (
-          case
-            when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-              then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-            else i.status
-          end
-        ) = 'Unknown')::int as unknown_items
+        count(i.*) filter (where (${normalizedItemStatus}) = 'Missing')::int as missing_items,
+        count(i.*) filter (where (${normalizedItemStatus}) = 'Late')::int as late_items,
+        count(i.*) filter (where (${normalizedItemStatus}) = 'Unknown')::int as unknown_items
       from audit_matter m
       left join audit_item i on i.matter_id = m.matter_id
       where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
@@ -373,11 +335,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       m.responsible_attorney_id,
       m.responsible_attorney_name,
       i.step_code,
-      case
-        when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-          then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-        else i.status
-      end as item_status,
+      ${normalizedItemStatus} as item_status,
       i.deadline_at,
       i.evidence_at,
       i.evidence_source,
@@ -416,11 +374,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         from audit_review_history h
         where h.matter_id = i.matter_id and h.step_code = i.step_code
       ), '[]'::json) as review_history,
-      case
-        when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-          then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
-        else i.reason_code
-      end as reason_code
+      ${normalizedReasonCode} as reason_code
     from audit_matter m
     join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
@@ -514,6 +468,28 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
       : filters.overall
         ? sql`m.overall_status = ${filters.overall}`
         : sql`true`;
+  const normalizedItemStatus = sql`
+    case
+      when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+      when i.step_code = 'APPEARANCE_FILING'
+        and i.status = 'Unknown'
+        and i.reason_code = 'EVIDENCE_NOT_CONFIRMED'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
+      else i.status
+    end
+  `;
+  const normalizedReasonCode = sql`
+    case
+      when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
+      when i.step_code = 'APPEARANCE_FILING'
+        and i.status = 'Unknown'
+        and i.reason_code = 'EVIDENCE_NOT_CONFIRMED'
+        then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
+      else i.reason_code
+    end
+  `;
   const rows = await sql<ActionCsvRow[]>`
     select *
     from (
@@ -526,11 +502,7 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
         m.matter_created_at,
         m.overall_status,
         i.step_code,
-        case
-          when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-            then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
-          else i.status
-        end as item_status,
+        ${normalizedItemStatus} as item_status,
         i.deadline_at,
         i.evidence_at,
         i.evidence_source,
@@ -568,11 +540,7 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
           from audit_review_history h
           where h.matter_id = i.matter_id and h.step_code = i.step_code
         ), '[]'::json) as review_history,
-        case
-          when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
-            then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
-          else i.reason_code
-        end as reason_code
+        ${normalizedReasonCode} as reason_code
       from audit_matter m
       join audit_item i on i.matter_id = m.matter_id
       left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code

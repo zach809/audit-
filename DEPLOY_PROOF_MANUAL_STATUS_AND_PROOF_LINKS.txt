@@ -1,11 +1,19 @@
 CWCA update proof
 
 Version marker:
-cwca-weekly-client-checkin-same-day-call-2026-06-17
+cwca-appearance-48h-not-due-recheck-2026-06-17
 
 What changed:
+- Appearance Filed now stays Not Due Yet until the 48-hour weekday review window has passed.
+- After the 48-hour weekday review window passes, missing Appearance Filed proof becomes Needs Follow-Up instead of the vague EVIDENCE_NOT_CONFIRMED review state.
+- Older saved Appearance Filed review rows are interpreted by the dashboard using the current 48-hour deadline, so stale rows can display Not Due Yet when they are not actually due.
+- Older saved Appearance Filed review rows are prioritized for the next safe audit batches so CWCA refreshes the Clio communications evidence.
 - Added Weekly Client Check-In as a new calendar-and-call audit item.
 - Weekly Client Check-In only passes when a weekly check-in/courtesy/follow-up calendar event exists and a phone-call communication exists on that same Illinois-local date.
+- Existing matters that were audited before this new item was added now get pulled back into the safe batch queue so the Weekly Client Check-In row is filled in.
+- Weekly Client Check-In no longer counts as the initial Attorney Call.
+- Same-day weekly check-in phone proof can be an inbound or outbound real phone communication, but not a missed call or SMS.
+- Appearance Filed matching now recognizes the current appearance filing notification template subjects more broadly.
 - Upcoming weekly check-ins show as not due yet until the same-day call window has passed.
 - Matters tab now has inline Auditor Status controls on flagged/problem items.
 - Auditor Status controls are collapsed by default and open only when clicked.

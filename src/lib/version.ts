@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-weekly-client-checkin-same-day-call-2026-06-17";
+export const APP_VERSION = "cwca-appearance-48h-not-due-recheck-2026-06-17";
