@@ -66,6 +66,8 @@ export type PostClosureFilters = {
 
 type ClosedMatter = ClioMatter & {
   close_date?: string | null;
+  closed_at?: string | null;
+  closed_date?: string | null;
 };
 
 function cleanText(value: unknown, max = 500): string {
@@ -84,6 +86,19 @@ function parseClioCloseDate(value?: string | null): Date | null {
   }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function queryDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function closeDateValue(matter: ClosedMatter): string | null {
+  return matter.close_date ?? matter.closed_at ?? matter.closed_date ?? null;
+}
+
+function hasClosedMatterSignal(matter: ClosedMatter): boolean {
+  const status = String(matter.status ?? "").trim().toLowerCase();
+  return status === "closed" || Boolean(closeDateValue(matter));
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -125,22 +140,27 @@ function computedStatusSql() {
 
 async function listClosedMatterCandidates(client: ClioClient, since: Date): Promise<ClosedMatter[]> {
   const fields = "id,number,display_number,status,created_at,updated_at,close_date,responsible_attorney{id,name},client{id,first_name,last_name,name}";
+  const closedSince = `>=${queryDate(since)}`;
   const attempts = [
-    { fields, status: "closed", updated_since: since.toISOString() },
-    { fields, status: "Closed", updated_since: since.toISOString() },
-    { fields, updated_since: since.toISOString() },
-    { fields, status: "closed", created_since: since.toISOString() },
-    { fields, created_since: since.toISOString() },
+    { fields, "close_date[]": closedSince, order: "close_date(desc)" },
+    { fields, close_date: closedSince, order: "close_date(desc)" },
+    { fields, "close_date[]": closedSince },
+    { fields, close_date: closedSince },
+    { fields, updated_since: since.toISOString(), order: "updated_at(desc)" },
   ];
   let lastError: unknown;
+  let bestEmptyResult: ClosedMatter[] | null = null;
   for (const query of attempts) {
     try {
       const matters = await client.list<ClosedMatter>("/matters.json", query);
-      return matters.filter((matter) => String(matter.status ?? "").toLowerCase() === "closed");
+      const closedMatters = matters.filter(hasClosedMatterSignal);
+      if (closedMatters.length > 0) return closedMatters;
+      bestEmptyResult = closedMatters;
     } catch (error) {
       lastError = error;
     }
   }
+  if (bestEmptyResult) return bestEmptyResult;
   throw lastError instanceof Error ? lastError : new Error("Could not read closed matters from Clio.");
 }
 
@@ -157,7 +177,7 @@ export async function syncPostClosureFollowups(
   let skippedWithoutCloseDate = 0;
 
   for (const matter of matters) {
-    const closedAt = parseClioCloseDate(matter.close_date);
+    const closedAt = parseClioCloseDate(closeDateValue(matter));
     if (!closedAt) {
       skippedWithoutCloseDate += 1;
       continue;

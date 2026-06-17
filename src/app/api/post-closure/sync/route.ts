@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await syncPostClosureFollowups();
-    const message = `Closed-matter follow-ups refreshed: ${result.syncedMatters} closed matters, ${result.remindersCreated} reminders.`;
+    const skipped = result.skippedWithoutCloseDate ? ` ${result.skippedWithoutCloseDate} closed matter(s) were skipped because Clio did not return a close date.` : "";
+    const message = `Closed-matter follow-ups refreshed: ${result.syncedMatters} closed matters, ${result.remindersCreated} reminders.${skipped}`;
     return redirectBack(request, {
       tab: "post-closure",
       closure_status: "due",

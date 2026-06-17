@@ -784,8 +784,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="deployment-proof">
         <div>
           <span className="label">Deployment Proof</span>
-          <strong>Weekly review builder is active</strong>
-          <p>Version {APP_VERSION}: Reports now include the one-by-one weekly flagged matter queue, saved results details, next steps, and review history.</p>
+          <strong>Closed-matter follow-up sync is active</strong>
+          <p>Version {APP_VERSION}: Post-Closure refresh now searches Clio by close date and creates the 1, 6, and 12-month internal follow-up queue.</p>
         </div>
         <a className="button compact" href="/api/health" target="_blank" rel="noreferrer">Check Version</a>
       </section>

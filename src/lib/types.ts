@@ -35,6 +35,8 @@ export type ClioMatter = {
   created_at: string;
   updated_at?: string | null;
   close_date?: string | null;
+  closed_at?: string | null;
+  closed_date?: string | null;
   client?: {
     id?: number;
     first_name?: string | null;

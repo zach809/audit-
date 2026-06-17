@@ -1,9 +1,13 @@
 CWCA update proof
 
 Version marker:
-cwca-post-closure-followup-2026-06-17
+cwca-post-closure-closed-matter-sync-fix-2026-06-17
 
 What changed:
+- Fixed Post-Closure refresh so it searches Clio by close_date instead of relying only on status=closed.
+- Post-Closure refresh no longer stops after the first empty Clio response; it tries safe fallback reads before giving up.
+- Post-Closure accepts a matter as closed when Clio provides a close date, even if the returned status text is inconsistent.
+- The refresh notice now says if any closed matters were skipped because Clio did not return a usable close date.
 - Added a Post-Closure tab for internal closed-matter client follow-up reminders.
 - Post-Closure creates 1-month, 6-month, and 12-month internal reminders from Clio close_date.
 - Due dates that fall on weekends move to the next business morning.

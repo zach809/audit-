@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-post-closure-followup-2026-06-17";
+export const APP_VERSION = "cwca-post-closure-closed-matter-sync-fix-2026-06-17";
