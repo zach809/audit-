@@ -1,9 +1,16 @@
 CWCA update proof
 
 Version marker:
-cwca-appearance-48h-not-due-recheck-2026-06-17
+cwca-post-closure-followup-2026-06-17
 
 What changed:
+- Added a Post-Closure tab for internal closed-matter client follow-up reminders.
+- Post-Closure creates 1-month, 6-month, and 12-month internal reminders from Clio close_date.
+- Due dates that fall on weekends move to the next business morning.
+- Staff can mark each reminder as In Progress, Completed, Unable to Reach, No Action Needed, or Issue Found.
+- Staff can record contact method, issue type, note, and reviewed-by name inside CWCA only.
+- Closed matters remain excluded from active audit views.
+- Clio remains read-only. No client messages or Clio updates are sent.
 - Appearance Filed now stays Not Due Yet until the 48-hour weekday review window has passed.
 - After the 48-hour weekday review window passes, missing Appearance Filed proof becomes Needs Follow-Up instead of the vague EVIDENCE_NOT_CONFIRMED review state.
 - Older saved Appearance Filed review rows are interpreted by the dashboard using the current 48-hour deadline, so stale rows can display Not Due Yet when they are not actually due.

@@ -10,11 +10,13 @@ export async function GET() {
       db()`select count(*)::int as matters from audit_matter`,
       db()`select status, started_at, finished_at, message from audit_run order by started_at desc limit 1`,
     ]);
+    const postClosure = await db()`select count(*)::int as reminders from post_closure_followup`.catch(() => [{ reminders: 0 }]);
     return NextResponse.json({
       ok: true,
       version: APP_VERSION,
       clioConnected: await hasClioConnection().catch(() => false),
       matters: summary[0]?.matters ?? 0,
+      postClosureReminders: postClosure[0]?.reminders ?? 0,
       lastRun: lastRun[0] ?? null,
     });
   } catch (error) {

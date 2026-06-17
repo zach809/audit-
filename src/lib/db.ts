@@ -131,6 +131,28 @@ create table if not exists audit_review_history (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists post_closure_followup (
+  matter_id text not null,
+  touchpoint_months integer not null,
+  touchpoint_label text not null,
+  matter_number text not null default '',
+  client_first_name text not null default '',
+  client_last_name text not null default '',
+  responsible_attorney_name text not null default '',
+  matter_closed_at timestamptz not null,
+  due_at timestamptz not null,
+  review_status text not null default '',
+  contact_method text not null default '',
+  issue_type text not null default '',
+  followup_note text not null default '',
+  reviewed_by text not null default '',
+  completed_at timestamptz,
+  last_synced_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (matter_id, touchpoint_months)
+);
+
 create table if not exists audit_metric_snapshot (
   snapshot_id bigserial primary key,
   period_start date not null,
@@ -218,6 +240,36 @@ alter table if exists audit_metric_snapshot add column if not exists logged_call
 update audit_metric_snapshot set logged_call_count = 0 where logged_call_count is null;
 alter table if exists audit_metric_snapshot alter column logged_call_count set default 0;
 alter table if exists audit_metric_snapshot alter column logged_call_count set not null;
+alter table if exists post_closure_followup add column if not exists contact_method text;
+alter table if exists post_closure_followup add column if not exists issue_type text;
+alter table if exists post_closure_followup add column if not exists followup_note text;
+alter table if exists post_closure_followup add column if not exists reviewed_by text;
+alter table if exists post_closure_followup add column if not exists completed_at timestamptz;
+alter table if exists post_closure_followup add column if not exists last_synced_at timestamptz;
+alter table if exists post_closure_followup add column if not exists created_at timestamptz;
+alter table if exists post_closure_followup add column if not exists updated_at timestamptz;
+update post_closure_followup
+set contact_method = coalesce(contact_method, ''),
+    issue_type = coalesce(issue_type, ''),
+    followup_note = coalesce(followup_note, ''),
+    reviewed_by = coalesce(reviewed_by, ''),
+    last_synced_at = coalesce(last_synced_at, now()),
+    created_at = coalesce(created_at, now()),
+    updated_at = coalesce(updated_at, now());
+alter table if exists post_closure_followup alter column contact_method set default '';
+alter table if exists post_closure_followup alter column issue_type set default '';
+alter table if exists post_closure_followup alter column followup_note set default '';
+alter table if exists post_closure_followup alter column reviewed_by set default '';
+alter table if exists post_closure_followup alter column last_synced_at set default now();
+alter table if exists post_closure_followup alter column created_at set default now();
+alter table if exists post_closure_followup alter column updated_at set default now();
+alter table if exists post_closure_followup alter column contact_method set not null;
+alter table if exists post_closure_followup alter column issue_type set not null;
+alter table if exists post_closure_followup alter column followup_note set not null;
+alter table if exists post_closure_followup alter column reviewed_by set not null;
+alter table if exists post_closure_followup alter column last_synced_at set not null;
+alter table if exists post_closure_followup alter column created_at set not null;
+alter table if exists post_closure_followup alter column updated_at set not null;
 
 create index if not exists audit_matter_attorney_idx on audit_matter(responsible_attorney_id);
 create index if not exists audit_matter_created_idx on audit_matter(matter_created_at);
@@ -226,6 +278,9 @@ create index if not exists audit_item_status_idx on audit_item(status);
 create index if not exists audit_item_audit_version_idx on audit_item(audit_version);
 create index if not exists audit_review_decision_idx on audit_review(review_decision);
 create index if not exists audit_review_history_matter_idx on audit_review_history(matter_id, step_code, updated_at desc);
+create index if not exists post_closure_followup_due_idx on post_closure_followup(due_at);
+create index if not exists post_closure_followup_status_idx on post_closure_followup(review_status);
+create index if not exists post_closure_followup_touchpoint_idx on post_closure_followup(touchpoint_months);
 `;
 
 export async function initDb(): Promise<void> {

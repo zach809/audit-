@@ -5526,3 +5526,179 @@ th,
     width: 100%;
   }
 }
+
+.dashboard-tabs {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.post-closure-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.post-closure-hero,
+.post-closure-panel {
+  padding: 22px;
+}
+
+.post-closure-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.post-closure-summary div {
+  background: rgba(6, 10, 16, 0.42);
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  padding: 13px;
+}
+
+.post-closure-summary span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.post-closure-summary strong {
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.post-closure-filters {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.post-closure-list {
+  display: grid;
+  gap: 14px;
+}
+
+.post-closure-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025)),
+    rgba(20, 24, 32, 0.86);
+  border: 1px solid var(--line-soft);
+  border-radius: 22px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.post-closure-card[open] {
+  border-color: rgba(168, 239, 255, 0.22);
+}
+
+.post-closure-card-head {
+  align-items: flex-start;
+  cursor: pointer;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(220px, 1.35fr) minmax(140px, 0.8fr) minmax(130px, 0.7fr) minmax(130px, 0.7fr) minmax(130px, auto);
+  list-style: none;
+  padding: 18px;
+}
+
+.post-closure-card-head::-webkit-details-marker {
+  display: none;
+}
+
+.post-closure-card-head h3 {
+  color: var(--text);
+  font-size: 18px;
+  margin: 3px 0 4px;
+}
+
+.post-closure-card-head p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.post-closure-card-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.post-closure-card-body {
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(230px, 0.75fr) minmax(0, 1.25fr);
+  padding: 18px;
+}
+
+.post-closure-purpose {
+  background: rgba(6, 10, 16, 0.36);
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.post-closure-purpose strong {
+  color: var(--text);
+}
+
+.post-closure-purpose p {
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+.post-closure-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.post-closure-form label {
+  color: var(--muted);
+}
+
+.post-closure-note {
+  grid-column: 1 / -1;
+}
+
+.post-closure-form button {
+  justify-self: start;
+}
+
+.status-row-Overdue {
+  border-color: rgba(197, 138, 84, 0.42);
+}
+
+.status-row-Due-Now,
+.status-row-Issue-Found,
+.status-row-In-Progress {
+  border-color: rgba(179, 148, 189, 0.42);
+}
+
+@media (max-width: 1050px) {
+  .dashboard-tabs,
+  .post-closure-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .post-closure-card-head,
+  .post-closure-card-body {
+    grid-template-columns: 1fr;
+  }
+
+  .post-closure-card-actions {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-tabs,
+  .post-closure-summary,
+  .post-closure-form {
+    grid-template-columns: 1fr;
+  }
+}

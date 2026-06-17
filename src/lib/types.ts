@@ -33,6 +33,8 @@ export type ClioMatter = {
   display_number?: string | null;
   status?: string | null;
   created_at: string;
+  updated_at?: string | null;
+  close_date?: string | null;
   client?: {
     id?: number;
     first_name?: string | null;

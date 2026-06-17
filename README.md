@@ -5,7 +5,8 @@ Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA 
 ## What It Does
 
 - Pulls Clio matters, communications, and calendar entries through read-only API calls.
-- Excludes Closed matters.
+- Excludes Closed matters from active audit views.
+- Provides a separate Post-Closure tab for closed-matter client follow-up reminders.
 - Groups the dashboard by the matter's responsible attorney.
 - Applies Monday-Friday, 8 AM-5 PM America/Chicago deadline rules.
 - Tracks setup, client contact, appearance filing, court results, post-court calls, and client follow-up risks.
@@ -13,6 +14,25 @@ Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA 
 - Provides manual refresh, Vercel Cron refresh, filters, historical metrics, and CSV export.
 - Provides a Case Manager action CSV named `cwca-case-manager-action-report.csv`.
 - Provides a Notepad-friendly Case Manager to-do list named `cwca-case-manager-to-do-list.txt`.
+
+## Post-Closure Follow-Up
+
+The Post-Closure tab is an internal reminder queue for closed matters. It reads closed matters from Clio and creates follow-up touchpoints at:
+
+- 1 month after closure.
+- 6 months after closure.
+- 12 months after closure.
+
+Each reminder is an opportunity for staff to call the client, confirm satisfaction, identify unresolved concerns, and note any billing, document, new legal issue, or supervision concern. The app does not send client messages and does not update Clio.
+
+Stored locally for this feature:
+
+- Matter ID and matter number.
+- Client name.
+- Responsible attorney.
+- Matter close date.
+- Follow-up due date and stage.
+- Staff-entered follow-up status, contact method, issue type, note, reviewer, and completion date.
 
 No AI is used.
 
@@ -43,6 +63,7 @@ Stored locally:
 - Workflow timestamps and statuses.
 - Evidence IDs and proof links.
 - Audit-run history.
+- Post-closure follow-up reminder metadata and staff-entered follow-up notes.
 - Encrypted OAuth tokens.
 
 Not stored locally:

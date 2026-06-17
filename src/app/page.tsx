@@ -5,6 +5,13 @@ import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
 import { APP_TZ } from "@/lib/config";
+import {
+  getPostClosureData,
+  POST_CLOSURE_CONTACT_METHODS,
+  POST_CLOSURE_ISSUE_TYPES,
+  POST_CLOSURE_REVIEW_STATUSES,
+  POST_CLOSURE_TOUCHPOINTS,
+} from "@/lib/post-closure";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
@@ -362,13 +369,22 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "post-closure" | "reports" | "guide" | "compliance";
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
+  { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
   { id: "guide", label: "Guide", description: "How to read the results" },
   { id: "compliance", label: "Compliance", description: "Read-only and data-handling rules" },
+];
+
+const POST_CLOSURE_STATUS_FILTERS = [
+  { id: "due", label: "Needs Outreach" },
+  { id: "upcoming", label: "Coming Soon" },
+  { id: "issues", label: "Issue Found" },
+  { id: "completed", label: "Completed" },
+  { id: "all", label: "All" },
 ];
 
 const WORKSPACE_STATUS_FILTERS = [
@@ -494,6 +510,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const activeTab = dashboardTab(searchParams.tab);
   const workspaceStatusFilter = searchParams.wstatus ?? "followup";
   const workspaceFocusFilter = searchParams.wfocus ?? "all";
+  const closureStatusFilter = searchParams.closure_status ?? "due";
+  const closureStageFilter = searchParams.closure_stage ?? "";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -504,14 +522,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const monthStart = monthStartInput(new Date());
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
+  let postClosure: Awaited<ReturnType<typeof getPostClosureData>> | null = null;
   let dataError = "";
   try {
-    data = await getDashboardData(filters);
+    [data, postClosure] = await Promise.all([
+      getDashboardData(filters),
+      getPostClosureData({ status: closureStatusFilter, stage: closureStageFilter }),
+    ]);
   } catch (error) {
     data = null;
+    postClosure = null;
     dataError = dashboardErrorMessage(error);
   }
-  if (!data) {
+  if (!data || !postClosure) {
     return (
       <DashboardUnavailable
         connected={connected}
@@ -520,6 +543,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     );
   }
   const dashboardData = data;
+  const postClosureData = postClosure;
   const auditBatchSize = Math.max(1, Number(process.env.AUDIT_BATCH_SIZE ?? "5") || 5);
   const totalCount = num(dashboardData.summary.total);
   const uncheckedCount = num(dashboardData.summary.unchecked);
@@ -693,11 +717,27 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       const followUp = rows.filter((item) => isFollowUpStatus(item.row.status)).length;
       return { code, label, followUp, checked: rows.length, clear: Math.max(0, rows.length - followUp) };
     });
+  const closureBaseFilters = {
+    tab: "post-closure",
+    closure_status: closureStatusFilter,
+    closure_stage: closureStageFilter,
+  };
+  const postClosureNeedsOutreach =
+    num(postClosureData.summary.due_now) +
+    num(postClosureData.summary.overdue) +
+    num(postClosureData.summary.in_progress) +
+    num(postClosureData.summary.issue_found);
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
       : searchParams.audit === "failed"
         ? searchParams.message || "Audit run failed."
+        : searchParams.postClosure === "synced"
+          ? searchParams.message || "Post-closure follow-ups refreshed."
+          : searchParams.postClosure === "saved"
+            ? searchParams.message || "Post-closure follow-up saved."
+            : searchParams.postClosure === "failed"
+              ? searchParams.message || "Post-closure follow-up update failed."
         : searchParams.clio === "connected"
           ? "Clio connected successfully."
           : searchParams.clio === "failed"
@@ -751,7 +791,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       {notice ? (
-        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" ? "notice danger" : "notice"}>
+        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" ? "notice danger" : "notice"}>
           {notice}
         </section>
       ) : null}
@@ -1159,11 +1199,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="compliance-grid">
           <div>
             <h3>What This Stores</h3>
-            <p>Matter IDs and numbers, client names, responsible attorney, timestamps, workflow statuses, evidence IDs or links, audit-run history, and encrypted OAuth tokens.</p>
+            <p>Matter IDs and numbers, client names, responsible attorney, timestamps, workflow statuses, evidence IDs or links, post-closure follow-up notes, audit-run history, and encrypted OAuth tokens.</p>
           </div>
           <div>
             <h3>What This Does Not Store</h3>
-            <p>No communication bodies, note text, document contents, billing data, payment data, or Clio write actions are saved here.</p>
+            <p>No communication bodies, note text, document contents, billing data, payment data, automatic client messages, or Clio write actions are saved here.</p>
           </div>
           <div>
             <h3>Retention</h3>
@@ -1178,6 +1218,172 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <span>Rotate secrets on a schedule and after staff changes.</span>
           <span>This is workflow coaching, not legal advice.</span>
         </div>
+      </section>
+      ) : null}
+
+      {activeTab === "post-closure" ? (
+      <section className="post-closure-layout">
+        <section className="panel post-closure-hero">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Closed Matter Follow-Up</span>
+              <h2>Post-Closure Client Follow-Up</h2>
+              <p className="muted small">Internal reminders for 1-month, 6-month, and 12-month client satisfaction calls after a matter closes.</p>
+            </div>
+            <form action="/api/post-closure/sync" method="post">
+              <button className="primary" type="submit">Refresh Closed Matters</button>
+            </form>
+          </div>
+          <div className="post-closure-summary">
+            <div><span>Total Reminders</span><strong>{postClosureData.summary.total}</strong></div>
+            <div><span>Needs Outreach</span><strong>{postClosureNeedsOutreach}</strong></div>
+            <div><span>Overdue</span><strong>{postClosureData.summary.overdue}</strong></div>
+            <div><span>Issue Found</span><strong>{postClosureData.summary.issue_found}</strong></div>
+            <div><span>Completed</span><strong>{postClosureData.summary.completed}</strong></div>
+          </div>
+          <p className="muted small">
+            {postClosureData.lastSync ? `Last refreshed: ${formatLocal(postClosureData.lastSync)}` : "No closed-matter refresh has run yet."}
+          </p>
+        </section>
+
+        <section className="panel post-closure-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Follow-Up Queue</h2>
+              <p className="muted small">Call the client, record what happened, and mark whether any issue needs attention.</p>
+            </div>
+            <span className="badge Pending">{postClosureData.rows.length} showing</span>
+          </div>
+
+          <div className="post-closure-filters">
+            <div>
+              <span className="label">Status</span>
+              <div className="workspace-filter-tabs">
+                {POST_CLOSURE_STATUS_FILTERS.map((filter) => (
+                  <a
+                    className={closureStatusFilter === filter.id ? "workspace-filter active" : "workspace-filter"}
+                    href={filterLink(closureBaseFilters, { closure_status: filter.id })}
+                    key={filter.id}
+                  >
+                    {filter.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="label">Touchpoint</span>
+              <div className="workspace-focus-tabs">
+                <a
+                  className={!closureStageFilter ? "workspace-focus active" : "workspace-focus"}
+                  href={filterLink(closureBaseFilters, { closure_stage: "" })}
+                >
+                  All
+                </a>
+                {POST_CLOSURE_TOUCHPOINTS.map((touchpoint) => (
+                  <a
+                    className={closureStageFilter === String(touchpoint.months) ? "workspace-focus active" : "workspace-focus"}
+                    href={filterLink(closureBaseFilters, { closure_stage: String(touchpoint.months) })}
+                    key={touchpoint.months}
+                  >
+                    {touchpoint.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {postClosureData.rows.length ? (
+            <div className="post-closure-list">
+              {postClosureData.rows.map((row) => {
+                const clientName = `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim() || "Unnamed Client";
+                const openByDefault = ["Due Now", "Overdue", "Issue Found", "In Progress"].includes(row.display_status);
+                return (
+                  <details className={`post-closure-card status-row-${statusClass(row.display_status)}`} key={`${row.matter_id}-${row.touchpoint_months}`} open={openByDefault}>
+                    <summary className="post-closure-card-head">
+                      <div>
+                        <span className="label">{row.touchpoint_label} Follow-Up</span>
+                        <h3>{clientName}</h3>
+                        <p>{row.matter_number}</p>
+                      </div>
+                      <div>
+                        <span className="label">Attorney</span>
+                        <strong>{row.responsible_attorney_name || "Unassigned"}</strong>
+                      </div>
+                      <div>
+                        <span className="label">Closed</span>
+                        <strong>{formatLocal(row.matter_closed_at)}</strong>
+                      </div>
+                      <div>
+                        <span className="label">Due</span>
+                        <strong>{formatLocal(row.due_at)}</strong>
+                      </div>
+                      <div className="post-closure-card-actions">
+                        {badge(row.display_status)}
+                        <a className="button compact" href={clioMatterPath(row.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
+                      </div>
+                    </summary>
+                    <div className="post-closure-card-body">
+                      <div className="post-closure-purpose">
+                        <strong>Call Goal</strong>
+                        <p>Confirm client satisfaction, ask whether any issue remains, and note billing, document, or supervision concerns that need follow-up.</p>
+                        {row.followup_note ? <p><b>Last note:</b> {row.followup_note}</p> : null}
+                      </div>
+                      <form className="post-closure-form" action="/api/post-closure/followups" method="post">
+                        <input type="hidden" name="matter_id" value={row.matter_id} />
+                        <input type="hidden" name="touchpoint_months" value={row.touchpoint_months} />
+                        <input type="hidden" name="closure_status" value={closureStatusFilter} />
+                        <input type="hidden" name="closure_stage" value={closureStageFilter} />
+                        <label>
+                          Status
+                          <select name="review_status" defaultValue={row.review_status || "In Progress"}>
+                            {POST_CLOSURE_REVIEW_STATUSES.map((status) => (
+                              <option key={status}>{status}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Contact Method
+                          <select name="contact_method" defaultValue={row.contact_method || "Phone"}>
+                            {POST_CLOSURE_CONTACT_METHODS.map((method) => (
+                              <option key={method}>{method}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Issue Type
+                          <select name="issue_type" defaultValue={row.issue_type || "None"}>
+                            {POST_CLOSURE_ISSUE_TYPES.map((issue) => (
+                              <option key={issue}>{issue}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Staff Member
+                          <input name="reviewed_by" defaultValue={row.reviewed_by} placeholder="Name" />
+                        </label>
+                        <label className="post-closure-note">
+                          Follow-Up Note
+                          <textarea
+                            name="followup_note"
+                            defaultValue={row.followup_note}
+                            placeholder="Example: Client was called, confirmed no unresolved concerns, and no further action is needed."
+                            rows={3}
+                          />
+                        </label>
+                        <button className="primary" type="submit">Save Follow-Up</button>
+                      </form>
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="workspace-empty">
+              <strong>No post-closure reminders match this view yet.</strong>
+              <p>Click Refresh Closed Matters to read closed matters from Clio and create the 1, 6, and 12-month internal follow-up queue.</p>
+            </div>
+          )}
+        </section>
       </section>
       ) : null}
 
