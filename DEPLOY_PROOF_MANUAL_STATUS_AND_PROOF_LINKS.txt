@@ -1,9 +1,17 @@
 CWCA update proof
 
 Version marker:
-cwca-post-closure-closed-matter-sync-fix-2026-06-17
+cwca-post-closure-all-touchpoints-fix-2026-06-17
 
 What changed:
+- Fixed Post-Closure visibility so the default view shows all 1-month, 6-month, and 12-month reminders instead of only currently due items.
+- Refresh now repairs older Post-Closure data by backfilling any missing 1-month, 6-month, or 12-month reminder rows for stored closed matters.
+- Touchpoint filters now show counts, so the dashboard makes it obvious whether 1 Month, 6 Months, and 12 Months are present.
+- Refresh now reports reminder checks, new reminders, and repaired missing reminder rows.
+- Added a responsible-attorney filter to the Post-Closure follow-up queue.
+- The Post-Closure summary counts now respect the selected attorney and touchpoint filters.
+- Added a Teams-ready copy-paste note for open post-closure follow-ups in the current filtered view.
+- The Teams note groups open follow-ups by attorney and includes client/matter, touchpoint, status, due date, and Clio matter link.
 - Fixed Post-Closure refresh so it searches Clio by close_date instead of relying only on status=closed.
 - Post-Closure refresh no longer stops after the first empty Clio response; it tries safe fallback reads before giving up.
 - Post-Closure accepts a matter as closed when Clio provides a close date, even if the returned status text is inconsistent.

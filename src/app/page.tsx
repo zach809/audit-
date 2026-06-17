@@ -15,6 +15,7 @@ import {
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
+import { CopyTextButton } from "./copy-text-button";
 import {
   actionFor,
   auditItemPriority,
@@ -27,6 +28,7 @@ import {
   workspaceStatus,
   REVIEW_STATUSES,
 } from "@/lib/audit-display";
+import type { PostClosureFollowUpRow } from "@/lib/post-closure";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +103,55 @@ function evidencePath(item: DashboardItem, directToClio = false): string {
 function clioMatterPath(matterId: string): string {
   const baseUrl = process.env.CLIO_BASE_URL || "https://app.clio.com";
   return `${baseUrl.replace(/\/$/, "")}/nc/#/matters/${encodeURIComponent(matterId)}`;
+}
+
+function postClosureClientName(row: PostClosureFollowUpRow): string {
+  return `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim() || "Unnamed Client";
+}
+
+function isOpenPostClosureStatus(status: string): boolean {
+  return ["Due Now", "Overdue", "In Progress", "Issue Found"].includes(status);
+}
+
+function postClosureTeamsNote(rows: PostClosureFollowUpRow[], attorneyFilter: string, stageFilter: string): string {
+  const openRows = rows
+    .filter((row) => isOpenPostClosureStatus(row.display_status))
+    .sort((a, b) => {
+      const attorneyCompare = (a.responsible_attorney_name || "Unassigned").localeCompare(b.responsible_attorney_name || "Unassigned");
+      if (attorneyCompare) return attorneyCompare;
+      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+    });
+  const stageLabel = POST_CLOSURE_TOUCHPOINTS.find((touchpoint) => String(touchpoint.months) === stageFilter)?.label;
+  const titleParts = [
+    attorneyFilter ? `Attorney: ${attorneyFilter}` : "All attorneys",
+    stageLabel ? `Touchpoint: ${stageLabel}` : "All touchpoints",
+  ];
+  const lines = [
+    "Hey team - these post-closure follow-ups still need outreach or review.",
+    titleParts.join(" | "),
+    "",
+  ];
+
+  if (!openRows.length) {
+    lines.push("No open post-closure follow-ups are showing in this filtered view.");
+    return lines.join("\n");
+  }
+
+  let currentAttorney = "";
+  for (const row of openRows) {
+    const attorney = row.responsible_attorney_name || "Unassigned";
+    if (attorney !== currentAttorney) {
+      currentAttorney = attorney;
+      lines.push(`${attorney}:`);
+    }
+    lines.push(
+      `- ${postClosureClientName(row)} (${row.matter_number}) - ${row.touchpoint_label} follow-up - ${row.display_status} - due ${formatLocal(row.due_at)} - ${clioMatterPath(row.matter_id)}`,
+    );
+  }
+
+  lines.push("");
+  lines.push("Please call or contact the client, update the follow-up result in CWCA, and note any issue that needs attorney or supervisor attention.");
+  return lines.join("\n");
 }
 
 function evidenceLabel(item: DashboardItem): string {
@@ -380,11 +431,11 @@ const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: stri
 ];
 
 const POST_CLOSURE_STATUS_FILTERS = [
+  { id: "all", label: "All" },
   { id: "due", label: "Needs Outreach" },
   { id: "upcoming", label: "Coming Soon" },
   { id: "issues", label: "Issue Found" },
   { id: "completed", label: "Completed" },
-  { id: "all", label: "All" },
 ];
 
 const WORKSPACE_STATUS_FILTERS = [
@@ -510,8 +561,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const activeTab = dashboardTab(searchParams.tab);
   const workspaceStatusFilter = searchParams.wstatus ?? "followup";
   const workspaceFocusFilter = searchParams.wfocus ?? "all";
-  const closureStatusFilter = searchParams.closure_status ?? "due";
+  const closureStatusFilter = searchParams.closure_status ?? "all";
   const closureStageFilter = searchParams.closure_stage ?? "";
+  const closureAttorneyFilter = searchParams.closure_attorney ?? "";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -527,7 +579,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   try {
     [data, postClosure] = await Promise.all([
       getDashboardData(filters),
-      getPostClosureData({ status: closureStatusFilter, stage: closureStageFilter }),
+      getPostClosureData({ status: closureStatusFilter, stage: closureStageFilter, attorney: closureAttorneyFilter }),
     ]);
   } catch (error) {
     data = null;
@@ -721,12 +773,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     tab: "post-closure",
     closure_status: closureStatusFilter,
     closure_stage: closureStageFilter,
+    closure_attorney: closureAttorneyFilter,
   };
   const postClosureNeedsOutreach =
     num(postClosureData.summary.due_now) +
     num(postClosureData.summary.overdue) +
     num(postClosureData.summary.in_progress) +
     num(postClosureData.summary.issue_found);
+  const teamsNote = postClosureTeamsNote(postClosureData.rows, closureAttorneyFilter, closureStageFilter);
+  const touchpointCounts = new Map(postClosureData.touchpoints.map((touchpoint) => [String(touchpoint.touchpoint_months), touchpoint]));
   const notice =
     searchParams.audit === "ran"
       ? searchParams.message || "Audit run completed."
@@ -1256,6 +1311,31 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
 
           <div className="post-closure-filters">
+            <form className="post-closure-attorney-filter" action="/" method="get">
+              <input type="hidden" name="tab" value="post-closure" />
+              <input type="hidden" name="closure_status" value={closureStatusFilter} />
+              <input type="hidden" name="closure_stage" value={closureStageFilter} />
+              <label>
+                <span className="label">Responsible Attorney</span>
+                <select name="closure_attorney" defaultValue={closureAttorneyFilter}>
+                  <option value="">All attorneys</option>
+                  {closureAttorneyFilter && !postClosureData.attorneys.some((attorney) => attorney.responsible_attorney_name === closureAttorneyFilter) ? (
+                    <option value={closureAttorneyFilter}>{closureAttorneyFilter}</option>
+                  ) : null}
+                  {postClosureData.attorneys.map((attorney) => (
+                    <option value={attorney.responsible_attorney_name} key={attorney.responsible_attorney_name}>
+                      {attorney.responsible_attorney_name} ({attorney.open_count} open)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="post-closure-filter-actions">
+                <button className="button compact" type="submit">Apply Attorney</button>
+                {closureAttorneyFilter ? (
+                  <a className="button compact" href={filterLink(closureBaseFilters, { closure_attorney: "" })}>Clear Attorney</a>
+                ) : null}
+              </div>
+            </form>
             <div>
               <span className="label">Status</span>
               <div className="workspace-filter-tabs">
@@ -1280,17 +1360,35 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   All
                 </a>
                 {POST_CLOSURE_TOUCHPOINTS.map((touchpoint) => (
-                  <a
-                    className={closureStageFilter === String(touchpoint.months) ? "workspace-focus active" : "workspace-focus"}
-                    href={filterLink(closureBaseFilters, { closure_stage: String(touchpoint.months) })}
-                    key={touchpoint.months}
-                  >
-                    {touchpoint.label}
-                  </a>
+                  (() => {
+                    const counts = touchpointCounts.get(String(touchpoint.months));
+                    return (
+                      <a
+                        className={closureStageFilter === String(touchpoint.months) ? "workspace-focus active" : "workspace-focus"}
+                        href={filterLink(closureBaseFilters, { closure_stage: String(touchpoint.months) })}
+                        key={touchpoint.months}
+                      >
+                        {touchpoint.label}
+                        {counts ? ` (${counts.reminder_count})` : ""}
+                      </a>
+                    );
+                  })()
                 ))}
               </div>
             </div>
           </div>
+
+          <section className="post-closure-team-note">
+            <div className="panel-heading">
+              <div>
+                <span className="label">Teams Note</span>
+                <h3>Copy-Paste Follow-Up Message</h3>
+                <p className="muted small">Uses the current attorney, status, and touchpoint filters.</p>
+              </div>
+              <CopyTextButton targetId="post-closure-teams-note" label="Copy Teams Note" />
+            </div>
+            <textarea id="post-closure-teams-note" readOnly rows={Math.min(18, Math.max(7, teamsNote.split("\n").length + 1))} defaultValue={teamsNote} />
+          </section>
 
           {postClosureData.rows.length ? (
             <div className="post-closure-list">
@@ -1333,6 +1431,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                         <input type="hidden" name="touchpoint_months" value={row.touchpoint_months} />
                         <input type="hidden" name="closure_status" value={closureStatusFilter} />
                         <input type="hidden" name="closure_stage" value={closureStageFilter} />
+                        <input type="hidden" name="closure_attorney" value={closureAttorneyFilter} />
                         <label>
                           Status
                           <select name="review_status" defaultValue={row.review_status || "In Progress"}>

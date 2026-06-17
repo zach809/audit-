@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     tab: "post-closure",
     closure_status: form.get("closure_status")?.toString() ?? "due",
     closure_stage: form.get("closure_stage")?.toString() ?? "",
+    closure_attorney: form.get("closure_attorney")?.toString() ?? "",
   };
 
   try {

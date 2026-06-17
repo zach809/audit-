@@ -20,10 +20,11 @@ export async function POST(request: NextRequest) {
   try {
     const result = await syncPostClosureFollowups();
     const skipped = result.skippedWithoutCloseDate ? ` ${result.skippedWithoutCloseDate} closed matter(s) were skipped because Clio did not return a close date.` : "";
-    const message = `Closed-matter follow-ups refreshed: ${result.syncedMatters} closed matters, ${result.remindersCreated} reminders.${skipped}`;
+    const repaired = result.remindersRepaired ? ` Repaired ${result.remindersRepaired} missing 1/6/12-month reminder row(s).` : "";
+    const message = `Closed-matter follow-ups refreshed: ${result.syncedMatters} closed matters, ${result.remindersChecked} reminder checks, ${result.remindersCreated} new reminders.${repaired}${skipped}`;
     return redirectBack(request, {
       tab: "post-closure",
-      closure_status: "due",
+      closure_status: "all",
       postClosure: "synced",
       message,
     });
