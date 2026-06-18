@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-post-closure-all-touchpoints-fix-2026-06-17";
+export const APP_VERSION = "cwca-post-closure-current-window-2026-06-18";

@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     closure_status: form.get("closure_status")?.toString() ?? "due",
     closure_stage: form.get("closure_stage")?.toString() ?? "",
     closure_attorney: form.get("closure_attorney")?.toString() ?? "",
+    closure_window: form.get("closure_window")?.toString() ?? "current",
   };
 
   try {

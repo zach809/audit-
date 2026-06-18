@@ -113,7 +113,7 @@ function isOpenPostClosureStatus(status: string): boolean {
   return ["Due Now", "Overdue", "In Progress", "Issue Found"].includes(status);
 }
 
-function postClosureTeamsNote(rows: PostClosureFollowUpRow[], attorneyFilter: string, stageFilter: string): string {
+function postClosureTeamsNote(rows: PostClosureFollowUpRow[], attorneyFilter: string, stageFilter: string, windowFilter: string): string {
   const openRows = rows
     .filter((row) => isOpenPostClosureStatus(row.display_status))
     .sort((a, b) => {
@@ -125,6 +125,7 @@ function postClosureTeamsNote(rows: PostClosureFollowUpRow[], attorneyFilter: st
   const titleParts = [
     attorneyFilter ? `Attorney: ${attorneyFilter}` : "All attorneys",
     stageLabel ? `Touchpoint: ${stageLabel}` : "All touchpoints",
+    windowFilter === "backlog" ? "Window: Older backlog" : windowFilter === "all" ? "Window: All history" : "Window: Current due window",
   ];
   const lines = [
     "Hey team - these post-closure follow-ups still need outreach or review.",
@@ -438,6 +439,12 @@ const POST_CLOSURE_STATUS_FILTERS = [
   { id: "completed", label: "Completed" },
 ];
 
+const POST_CLOSURE_WINDOW_FILTERS = [
+  { id: "current", label: "Current Window" },
+  { id: "backlog", label: "Older Backlog" },
+  { id: "all", label: "All History" },
+];
+
 const WORKSPACE_STATUS_FILTERS = [
   { id: "followup", label: "Needs Follow-Up" },
   { id: "missing", label: "Needs Action" },
@@ -564,6 +571,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const closureStatusFilter = searchParams.closure_status ?? "all";
   const closureStageFilter = searchParams.closure_stage ?? "";
   const closureAttorneyFilter = searchParams.closure_attorney ?? "";
+  const closureWindowFilter = searchParams.closure_window ?? "current";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -579,7 +587,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   try {
     [data, postClosure] = await Promise.all([
       getDashboardData(filters),
-      getPostClosureData({ status: closureStatusFilter, stage: closureStageFilter, attorney: closureAttorneyFilter }),
+      getPostClosureData({
+        status: closureStatusFilter,
+        stage: closureStageFilter,
+        attorney: closureAttorneyFilter,
+        window: closureWindowFilter,
+      }),
     ]);
   } catch (error) {
     data = null;
@@ -774,13 +787,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     closure_status: closureStatusFilter,
     closure_stage: closureStageFilter,
     closure_attorney: closureAttorneyFilter,
+    closure_window: closureWindowFilter,
   };
   const postClosureNeedsOutreach =
     num(postClosureData.summary.due_now) +
     num(postClosureData.summary.overdue) +
     num(postClosureData.summary.in_progress) +
     num(postClosureData.summary.issue_found);
-  const teamsNote = postClosureTeamsNote(postClosureData.rows, closureAttorneyFilter, closureStageFilter);
+  const teamsNote = postClosureTeamsNote(postClosureData.rows, closureAttorneyFilter, closureStageFilter, closureWindowFilter);
   const touchpointCounts = new Map(postClosureData.touchpoints.map((touchpoint) => [String(touchpoint.touchpoint_months), touchpoint]));
   const notice =
     searchParams.audit === "ran"
@@ -1315,6 +1329,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <input type="hidden" name="tab" value="post-closure" />
               <input type="hidden" name="closure_status" value={closureStatusFilter} />
               <input type="hidden" name="closure_stage" value={closureStageFilter} />
+              <input type="hidden" name="closure_window" value={closureWindowFilter} />
               <label>
                 <span className="label">Responsible Attorney</span>
                 <select name="closure_attorney" defaultValue={closureAttorneyFilter}>
@@ -1336,6 +1351,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 ) : null}
               </div>
             </form>
+            <div>
+              <span className="label">Date Window</span>
+              <div className="workspace-filter-tabs">
+                {POST_CLOSURE_WINDOW_FILTERS.map((filter) => (
+                  <a
+                    className={closureWindowFilter === filter.id ? "workspace-filter active" : "workspace-filter"}
+                    href={filterLink(closureBaseFilters, { closure_window: filter.id })}
+                    key={filter.id}
+                  >
+                    {filter.label}
+                  </a>
+                ))}
+              </div>
+              <p className="muted small">Current Window shows reminders due in the last 45 days or next 45 days.</p>
+            </div>
             <div>
               <span className="label">Status</span>
               <div className="workspace-filter-tabs">
@@ -1432,6 +1462,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                         <input type="hidden" name="closure_status" value={closureStatusFilter} />
                         <input type="hidden" name="closure_stage" value={closureStageFilter} />
                         <input type="hidden" name="closure_attorney" value={closureAttorneyFilter} />
+                        <input type="hidden" name="closure_window" value={closureWindowFilter} />
                         <label>
                           Status
                           <select name="review_status" defaultValue={row.review_status || "In Progress"}>

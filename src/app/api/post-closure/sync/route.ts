@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
     return redirectBack(request, {
       tab: "post-closure",
       closure_status: "all",
+      closure_window: "current",
       postClosure: "synced",
       message,
     });

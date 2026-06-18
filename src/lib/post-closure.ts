@@ -63,6 +63,7 @@ export type PostClosureFilters = {
   status?: string;
   stage?: string;
   attorney?: string;
+  window?: string;
 };
 
 export type PostClosureAttorneyOption = {
@@ -121,6 +122,7 @@ function closeDateValue(matter: ClosedMatter): string | null {
 
 function hasClosedMatterSignal(matter: ClosedMatter): boolean {
   const status = String(matter.status ?? "").trim().toLowerCase();
+  if (["open", "pending"].includes(status)) return false;
   return status === "closed" || Boolean(closeDateValue(matter));
 }
 
@@ -307,6 +309,13 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
   const attorney = cleanText(filters.attorney, 160);
   const attorneyName = sql`coalesce(nullif(responsible_attorney_name, ''), 'Unassigned')`;
   const attorneyCondition = attorney ? sql`${attorneyName} = ${attorney}` : sql`true`;
+  const window = filters.window || "current";
+  const windowCondition =
+    window === "all"
+      ? sql`true`
+      : window === "backlog"
+        ? sql`due_at < now() - interval '45 days'`
+        : sql`due_at >= now() - interval '45 days' and due_at <= now() + interval '45 days'`;
   const status = filters.status || "due";
   const statusCondition =
     status === "all"
@@ -329,6 +338,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
     ) followups
     where ${stageCondition}
       and ${attorneyCondition}
+      and ${windowCondition}
       and ${statusCondition}
     order by
       case display_status
@@ -363,6 +373,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
     ) followups
     where ${stageCondition}
       and ${attorneyCondition}
+      and ${windowCondition}
   `;
 
   const attorneys = await sql<PostClosureAttorneyOption[]>`
@@ -377,6 +388,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
       from post_closure_followup
     ) followups
     where ${stageCondition}
+      and ${windowCondition}
     group by 1
     order by open_count desc, responsible_attorney_name
   `;
@@ -394,6 +406,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
       from post_closure_followup
     ) followups
     where ${attorneyCondition}
+      and ${windowCondition}
     group by touchpoint_months, touchpoint_label
     order by touchpoint_months
   `;

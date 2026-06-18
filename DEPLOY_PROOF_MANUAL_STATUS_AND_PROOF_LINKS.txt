@@ -1,9 +1,13 @@
 CWCA update proof
 
 Version marker:
-cwca-post-closure-all-touchpoints-fix-2026-06-17
+cwca-post-closure-current-window-2026-06-18
 
 What changed:
+- Added a Post-Closure Date Window filter: Current Window, Older Backlog, and All History.
+- Current Window is now the default and shows reminders due in the last 45 days or next 45 days.
+- Older one-year-old missed reminders stay available under Older Backlog instead of dominating the main queue.
+- Post-Closure closed-matter detection now rejects Clio matters whose status says Open or Pending.
 - Fixed Post-Closure visibility so the default view shows all 1-month, 6-month, and 12-month reminders instead of only currently due items.
 - Refresh now repairs older Post-Closure data by backfilling any missing 1-month, 6-month, or 12-month reminder rows for stored closed matters.
 - Touchpoint filters now show counts, so the dashboard makes it obvious whether 1 Month, 6 Months, and 12 Months are present.
