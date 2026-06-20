@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-boomer-friendly-postclosure-reports-2026-06-19";
+export const APP_VERSION = "cwca-compact-matter-dropdowns-2026-06-20";

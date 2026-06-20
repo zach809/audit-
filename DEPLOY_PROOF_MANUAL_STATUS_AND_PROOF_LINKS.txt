@@ -1,9 +1,14 @@
 CWCA update proof
 
 Version marker:
-cwca-boomer-friendly-postclosure-reports-2026-06-19
+cwca-compact-matter-dropdowns-2026-06-20
 
 What changed:
+- Made Matter cards more compact by turning Next Best Action into an expandable dropdown row.
+- Hid the full Workflow Checks grid behind a Workflow Checks dropdown.
+- Hid Problems and Evidence behind separate dropdown rows on each matter card.
+- Kept the compact summary visible so staff can see what needs attention without the large boxes taking over the screen.
+- No Clio audit logic or Clio write behavior changed.
 - Simplified the Post-Closure tab for easier use by non-technical staff.
 - Replaced the Post-Closure chip/button filter rows with one clear dropdown filter panel.
 - Post-Closure reminder cards are collapsed by default so the page does not feel flooded with forms.

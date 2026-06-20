@@ -1809,15 +1809,22 @@ Items Still Needing Action
               </div>
 
               {!refreshNeeded && nextAction ? (
-                <section className={`next-action-card status-row-${statusClass(currentItemStatus(nextAction))}`}>
-                  <span className="label">Next Best Action</span>
-                  <strong>{actionFor(nextAction.stepCode, nextAction.status, nextAction.reasonCode)}</strong>
-                  <p><b>Why?</b> {problemText(nextAction)}</p>
-                  <div className="next-action-links">
-                    <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
-                    {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof</a> : null}
+                <details className={`matter-dropdown next-action-card status-row-${statusClass(currentItemStatus(nextAction))}`}>
+                  <summary>
+                    <span>
+                      <span className="label">Next Best Action</span>
+                      <strong>{actionFor(nextAction.stepCode, nextAction.status, nextAction.reasonCode)}</strong>
+                    </span>
+                    <span className="dropdown-pill" aria-hidden="true" />
+                  </summary>
+                  <div className="matter-dropdown-body next-action-content">
+                    <p><b>Why?</b> {problemText(nextAction)}</p>
+                    <div className="next-action-links">
+                      <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
+                      {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof</a> : null}
+                    </div>
                   </div>
-                </section>
+                </details>
               ) : null}
 
               {refreshNeeded ? (
@@ -1826,25 +1833,49 @@ Items Still Needing Action
                   <span>The saved result is from an older incomplete API run, so it is not proof of undone work yet.</span>
                 </div>
               ) : (
-                <div className="step-grid">
-                  {WORKFLOW_COLUMNS.map(([code, label]) => (
-                    <div className="step-block" key={code}>
-                      <span className="step-label">{label}</span>
-                      {stepCell(items, code)}
-                    </div>
-                  ))}
-                </div>
+                <details className="matter-dropdown workflow-dropdown">
+                  <summary>
+                    <span>
+                      <span className="label">Workflow Checks</span>
+                      <strong>{attentionItems.length ? `${attentionItems.length} items need follow-up` : "View all workflow check results"}</strong>
+                    </span>
+                    <span className="dropdown-pill" aria-hidden="true" />
+                  </summary>
+                  <div className="step-grid">
+                    {WORKFLOW_COLUMNS.map(([code, label]) => (
+                      <div className="step-block" key={code}>
+                        <span className="step-label">{label}</span>
+                        {stepCell(items, code)}
+                      </div>
+                    ))}
+                  </div>
+                </details>
               )}
 
-              <div className={`matter-foot ${attentionItems.length ? "" : "evidence-only"}`}>
+              <div className={`matter-compact-sections ${attentionItems.length ? "" : "evidence-only"}`}>
                 {attentionItems.length ? (
-                  <div>
-                    <span className="label">Problems</span>
-                    {problemList(String(m.matter_id), items)}
-                  </div>
+                  <details className="matter-dropdown problems-dropdown">
+                    <summary>
+                      <span>
+                        <span className="label">Problems</span>
+                        <strong>{attentionItems.length} item{attentionItems.length === 1 ? "" : "s"} need review or follow-up</strong>
+                      </span>
+                      <span className="dropdown-pill" aria-hidden="true" />
+                    </summary>
+                    <div className="matter-dropdown-body">
+                      {problemList(String(m.matter_id), items)}
+                    </div>
+                  </details>
                 ) : null}
-                <div>
-                  <span className="label">Evidence</span>
+                <details className="matter-dropdown evidence-dropdown">
+                  <summary>
+                    <span>
+                      <span className="label">Evidence</span>
+                      <strong>{evidenceItems.length ? `${evidenceItems.length} proof link${evidenceItems.length === 1 ? "" : "s"} saved` : "No proof links saved yet"}</strong>
+                    </span>
+                    <span className="dropdown-pill" aria-hidden="true" />
+                  </summary>
+                  <div className="matter-dropdown-body">
                   <p className="evidence-links">
                     <span>Matter: {m.matter_number}</span>
                     <a href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open Matter in Clio</a>
@@ -1859,7 +1890,8 @@ Items Still Needing Action
                   ) : (
                     <p>None yet</p>
                   )}
-                </div>
+                  </div>
+                </details>
               </div>
             </article>
           );
