@@ -623,6 +623,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const exportParams = new URLSearchParams(filters).toString();
   const actionExportParams = new URLSearchParams(filters);
   actionExportParams.set("type", "actions");
+  const logicIssueExportParams = new URLSearchParams(filters);
+  logicIssueExportParams.set("type", "logic-issues");
   const lastRunText = dashboardData.lastRun
     ? `${dashboardData.lastRun.status} at ${formatLocal(dashboardData.lastRun.finished_at ?? dashboardData.lastRun.started_at)}`
     : "No audit has run yet";
@@ -1561,6 +1563,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <p>Full dashboard export for deeper review or recordkeeping.</p>
             </div>
             <button type="submit">Download Audit</button>
+          </form>
+          <form className="report-card" action={`/api/export.csv?${logicIssueExportParams.toString()}`} method="post">
+            <div>
+              <span className="label">Internal Diagnostics</span>
+              <strong>Audit Logic Issues</strong>
+              <p>Rows where CWCA hit an API error, unclear evidence, or a rule that may need tuning.</p>
+            </div>
+            <button type="submit">Download Issues</button>
           </form>
         </div>
         <div className="report-preview">

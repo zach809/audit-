@@ -42,6 +42,29 @@ type ActionCsvRow = {
   review_history: unknown;
 };
 
+type LogicIssueRow = {
+  matter_id: string;
+  matter_number: string;
+  client_first_name: string | null;
+  client_last_name: string | null;
+  responsible_attorney_name: string | null;
+  matter_status: string | null;
+  step_code: string;
+  item_status: string;
+  operational_state: string | null;
+  deadline_at: string | Date | null;
+  evidence_at: string | Date | null;
+  evidence_source: string | null;
+  evidence_ref_id: string | null;
+  reason_code: string | null;
+  audit_version: string | null;
+  last_evaluated_at: string | Date | null;
+  review_decision: string | null;
+  review_note: string | null;
+  reviewed_by: string | null;
+  review_updated_at: string | Date | null;
+};
+
 export type WorkspaceAuditItem = {
   matter_id: string;
   matter_number: string;
@@ -106,6 +129,51 @@ function proofPath(origin: string, source?: string | null, refId?: string | null
 function clioMatterLink(matterId: string): string {
   const baseUrl = process.env.CLIO_BASE_URL || "https://app.clio.com";
   return `${baseUrl.replace(/\/$/, "")}/nc/#/matters/${encodeURIComponent(matterId)}`;
+}
+
+function logicIssueType(row: LogicIssueRow): string {
+  const reason = String(row.reason_code ?? "");
+  if (reason.includes("_ERROR") || reason.includes("ERROR:")) return "API or connection error";
+  if (reason.startsWith("NOTES_400:")) return "Clio notes access issue";
+  if (reason === "EVIDENCE_NOT_CONFIRMED") return "Evidence matching uncertainty";
+  if (reason === "DIRECTION_UNCLEAR") return "Communication direction unclear";
+  if (row.item_status === "Unknown") return "Needs rule review";
+  return "Audit logic review";
+}
+
+function logicIssueExplanation(row: LogicIssueRow): string {
+  const area = workflowLabel(row.step_code);
+  const reason = String(row.reason_code ?? "");
+  if (logicIssueType(row) === "API or connection error") {
+    return `${area} could not be checked cleanly because Clio returned an API or connection error.`;
+  }
+  if (reason.startsWith("NOTES_400:")) {
+    return `${area} depended on note-related evidence, but Clio did not allow that read in this audit result.`;
+  }
+  if (reason === "EVIDENCE_NOT_CONFIRMED") {
+    return `${area} is not confidently matched from read-only Clio evidence. This may need a keyword/template rule adjustment.`;
+  }
+  if (reason === "DIRECTION_UNCLEAR") {
+    return `${area} found communication activity, but CWCA could not clearly tell whether it was firm-to-client or client-to-firm.`;
+  }
+  return `${area} is marked Unknown or has a reason code that should be reviewed before treating it as a team issue.`;
+}
+
+function logicIssueNextStep(row: LogicIssueRow): string {
+  const reason = String(row.reason_code ?? "");
+  if (reason.includes("_ERROR") || reason.includes("ERROR:")) {
+    return "Recheck the matter. If it repeats, review Clio permissions, rate limits, and the endpoint named in the reason code.";
+  }
+  if (reason.startsWith("NOTES_400:")) {
+    return "Avoid depending on note text for this rule, or confirm the Clio scope/endpoint allows the needed read-only metadata.";
+  }
+  if (reason === "EVIDENCE_NOT_CONFIRMED") {
+    return "Open the matter in Clio, compare the real subject/title/template wording, and add the valid pattern to CWCA.";
+  }
+  if (reason === "DIRECTION_UNCLEAR") {
+    return "Review sender/receiver metadata and adjust the direction logic or accepted communication types.";
+  }
+  return "Review the Clio proof and decide whether this is a true workflow issue or a rule that needs tuning.";
 }
 
 export async function getDashboardData(filters: DashboardFilters = {}) {
@@ -620,6 +688,116 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
       whyFlagged(row.step_code, status, row.reason_code),
     ];
   });
+
+  return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+async function getLogicIssueRows(filters: DashboardFilters = {}): Promise<LogicIssueRow[]> {
+  await initDb();
+  const sql = db();
+  const overallCondition =
+    filters.overall === "Unchecked"
+      ? sql`false`
+      : filters.overall
+        ? sql`m.overall_status = ${filters.overall}`
+        : sql`true`;
+
+  return sql<LogicIssueRow[]>`
+    select
+      m.matter_id,
+      m.matter_number,
+      m.client_first_name,
+      m.client_last_name,
+      m.responsible_attorney_name,
+      m.matter_status,
+      i.step_code,
+      i.status as item_status,
+      i.operational_state,
+      i.deadline_at,
+      i.evidence_at,
+      i.evidence_source,
+      i.evidence_ref_id,
+      i.reason_code,
+      i.audit_version,
+      i.last_evaluated_at,
+      r.review_decision,
+      r.review_note,
+      r.reviewed_by,
+      r.updated_at as review_updated_at
+    from audit_matter m
+    join audit_item i on i.matter_id = m.matter_id
+    left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
+    where lower(coalesce(m.matter_status, '')) <> 'closed'
+      and ${filters.attorney ? sql`m.responsible_attorney_id = ${filters.attorney}` : sql`true`}
+      and ${overallCondition}
+      and ${filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`}
+      and ${filters.to ? sql`m.matter_created_at < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`}
+      and (
+        i.status = 'Unknown'
+        or coalesce(i.reason_code, '') like '%_ERROR%'
+        or coalesce(i.reason_code, '') like '%ERROR:%'
+        or coalesce(i.reason_code, '') like 'NOTES_400:%'
+        or coalesce(i.reason_code, '') in ('EVIDENCE_NOT_CONFIRMED', 'DIRECTION_UNCLEAR')
+      )
+    order by
+      case
+        when coalesce(i.reason_code, '') like '%_ERROR%' or coalesce(i.reason_code, '') like '%ERROR:%' then 1
+        when coalesce(i.reason_code, '') like 'NOTES_400:%' then 2
+        when i.reason_code = 'EVIDENCE_NOT_CONFIRMED' then 3
+        when i.reason_code = 'DIRECTION_UNCLEAR' then 4
+        else 5
+      end,
+      i.last_evaluated_at desc nulls last,
+      m.responsible_attorney_name,
+      m.client_last_name,
+      m.client_first_name
+    limit 1000
+  `;
+}
+
+export async function auditLogicIssuesCsv(filters: DashboardFilters = {}, origin = ""): Promise<string> {
+  const rows = await getLogicIssueRows(filters);
+  const headers = [
+    "Issue Type",
+    "Client",
+    "Matter",
+    "Attorney",
+    "Workflow Area",
+    "Audit Status",
+    "Reason Code",
+    "What Happened",
+    "Suggested Debugging Step",
+    "Open Matter In Clio",
+    "Proof Link",
+    "Evidence Found",
+    "Last Checked",
+    "Audit Version",
+    "Human Review Status",
+    "Human Review Note",
+    "Reviewed By",
+    "Review Updated",
+  ];
+
+  const csvRows = rows.map((row) => [
+    logicIssueType(row),
+    `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim(),
+    row.matter_number,
+    row.responsible_attorney_name || "Unassigned",
+    workflowLabel(row.step_code),
+    humanStatus(row.item_status),
+    row.reason_code || "",
+    logicIssueExplanation(row),
+    logicIssueNextStep(row),
+    clioMatterLink(String(row.matter_id)),
+    proofPath(origin, row.evidence_source, row.evidence_ref_id),
+    row.evidence_source && row.evidence_ref_id ? `${row.evidence_source} #${row.evidence_ref_id}` : "",
+    formatCsvDate(row.last_evaluated_at),
+    row.audit_version || "",
+    row.review_decision || "Not reviewed",
+    row.review_note || "",
+    row.reviewed_by || "",
+    formatCsvDate(row.review_updated_at),
+  ]);
 
   return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
 }

@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-post-closure-current-window-2026-06-18";
+export const APP_VERSION = "cwca-audit-logic-issues-report-2026-06-19";

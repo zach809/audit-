@@ -1,9 +1,13 @@
 CWCA update proof
 
 Version marker:
-cwca-post-closure-current-window-2026-06-18
+cwca-audit-logic-issues-report-2026-06-19
 
 What changed:
+- Added an Internal Diagnostics export in Reports called Audit Logic Issues.
+- The diagnostics report lists API errors, unclear evidence matches, direction-unclear communication rows, Clio notes access issues, and other Unknown audit rows.
+- Each diagnostics row includes issue type, reason code, what happened, suggested debugging step, Clio matter link, proof link, last checked date, audit version, and any human review note.
+- The diagnostics report is separated from the case-manager report so logic bugs do not get mixed into staff coaching.
 - Added a Post-Closure Date Window filter: Current Window, Older Backlog, and All History.
 - Current Window is now the default and shows reminders due in the last 45 days or next 45 days.
 - Older one-year-old missed reminders stay available under Older Backlog instead of dominating the main queue.

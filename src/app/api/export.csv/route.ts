@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { actionItemsCsv, caseManagerTodoText, dashboardCsv } from "@/lib/dashboard-data";
+import { actionItemsCsv, auditLogicIssuesCsv, caseManagerTodoText, dashboardCsv } from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
@@ -25,16 +25,21 @@ export async function POST(request: NextRequest) {
   const exportType = url.searchParams.get("type") ?? "";
   const isActionList = exportType === "actions";
   const isCaseManagerText = exportType === "case-manager-text";
+  const isLogicIssues = exportType === "logic-issues";
   const body = isCaseManagerText
     ? await caseManagerTodoText(filters, url.origin)
-    : isActionList
-      ? await actionItemsCsv(filters, url.origin)
-      : await dashboardCsv(filters);
+    : isLogicIssues
+      ? await auditLogicIssuesCsv(filters, url.origin)
+      : isActionList
+        ? await actionItemsCsv(filters, url.origin)
+        : await dashboardCsv(filters);
   const filename = isCaseManagerText
     ? "cwca-end-of-week-case-manager-audit-report.txt"
-    : isActionList
-      ? "cwca-case-manager-action-report.csv"
-      : "cwca-audit.csv";
+    : isLogicIssues
+      ? "cwca-audit-logic-issues.csv"
+      : isActionList
+        ? "cwca-case-manager-action-report.csv"
+        : "cwca-audit.csv";
   return new NextResponse(body, {
     headers: {
       "content-type": `${isCaseManagerText ? "text/plain" : "text/csv"}; charset=utf-8`,
