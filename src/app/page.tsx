@@ -784,13 +784,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       const followUp = rows.filter((item) => isFollowUpStatus(item.row.status)).length;
       return { code, label, followUp, checked: rows.length, clear: Math.max(0, rows.length - followUp) };
     });
-  const closureBaseFilters = {
-    tab: "post-closure",
-    closure_status: closureStatusFilter,
-    closure_stage: closureStageFilter,
-    closure_attorney: closureAttorneyFilter,
-    closure_window: closureWindowFilter,
-  };
   const postClosureNeedsOutreach =
     num(postClosureData.summary.due_now) +
     num(postClosureData.summary.overdue) +
@@ -1326,109 +1319,78 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <span className="badge Pending">{postClosureData.rows.length} showing</span>
           </div>
 
-          <div className="post-closure-filters">
-            <form className="post-closure-attorney-filter" action="/" method="get">
-              <input type="hidden" name="tab" value="post-closure" />
-              <input type="hidden" name="closure_status" value={closureStatusFilter} />
-              <input type="hidden" name="closure_stage" value={closureStageFilter} />
-              <input type="hidden" name="closure_window" value={closureWindowFilter} />
-              <label>
-                <span className="label">Responsible Attorney</span>
-                <select name="closure_attorney" defaultValue={closureAttorneyFilter}>
-                  <option value="">All attorneys</option>
-                  {closureAttorneyFilter && !postClosureData.attorneys.some((attorney) => attorney.responsible_attorney_name === closureAttorneyFilter) ? (
-                    <option value={closureAttorneyFilter}>{closureAttorneyFilter}</option>
-                  ) : null}
-                  {postClosureData.attorneys.map((attorney) => (
-                    <option value={attorney.responsible_attorney_name} key={attorney.responsible_attorney_name}>
-                      {attorney.responsible_attorney_name} ({attorney.open_count} open)
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="post-closure-filter-actions">
-                <button className="button compact" type="submit">Apply Attorney</button>
-                {closureAttorneyFilter ? (
-                  <a className="button compact" href={filterLink(closureBaseFilters, { closure_attorney: "" })}>Clear Attorney</a>
-                ) : null}
-              </div>
-            </form>
-            <div>
-              <span className="label">Date Window</span>
-              <div className="workspace-filter-tabs">
+          <form className="post-closure-simple-controls" action="/" method="get">
+            <input type="hidden" name="tab" value="post-closure" />
+            <label>
+              <span>Show</span>
+              <select name="closure_window" defaultValue={closureWindowFilter}>
                 {POST_CLOSURE_WINDOW_FILTERS.map((filter) => (
-                  <a
-                    className={closureWindowFilter === filter.id ? "workspace-filter active" : "workspace-filter"}
-                    href={filterLink(closureBaseFilters, { closure_window: filter.id })}
-                    key={filter.id}
-                  >
-                    {filter.label}
-                  </a>
+                  <option value={filter.id} key={filter.id}>{filter.label}</option>
                 ))}
-              </div>
-              <p className="muted small">Current Window shows reminders due in the last 45 days or next 45 days.</p>
-            </div>
-            <div>
-              <span className="label">Status</span>
-              <div className="workspace-filter-tabs">
+              </select>
+            </label>
+            <label>
+              <span>Status</span>
+              <select name="closure_status" defaultValue={closureStatusFilter}>
                 {POST_CLOSURE_STATUS_FILTERS.map((filter) => (
-                  <a
-                    className={closureStatusFilter === filter.id ? "workspace-filter active" : "workspace-filter"}
-                    href={filterLink(closureBaseFilters, { closure_status: filter.id })}
-                    key={filter.id}
-                  >
-                    {filter.label}
-                  </a>
+                  <option value={filter.id} key={filter.id}>{filter.label}</option>
                 ))}
-              </div>
-            </div>
-            <div>
-              <span className="label">Touchpoint</span>
-              <div className="workspace-focus-tabs">
-                <a
-                  className={!closureStageFilter ? "workspace-focus active" : "workspace-focus"}
-                  href={filterLink(closureBaseFilters, { closure_stage: "" })}
-                >
-                  All
-                </a>
-                {POST_CLOSURE_TOUCHPOINTS.map((touchpoint) => (
-                  (() => {
-                    const counts = touchpointCounts.get(String(touchpoint.months));
-                    return (
-                      <a
-                        className={closureStageFilter === String(touchpoint.months) ? "workspace-focus active" : "workspace-focus"}
-                        href={filterLink(closureBaseFilters, { closure_stage: String(touchpoint.months) })}
-                        key={touchpoint.months}
-                      >
-                        {touchpoint.label}
-                        {counts ? ` (${counts.reminder_count})` : ""}
-                      </a>
-                    );
-                  })()
+              </select>
+            </label>
+            <label>
+              <span>Touchpoint</span>
+              <select name="closure_stage" defaultValue={closureStageFilter}>
+                <option value="">All touchpoints</option>
+                {POST_CLOSURE_TOUCHPOINTS.map((touchpoint) => {
+                  const counts = touchpointCounts.get(String(touchpoint.months));
+                  return (
+                    <option value={String(touchpoint.months)} key={touchpoint.months}>
+                      {touchpoint.label}{counts ? ` (${counts.reminder_count})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <label>
+              <span>Attorney</span>
+              <select name="closure_attorney" defaultValue={closureAttorneyFilter}>
+                <option value="">All attorneys</option>
+                {closureAttorneyFilter && !postClosureData.attorneys.some((attorney) => attorney.responsible_attorney_name === closureAttorneyFilter) ? (
+                  <option value={closureAttorneyFilter}>{closureAttorneyFilter}</option>
+                ) : null}
+                {postClosureData.attorneys.map((attorney) => (
+                  <option value={attorney.responsible_attorney_name} key={attorney.responsible_attorney_name}>
+                    {attorney.responsible_attorney_name} ({attorney.open_count} open)
+                  </option>
                 ))}
-              </div>
-            </div>
-          </div>
+              </select>
+            </label>
+            <button className="primary" type="submit">Show Results</button>
+            <a className="button" href="/?tab=post-closure">Reset</a>
+            <p>Current Window shows reminders due recently or coming up soon. Use Older Backlog only when you want old clean-up items.</p>
+          </form>
 
-          <section className="post-closure-team-note">
-            <div className="panel-heading">
+          <details className="post-closure-team-note">
+            <summary>
               <div>
-                <span className="label">Teams Note</span>
-                <h3>Copy-Paste Follow-Up Message</h3>
-                <p className="muted small">Uses the current attorney, status, and touchpoint filters.</p>
+                <span className="label">Team Message</span>
+                <h3>Copy a follow-up note for Teams</h3>
+                <p className="muted small">Open only when you need to send the queue to the team.</p>
               </div>
+              <span className="summary-action">Open Note</span>
+            </summary>
+            <div className="post-closure-note-toolbar">
               <CopyTextButton targetId="post-closure-teams-note" label="Copy Teams Note" />
             </div>
-            <textarea id="post-closure-teams-note" readOnly rows={Math.min(18, Math.max(7, teamsNote.split("\n").length + 1))} defaultValue={teamsNote} />
-          </section>
+            <textarea id="post-closure-teams-note" readOnly rows={Math.min(14, Math.max(6, teamsNote.split("\n").length + 1))} defaultValue={teamsNote} />
+          </details>
 
           {postClosureData.rows.length ? (
             <div className="post-closure-list">
               {postClosureData.rows.map((row) => {
                 const clientName = `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim() || "Unnamed Client";
-                const openByDefault = ["Due Now", "Overdue", "Issue Found", "In Progress"].includes(row.display_status);
                 return (
-                  <details className={`post-closure-card status-row-${statusClass(row.display_status)}`} key={`${row.matter_id}-${row.touchpoint_months}`} open={openByDefault}>
+                  <details className={`post-closure-card status-row-${statusClass(row.display_status)}`} key={`${row.matter_id}-${row.touchpoint_months}`}>
                     <summary className="post-closure-card-head">
                       <div>
                         <span className="label">{row.touchpoint_label} Follow-Up</span>
@@ -1454,8 +1416,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     </summary>
                     <div className="post-closure-card-body">
                       <div className="post-closure-purpose">
-                        <strong>Call Goal</strong>
-                        <p>Confirm client satisfaction, ask whether any issue remains, and note billing, document, or supervision concerns that need follow-up.</p>
+                        <strong>Goal</strong>
+                        <p>Call or contact the client, record the result, and mark any issue that needs attention.</p>
                         {row.followup_note ? <p><b>Last note:</b> {row.followup_note}</p> : null}
                       </div>
                       <form className="post-closure-form" action="/api/post-closure/followups" method="post">
@@ -1502,7 +1464,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                             rows={3}
                           />
                         </label>
-                        <button className="primary" type="submit">Save Follow-Up</button>
+                        <button className="primary" type="submit">Save</button>
                       </form>
                     </div>
                   </details>
@@ -1526,7 +1488,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <h2>Reports</h2>
           </div>
         </div>
-        <ReviewBuilder items={reviewBuilderItems} initialFrom={filters.from} initialTo={filters.to} />
+        <details className="report-advanced-builder">
+          <summary>
+            <div>
+              <span className="label">Optional</span>
+              <h3>Weekly review builder</h3>
+              <p className="muted small">Open this only when you want to review flagged matters one by one.</p>
+            </div>
+            <span className="summary-action">Open Builder</span>
+          </summary>
+          <ReviewBuilder items={reviewBuilderItems} initialFrom={filters.from} initialTo={filters.to} />
+        </details>
         <div className="report-grid">
           <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
@@ -1573,8 +1545,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <button type="submit">Download Issues</button>
           </form>
         </div>
-        <div className="report-preview">
-          <span className="label">Report Format Preview</span>
+        <details className="report-preview report-preview-collapsible">
+          <summary>
+            <div>
+              <span className="label">Optional</span>
+              <h3>Report format preview</h3>
+              <p className="muted small">Open to see an example before downloading.</p>
+            </div>
+            <span className="summary-action">Open Preview</span>
+          </summary>
           <pre>{`End of the week Case manager clio audit report
 
 Priority Summary
@@ -1608,7 +1587,7 @@ Completed Items
 
 Items Still Needing Action
 * [Client Name] - Welcome Letter: Still Needs Action.`}</pre>
-        </div>
+        </details>
       </section>
       ) : null}
 

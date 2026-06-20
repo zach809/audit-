@@ -1,9 +1,17 @@
 CWCA update proof
 
 Version marker:
-cwca-audit-logic-issues-report-2026-06-19
+cwca-boomer-friendly-postclosure-reports-2026-06-19
 
 What changed:
+- Simplified the Post-Closure tab for easier use by non-technical staff.
+- Replaced the Post-Closure chip/button filter rows with one clear dropdown filter panel.
+- Post-Closure reminder cards are collapsed by default so the page does not feel flooded with forms.
+- The Teams follow-up message is hidden until opened, with a Copy Teams Note button inside.
+- Shortened the Post-Closure card form wording and changed Save Follow-Up to Save.
+- Simplified the Reports tab by hiding the weekly review builder behind an optional expandable section.
+- Hid the report format preview behind an optional expandable section.
+- Kept all existing exports and diagnostics; this is a layout/clarity cleanup, not a Clio behavior change.
 - Added an Internal Diagnostics export in Reports called Audit Logic Issues.
 - The diagnostics report lists API errors, unclear evidence matches, direction-unclear communication rows, Clio notes access issues, and other Unknown audit rows.
 - Each diagnostics row includes issue type, reason code, what happened, suggested debugging step, Clio matter link, proof link, last checked date, audit version, and any human review note.
