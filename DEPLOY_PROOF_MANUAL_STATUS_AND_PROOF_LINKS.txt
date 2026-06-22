@@ -1,9 +1,21 @@
 CWCA update proof
 
 Version marker:
-cwca-compact-matter-dropdowns-2026-06-20
+cwca-broader-proof-reading-2026-06-20
 
 What changed:
+- Broadened communication proof reading so CWCA checks subject, body snippet, communication type, sender/receiver, firm user, and Clio external metadata while the audit runs.
+- Broadened Welcome Letter matching for Welcome Letter, Welcome to Hirsch Law Group, Carta de bienvenida, Bienvenido/Bienvenida, welcome email, and welcome packet wording.
+- Broadened Appearance Filed matching for Court Appearance Has Been Filed Notification, Notificación/Notificacion de Presentación, notice of appearance, appearance filed, and related filing wording.
+- Broadened Court Results matching for Court Result and Next Court Date, final court result, representation-ended, Resultado del juicio, and Resultado final del caso wording.
+- Broadened calendar proof reading so CWCA checks event title, description, event type, and calendar owner together.
+- Broadened attorney/client call calendar matching for DC/EM phone-call naming, Spanish phone call, phoneclient, phone client, and similar staff naming styles.
+- Broadened court calendar matching for court date, next court date, court hearing, plea/status/continuance, pre-plea, court setting, and case-number style entries.
+- Broadened weekly client check-in matching for weekly follow-up, weekly client follow-up, weekly check-in, weekly call, and courtesy call wording.
+- Calendar scanning now looks from 30 days before matter creation through 365 days ahead, so future or slightly early linked events are less likely to be missed.
+- Confirmed Clio remains read-only; communication bodies are read only during the audit check and are not stored by CWCA.
+- Removed the top audit summary strip with the repeated counts above the tabs.
+- Kept the audit counts available where they are still useful in filters/reports, but removed the redundant visual row from the main dashboard.
 - Made Matter cards more compact by turning Next Best Action into an expandable dropdown row.
 - Hid the full Workflow Checks grid behind a Workflow Checks dropdown.
 - Hid Problems and Evidence behind separate dropdown rows on each matter card.

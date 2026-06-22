@@ -105,6 +105,39 @@ function clioMatterPath(matterId: string): string {
   return `${baseUrl.replace(/\/$/, "")}/nc/#/matters/${encodeURIComponent(matterId)}`;
 }
 
+function clioMatterSectionPath(matterId: string, section: "communications" | "calendar"): string {
+  return `${clioMatterPath(matterId)}/${section}`;
+}
+
+function problemClioLinks(matterId: string, stepCode: string): Array<{ href: string; label: string }> {
+  const communications = { href: clioMatterSectionPath(matterId, "communications"), label: "Open Communications" };
+  const calendar = { href: clioMatterSectionPath(matterId, "calendar"), label: "Open Calendar" };
+
+  if (
+    stepCode === "SETUP_WELCOME" ||
+    stepCode === "CLIENT_CONTACT" ||
+    stepCode === "APPEARANCE_FILING" ||
+    stepCode === "COURT_RESULTS" ||
+    stepCode === "CLIENT_FOLLOWUP"
+  ) {
+    return [communications];
+  }
+
+  if (
+    stepCode === "SETUP_ATTY_CALL" ||
+    stepCode === "SETUP_COURT_DATE" ||
+    stepCode === "POST_COURT_CALL"
+  ) {
+    return [calendar];
+  }
+
+  if (stepCode === "WEEKLY_CLIENT_CHECKIN") {
+    return [calendar, communications];
+  }
+
+  return [{ href: clioMatterPath(matterId), label: "Open Matter" }];
+}
+
 function postClosureClientName(row: PostClosureFollowUpRow): string {
   return `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim() || "Unnamed Client";
 }
@@ -310,6 +343,7 @@ function problemList(matterId: string, items: DashboardItem[]) {
       ) : null}
       {visibleProblems.map((item) => {
         const href = evidencePath(item, true);
+        const clioLinks = problemClioLinks(matterId, item.stepCode);
         return (
             <div className={`problem-item ${item.status.replace(/\s+/g, "-")}`} key={`${item.stepCode}-${item.status}`}>
             <div className="problem-title">
@@ -334,7 +368,12 @@ function problemList(matterId: string, items: DashboardItem[]) {
             <div className="problem-meta">
               {item.deadlineAt ? <span>Due: {formatLocal(item.deadlineAt)}</span> : null}
               {item.evidenceAt ? <span>Found: {formatLocal(item.evidenceAt)}</span> : null}
-              {href ? <a href={href} target="_blank" rel="noreferrer">{evidenceLabel(item)}</a> : null}
+              {clioLinks.map((link) => (
+                <a className="problem-clio-link" href={link.href} target="_blank" rel="noreferrer" key={link.label}>
+                  {link.label}
+                </a>
+              ))}
+              {href ? <a href={href} target="_blank" rel="noreferrer">Open Saved Proof</a> : null}
             </div>
           </div>
         );
@@ -859,39 +898,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           {notice}
         </section>
       ) : null}
-
-      <section className="audit-summary-strip" aria-label="Audit summary">
-        <div>
-          <span className="summary-icon">✓</span>
-          <strong>{checkedCount} of {totalCount}</strong>
-          <small>Matters audited</small>
-        </div>
-        <div>
-          <span className="summary-icon review">?</span>
-          <strong>{dashboardData.summary.review}</strong>
-          <small>Matters need review</small>
-        </div>
-        <div>
-          <span className="summary-icon followup">!</span>
-          <strong>{needsFollowUpCount}</strong>
-          <small>Need follow-up</small>
-        </div>
-        <div>
-          <span className="summary-icon success">✓</span>
-          <strong>{dashboardData.summary.pass}</strong>
-          <small>On track / complete</small>
-        </div>
-        <div>
-          <span className="summary-icon slate">↻</span>
-          <strong>{uncheckedCount}</strong>
-          <small>Still to audit</small>
-        </div>
-        <div>
-          <span className="summary-icon shield">◇</span>
-          <strong>{uncheckedCount > 0 ? `${batchesLeft} ${batchLabel}` : "Done"}</strong>
-          <small>{uncheckedCount > 0 ? "Safe batches left" : "All discovered matters checked"}</small>
-        </div>
-      </section>
 
       <nav className="dashboard-tabs" aria-label="Dashboard sections">
         {DASHBOARD_TABS.map((tab) => (

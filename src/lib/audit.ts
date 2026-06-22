@@ -68,7 +68,16 @@ function commDate(comm: ClioCommunication): Date | null {
 
 function communicationSearchText(comm: ClioCommunication, includeBody = false): string {
   const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
-  return haystack(comm.subject, comm.type, ...externalValues, includeBody ? comm.body : null);
+  const senderValues = comm.senders?.flatMap((sender) => [sender.name, sender.type]) ?? [];
+  const receiverValues = comm.receivers?.flatMap((receiver) => [receiver.name, receiver.type]) ?? [];
+  return haystack(comm.subject, comm.type, comm.user?.name, ...senderValues, ...receiverValues, ...externalValues, includeBody ? comm.body : null);
+}
+
+function communicationDirectionText(comm: ClioCommunication): string {
+  const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
+  const senderValues = comm.senders?.flatMap((sender) => [sender.name, sender.type]) ?? [];
+  const receiverValues = comm.receivers?.flatMap((receiver) => [receiver.name, receiver.type]) ?? [];
+  return haystack(comm.subject, comm.type, comm.user?.name, ...senderValues, ...receiverValues, ...externalValues);
 }
 
 function isReplySubject(subject?: string | null): boolean {
@@ -76,9 +85,14 @@ function isReplySubject(subject?: string | null): boolean {
 }
 
 function isOutbound(comm: ClioCommunication, clientId: string | null): boolean | null {
+  const directionText = communicationDirectionText(comm);
+  if (directionText.includes("inbound")) return false;
+  if (directionText.includes("outbound")) return true;
   if (comm.user?.id) return true;
   const receivers = comm.receivers ?? [];
   const senders = comm.senders ?? [];
+  if (senders.some((s) => haystack(s.type, s.name).includes("user") || haystack(s.type, s.name).includes("firm"))) return true;
+  if (senders.some((s) => haystack(s.type).includes("contact") || haystack(s.type).includes("client"))) return false;
   if (clientId && receivers.some((r) => String(r.id) === clientId)) return true;
   if (clientId && senders.some((s) => String(s.id) === clientId)) return false;
   return null;
@@ -90,6 +104,10 @@ function earliest<T>(items: Evidence<T>[]): Evidence<T> | null {
 
 function calendarEnd(cal: ClioCalendarEntry): Date | null {
   return parseDate(cal.end_at) ?? parseDate(cal.start_at);
+}
+
+function calendarSearchText(cal: ClioCalendarEntry): string {
+  return haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name, cal.calendar_owner?.name);
 }
 
 function isPettyTrafficMatter(record: MatterRecord): boolean {
@@ -313,8 +331,8 @@ export async function discoverMatters(client = new ClioClient(), lookbackDays = 
 }
 
 async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<EvidenceBundle> {
-  const since = matter.matter_created_at.toISOString();
-  const to = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+  const calendarFrom = new Date(matter.matter_created_at.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const calendarTo = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const [communicationsResult, calendarsResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
       fields: "id,subject,body,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}",
@@ -323,8 +341,8 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
     client.list<ClioCalendarEntry>("/calendar_entries.json", {
       fields: "id,summary,description,start_at,end_at,created_at,all_day,matter{id},calendar_owner{id,name},calendar_entry_event_type{id,name}",
       matter_id: matter.matter_id,
-      from: since,
-      to,
+      from: calendarFrom,
+      to: calendarTo,
     }),
   ]);
   const errors: EvidenceErrors = {};
@@ -369,12 +387,13 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           const at = commDate(comm);
           if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
           const direction = isOutbound(comm, record.client_id);
-          if (direction === false || isReplySubject(comm.subject)) return null;
+          if (direction === false) return null;
+          if (direction !== true && isReplySubject(comm.subject)) return null;
 
           const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
           const subjectText = haystack(comm.subject, ...externalValues);
           const fullText = communicationSearchText(comm, true);
-          if (!matcher(subjectText) && !(direction === true && matcher(fullText))) return null;
+          if (!matcher(subjectText) && !matcher(fullText)) return null;
 
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
         })
@@ -386,7 +405,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       .map((cal): Evidence<ClioCalendarEntry> | null => {
         const at = parseDate(cal.created_at ?? cal.start_at);
         if (!at) return null;
-        if (!isAttorneyCall(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
+        if (!isAttorneyCall(calendarSearchText(cal))) return null;
         return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
       })
       .filter(Boolean) as Evidence<ClioCalendarEntry>[],
@@ -396,7 +415,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.start_at);
       if (!at) return null;
-      if (!isWeeklyClientCheckIn(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
+      if (!isWeeklyClientCheckIn(calendarSearchText(cal))) return null;
       return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
     })
     .filter(Boolean) as Evidence<ClioCalendarEntry>[];
@@ -447,7 +466,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.start_at);
       if (!at) return null;
-      const text = haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name);
+      const text = calendarSearchText(cal);
       if (!isCourtEvent(text) && !isPossibleCourtEvent(text)) return null;
       return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
     })
@@ -486,7 +505,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .map((cal): Evidence<ClioCalendarEntry> | null => {
             const at = parseDate(cal.created_at ?? cal.start_at);
             if (!at || at < courtResult.at) return null;
-            if (!isAttorneyCall(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
+            if (!isAttorneyCall(calendarSearchText(cal))) return null;
             return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
           })
           .filter(Boolean) as Evidence<ClioCalendarEntry>[],
@@ -538,7 +557,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.created_at ?? cal.start_at);
       if (!at) return null;
-      const text = haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name);
+      const text = calendarSearchText(cal);
       if (!isCalendarEmailContact(text)) return null;
       return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
     })
