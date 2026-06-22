@@ -1,12 +1,9 @@
 CWCA update proof
 
 Version marker:
-cwca-claude-manual-ai-2026-06-22
+cwca-manual-matter-ai-2026-06-22
 
 What changed:
-- Added Claude API support for the manual AI helper and weekly review AI draft.
-- Set the example AI provider to Claude with AI_PROVIDER=anthropic and ANTHROPIC_MODEL=claude-haiku-4-5.
-- Kept OpenAI support available with AI_PROVIDER=openai and OPENAI_API_KEY.
 - Added a manual AI helper button on individual matter problem cards: Ask AI About This.
 - AI now runs only when a user clicks that specific issue button or the existing Draft with AI button in the weekly review builder.
 - Removed the broad AI Diagnostics panel from the visible Reports tab so AI does not feel like an automatic/bulk analyzer.

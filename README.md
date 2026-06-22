@@ -49,9 +49,7 @@ The matter card can show **Ask AI About This** on a single flagged issue. The Re
 - AI does not bulk-analyze every matter automatically.
 - AI does not repair logic automatically.
 
-To use Claude, set `AI_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`, and optionally `ANTHROPIC_MODEL`. The default Claude model is `claude-haiku-4-5` because it is the lower-cost, fast option for short manual helper prompts. OpenAI can still be used by setting `AI_PROVIDER=openai` and `OPENAI_API_KEY`.
-
-If the selected AI provider key is not configured, CWCA still works normally and shows a clear AI-not-configured message.
+If `OPENAI_API_KEY` is not configured, CWCA still works normally and shows a clear AI-not-configured message.
 
 ## Current Workflow Rules
 
@@ -156,11 +154,8 @@ Do not enable write permissions.
 - `AUDIT_RUN_RETENTION_DAYS`: audit-run history retention. Default `90`.
 - `AUDIT_METRIC_RETENTION_DAYS`: monthly snapshot retention. Default `365`.
 - `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
-- `AI_PROVIDER`: optional AI provider for manual AI help. Use `anthropic` for Claude or `openai` for OpenAI.
-- `ANTHROPIC_API_KEY`: optional Claude API key for manual AI help.
-- `ANTHROPIC_MODEL`: optional Claude model name. Default `claude-haiku-4-5`.
 - `OPENAI_API_KEY`: optional OpenAI API key for manual AI help.
-- `OPENAI_MODEL`: optional OpenAI model name. Default `gpt-4o-mini`.
+- `AI_MODEL`: optional model name for AI help. Default `gpt-4o-mini`.
 
 ## Notes
 
