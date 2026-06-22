@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AiConfigurationError, generateAiText } from "@/lib/ai-provider";
 import { NEXT_STEPS } from "@/lib/review-shared";
 import { isValidSessionCookie } from "@/lib/session";
 
@@ -40,25 +41,6 @@ function cleanText(value: unknown, maxLength = 700): string {
     .slice(0, maxLength);
 }
 
-function extractOutputText(data: unknown): string {
-  if (!data || typeof data !== "object") return "";
-  const record = data as Record<string, unknown>;
-  if (typeof record.output_text === "string") return record.output_text;
-
-  const output = Array.isArray(record.output) ? record.output : [];
-  const pieces: string[] = [];
-  for (const item of output) {
-    if (!item || typeof item !== "object") continue;
-    const content = Array.isArray((item as Record<string, unknown>).content) ? ((item as Record<string, unknown>).content as unknown[]) : [];
-    for (const part of content) {
-      if (!part || typeof part !== "object") continue;
-      const text = (part as Record<string, unknown>).text;
-      if (typeof text === "string") pieces.push(text);
-    }
-  }
-  return pieces.join("\n").trim();
-}
-
 function parseDraft(text: string): DraftResponse {
   const trimmed = text.trim();
   const jsonText = trimmed.startsWith("{") ? trimmed : trimmed.match(/\{[\s\S]*\}/)?.[0] ?? "";
@@ -79,18 +61,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "AI is not configured yet. Add OPENAI_API_KEY in Vercel to enable AI drafting." },
-      { status: 503 },
-    );
-  }
-
   const body = (await request.json().catch(() => null)) as DraftRequest | null;
   const matter = body?.matter ?? {};
   const review = body?.review ?? {};
-  const model = process.env.AI_MODEL || "gpt-4o-mini";
 
   const safeContext = {
     matter: {
@@ -127,37 +100,10 @@ export async function POST(request: NextRequest) {
   ].join("\n");
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        input: prompt,
-        temperature: 0.2,
-        max_output_tokens: 900,
-      }),
-    });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      return NextResponse.json(
-        { error: `AI draft failed. Check OPENAI_API_KEY, AI_MODEL, and OpenAI billing. ${detail}`.slice(0, 700) },
-        { status: 502 },
-      );
-    }
-
-    const data = await response.json();
-    const outputText = extractOutputText(data);
-    if (!outputText) {
-      return NextResponse.json({ error: "AI did not return draft text." }, { status: 502 });
-    }
-
+    const outputText = await generateAiText(prompt, { featureName: "AI draft", maxOutputTokens: 900, temperature: 0.2 });
     return NextResponse.json({ draft: parseDraft(outputText) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI draft failed.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: message }, { status: error instanceof AiConfigurationError ? error.status : 502 });
   }
 }
