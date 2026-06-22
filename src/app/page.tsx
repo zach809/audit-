@@ -377,7 +377,7 @@ function problemList(context: { matterId: string; matterNumber: string; clientNa
               reason={problemText(item)}
               due={item.deadlineAt ? formatLocal(item.deadlineAt) : null}
               found={item.evidenceAt ? formatLocal(item.evidenceAt) : null}
-              clioUrl={clioMatterPath(context.matterId)}
+              clioUrl={clioLinks[0]?.href ?? clioMatterPath(context.matterId)}
               proofUrl={href || null}
             />
             <div className="problem-meta">

@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as DraftRequest | null;
   const matter = body?.matter ?? {};
   const review = body?.review ?? {};
-  const model = process.env.AI_MODEL || "gpt-4o-mini";
+  const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const safeContext = {
     matter: {
@@ -149,8 +149,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = await response.json();
-    const outputText = extractOutputText(data);
+    const outputText = extractOutputText(await response.json());
     if (!outputText) {
       return NextResponse.json({ error: "AI did not return draft text." }, { status: 502 });
     }

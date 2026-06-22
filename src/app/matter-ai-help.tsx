@@ -1,14 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
-type MatterAiHelpResult = {
-  plainExplanation: string;
-  whyItMayBeFlagged: string;
-  whatToCheckInClio: string;
-  possibleCwcaIssue: string;
-  teamMessage: string;
-  caution: string;
+type ChatMessage = {
+  role: "user" | "assistant";
+  text: string;
 };
 
 type MatterAiHelpProps = {
@@ -34,17 +30,24 @@ function copyText(text: string) {
 export function MatterAiHelp(props: MatterAiHelpProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [result, setResult] = useState<MatterAiHelpResult | null>(null);
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  async function askAi() {
+  async function askAi(nextQuestion: string) {
+    const trimmed = nextQuestion.trim();
+    if (!trimmed || loading) return;
     setLoading(true);
-    setMessage("Checking this one issue only...");
-    setResult(null);
+    setMessage("Asking about this one issue only...");
+    const nextMessages: ChatMessage[] = [...messages, { role: "user", text: trimmed }];
+    setMessages(nextMessages);
+    setQuestion("");
 
     const response = await fetch("/api/ai/matter-help", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        question: trimmed,
+        history: messages.slice(-6),
         matter: {
           id: props.matterId,
           number: props.matterNumber,
@@ -64,73 +67,80 @@ export function MatterAiHelp(props: MatterAiHelpProps) {
       }),
     });
 
-    const body = (await response.json().catch(() => null)) as { help?: MatterAiHelpResult; error?: string } | null;
+    const body = (await response.json().catch(() => null)) as { answer?: string; error?: string } | null;
     setLoading(false);
 
-    if (!response.ok || !body?.help) {
+    if (!response.ok || !body?.answer) {
       setMessage(body?.error || "AI help could not run.");
       return;
     }
 
-    setResult(body.help);
-    setMessage("AI note ready. Please review before using it.");
+    setMessages([...nextMessages, { role: "assistant", text: body.answer }]);
+    setMessage("Answer ready. Review it before acting on it.");
   }
 
-  const copyable = result
-    ? [
-        `Matter: ${props.clientName || props.matterNumber}`,
-        `Audit item: ${props.auditItemLabel}`,
-        "",
-        "Plain explanation:",
-        result.plainExplanation,
-        "",
-        "What to check in Clio:",
-        result.whatToCheckInClio,
-        "",
-        "Possible CWCA issue:",
-        result.possibleCwcaIssue,
-        "",
-        "Team message:",
-        result.teamMessage,
-      ].join("\n")
-    : "";
+  function submitQuestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    askAi(question);
+  }
+
+  const lastAnswer = [...messages].reverse().find((item) => item.role === "assistant")?.text ?? "";
+  const quickQuestions = [
+    "Where did CWCA look?",
+    "Could this be a false positive?",
+    "What proof should I check?",
+    "How can we improve this rule?",
+  ];
 
   return (
     <div className="matter-ai-help">
       <div className="matter-ai-help-head">
         <div>
-          <strong>AI help for this item</strong>
-          <small>Manual only. This sends only this matter's audit metadata, not communication bodies.</small>
+          <span className="matter-ai-kicker">Manual AI</span>
+          <strong>Ask about this flag</strong>
+          <small>Ask where CWCA looked, why it flagged, or what rule may need tuning.</small>
         </div>
-        <button className="compact" type="button" onClick={askAi} disabled={loading}>
-          {loading ? "Asking AI..." : "Ask AI About This"}
-        </button>
+        <a className="button compact" href={props.clioUrl} target="_blank" rel="noreferrer">Open Clio</a>
       </div>
       {message ? <p className="matter-ai-status">{message}</p> : null}
-      {result ? (
-        <div className="matter-ai-result">
-          <div>
-            <span>Plain explanation</span>
-            <p>{result.plainExplanation}</p>
-          </div>
-          <div>
-            <span>What to check in Clio</span>
-            <p>{result.whatToCheckInClio}</p>
-          </div>
-          <div>
-            <span>Possible CWCA issue</span>
-            <p>{result.possibleCwcaIssue}</p>
-          </div>
-          <div className="matter-ai-message">
-            <span>Team message</span>
-            <p>{result.teamMessage}</p>
-          </div>
-          {result.caution ? <small>{result.caution}</small> : null}
-          <button className="compact" type="button" onClick={() => copyText(copyable).then(() => setMessage("AI note copied."))}>
-            Copy AI Note
+      <div className="matter-ai-prompts">
+        {quickQuestions.map((item) => (
+          <button className="compact" type="button" key={item} onClick={() => askAi(item)} disabled={loading}>
+            {item}
+          </button>
+        ))}
+      </div>
+      <div className="matter-ai-chat-log">
+        {messages.length ? (
+          messages.map((item, index) => (
+            <div className={`matter-ai-bubble ${item.role}`} key={`${item.role}-${index}`}>
+              <span>{item.role === "user" ? "You asked" : "CWCA AI"}</span>
+              <p>{item.text}</p>
+            </div>
+          ))
+        ) : (
+          <p className="matter-ai-empty">Ask a direct question about this flag. AI only sees this matter's audit metadata, not communication bodies.</p>
+        )}
+      </div>
+      <form className="matter-ai-chat-form" onSubmit={submitQuestion}>
+        <textarea
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder="Example: Why did CWCA flag this if I can see the email in Communications?"
+          rows={2}
+        />
+        <div className="matter-ai-footer">
+          <small>Use this to debug CWCA logic. Human review still makes the final call.</small>
+          {lastAnswer ? (
+            <button className="compact" type="button" onClick={() => copyText(lastAnswer).then(() => setMessage("Answer copied."))}>
+              Copy Answer
+            </button>
+          ) : null}
+          <button className="compact primary" type="submit" disabled={loading || !question.trim()}>
+            {loading ? "Asking..." : "Ask"}
           </button>
         </div>
-      ) : null}
+      </form>
     </div>
   );
 }

@@ -1,9 +1,22 @@
 CWCA update proof
 
 Version marker:
-cwca-manual-matter-ai-2026-06-22
+cwca-openai-matter-ai-chat-2026-06-22
 
 What changed:
+- Changed the matter AI helper into a direct mini chat for each flagged item.
+- Auditors can now type their own question about a flag instead of only receiving a fixed AI summary.
+- Added quick buttons for: Where did CWCA look, Could this be a false positive, What proof should I check, and How can we improve this rule.
+- The chat is still manual-only and only uses the selected matter/audit item metadata.
+- The chat is meant to help debug CWCA logic and understand possible app false positives.
+- Improved the manual AI helper so it gives more useful auditor guidance instead of generic "check Clio" wording.
+- The AI helper now receives the specific workflow rule, goal, expected proof type, and suggested Clio area for the selected item.
+- AI output now includes: expected proof, where to check, why it was flagged, recommended auditor action, possible CWCA issue, and a copy-ready team note.
+- The AI helper includes an Open Clio shortcut that points to the most relevant Clio area for that issue.
+- Reverted the AI helper back to the OpenAI setup.
+- Polished the matter-level AI helper panel so it is shorter, easier to scan, and less system-looking.
+- The AI result now shows one Summary, a short checklist of what to check, and a collapsed copy-ready team note.
+- The copy button now says Copy Note instead of Copy AI Note.
 - Added a manual AI helper button on individual matter problem cards: Ask AI About This.
 - AI now runs only when a user clicks that specific issue button or the existing Draft with AI button in the weekly review builder.
 - Removed the broad AI Diagnostics panel from the visible Reports tab so AI does not feel like an automatic/bulk analyzer.

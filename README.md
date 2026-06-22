@@ -49,7 +49,9 @@ The matter card can show **Ask AI About This** on a single flagged issue. The Re
 - AI does not bulk-analyze every matter automatically.
 - AI does not repair logic automatically.
 
-If `OPENAI_API_KEY` is not configured, CWCA still works normally and shows a clear AI-not-configured message.
+To use the helper, set `OPENAI_API_KEY` and optionally `AI_MODEL`. The default model is `gpt-4o-mini` because it keeps these short manual helper prompts low-cost.
+
+If the OpenAI key is not configured, CWCA still works normally and shows a clear AI-not-configured message.
 
 ## Current Workflow Rules
 
@@ -155,7 +157,7 @@ Do not enable write permissions.
 - `AUDIT_METRIC_RETENTION_DAYS`: monthly snapshot retention. Default `365`.
 - `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
 - `OPENAI_API_KEY`: optional OpenAI API key for manual AI help.
-- `AI_MODEL`: optional model name for AI help. Default `gpt-4o-mini`.
+- `AI_MODEL`: optional OpenAI model name. Default `gpt-4o-mini`.
 
 ## Notes
 
