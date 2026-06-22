@@ -16,6 +16,7 @@ import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
 import { CopyTextButton } from "./copy-text-button";
+import { AiDiagnosticsPanel } from "./ai-diagnostics-panel";
 import {
   actionFor,
   auditItemPriority,
@@ -1551,6 +1552,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <button type="submit">Download Issues</button>
           </form>
         </div>
+        <AiDiagnosticsPanel filters={filters} />
         <details className="report-preview report-preview-collapsible">
           <summary>
             <div>

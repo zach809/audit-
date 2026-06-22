@@ -14,6 +14,7 @@ Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA 
 - Provides manual refresh, Vercel Cron refresh, filters, historical metrics, and CSV export.
 - Provides a Case Manager action CSV named `cwca-case-manager-action-report.csv`.
 - Provides a Notepad-friendly Case Manager to-do list named `cwca-case-manager-to-do-list.txt`.
+- Optionally drafts plain-English review wording and audit diagnostics with AI when `OPENAI_API_KEY` is configured.
 
 ## Post-Closure Follow-Up
 
@@ -34,7 +35,18 @@ Stored locally for this feature:
 - Follow-up due date and stage.
 - Staff-entered follow-up status, contact method, issue type, note, reviewer, and completion date.
 
-No AI is used.
+## Optional AI Review Assistant
+
+The Reports review builder can use AI to draft plain-English Results Details, Report Summary, and a Teams message for the selected flagged matter. The Reports tab can also use AI Diagnostics to explain likely causes behind saved audit logic issues, such as API/read errors, evidence wording mismatch, unclear communication direction, stale rows, or rules that may need tuning. These are helper features only:
+
+- It does not write to Clio.
+- It does not save the review automatically.
+- It does not decide whether an item is compliant.
+- It uses only selected audit metadata and auditor-entered notes.
+- It should be reviewed by a human before saving or sending.
+- AI Diagnostics explains likely causes and suggested checks; it does not repair the logic automatically.
+
+If `OPENAI_API_KEY` is not configured, CWCA still works normally and shows a clear AI-not-configured message.
 
 ## Current Workflow Rules
 
@@ -73,6 +85,8 @@ Not stored locally:
 - Document contents.
 - Billing data.
 - Payment data.
+
+For AI drafting, CWCA sends only the selected audit metadata and auditor-entered notes needed to draft wording. It does not send stored communication bodies, note text, document contents, billing data, or payment data.
 
 Retention defaults:
 
@@ -137,6 +151,8 @@ Do not enable write permissions.
 - `AUDIT_RUN_RETENTION_DAYS`: audit-run history retention. Default `90`.
 - `AUDIT_METRIC_RETENTION_DAYS`: monthly snapshot retention. Default `365`.
 - `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
+- `OPENAI_API_KEY`: optional OpenAI API key for the AI Review Assistant.
+- `AI_MODEL`: optional model name for AI drafting. Default `gpt-4o-mini`.
 
 ## Notes
 

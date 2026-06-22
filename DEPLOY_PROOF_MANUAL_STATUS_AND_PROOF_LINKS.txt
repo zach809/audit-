@@ -1,9 +1,23 @@
 CWCA update proof
 
 Version marker:
-cwca-broader-proof-reading-2026-06-20
+cwca-ai-diagnostics-assistant-2026-06-22
 
 What changed:
+- Added an optional AI Diagnostics Assistant in the Reports tab.
+- AI Diagnostics summarizes saved Audit Logic Issues and explains likely causes in plain English.
+- AI Diagnostics can call out patterns like Clio API/read errors, evidence wording mismatches, unclear communication direction, stale rows needing recheck, date-window issues, or rules that may need tuning.
+- AI Diagnostics provides recommended checks, rule-tuning ideas, Clio setup checks, and a copyable diagnostics note.
+- AI Diagnostics uses saved audit metadata only; it does not send communication bodies, note text, document contents, billing data, or payment data.
+- AI Diagnostics does not change Clio, does not change audit results, and does not repair logic automatically.
+- Added an optional AI Review Assistant inside the weekly review builder.
+- The AI button drafts Results Details, Report Summary, and a Teams message for the selected flagged matter.
+- AI drafts are not saved automatically; the auditor must review and save them.
+- The AI helper does not write to Clio, does not change audit decisions, and does not mark items resolved.
+- The AI helper sends only selected audit metadata and auditor-entered notes to OpenAI for drafting.
+- The AI helper does not send communication bodies, note text, document contents, billing data, or payment data.
+- If OPENAI_API_KEY is missing, CWCA still works normally and shows an AI-not-configured message.
+- Added optional environment variables: OPENAI_API_KEY and AI_MODEL.
 - Broadened communication proof reading so CWCA checks subject, body snippet, communication type, sender/receiver, firm user, and Clio external metadata while the audit runs.
 - Broadened Welcome Letter matching for Welcome Letter, Welcome to Hirsch Law Group, Carta de bienvenida, Bienvenido/Bienvenida, welcome email, and welcome packet wording.
 - Broadened Appearance Filed matching for Court Appearance Has Been Filed Notification, Notificación/Notificacion de Presentación, notice of appearance, appearance filed, and related filing wording.

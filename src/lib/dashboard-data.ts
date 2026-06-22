@@ -42,7 +42,7 @@ type ActionCsvRow = {
   review_history: unknown;
 };
 
-type LogicIssueRow = {
+export type LogicIssueRow = {
   matter_id: string;
   matter_number: string;
   client_first_name: string | null;
@@ -131,7 +131,7 @@ function clioMatterLink(matterId: string): string {
   return `${baseUrl.replace(/\/$/, "")}/nc/#/matters/${encodeURIComponent(matterId)}`;
 }
 
-function logicIssueType(row: LogicIssueRow): string {
+export function logicIssueType(row: LogicIssueRow): string {
   const reason = String(row.reason_code ?? "");
   if (reason.includes("_ERROR") || reason.includes("ERROR:")) return "API or connection error";
   if (reason.startsWith("NOTES_400:")) return "Clio notes access issue";
@@ -141,7 +141,7 @@ function logicIssueType(row: LogicIssueRow): string {
   return "Audit logic review";
 }
 
-function logicIssueExplanation(row: LogicIssueRow): string {
+export function logicIssueExplanation(row: LogicIssueRow): string {
   const area = workflowLabel(row.step_code);
   const reason = String(row.reason_code ?? "");
   if (logicIssueType(row) === "API or connection error") {
@@ -159,7 +159,7 @@ function logicIssueExplanation(row: LogicIssueRow): string {
   return `${area} is marked Unknown or has a reason code that should be reviewed before treating it as a team issue.`;
 }
 
-function logicIssueNextStep(row: LogicIssueRow): string {
+export function logicIssueNextStep(row: LogicIssueRow): string {
   const reason = String(row.reason_code ?? "");
   if (reason.includes("_ERROR") || reason.includes("ERROR:")) {
     return "Recheck the matter. If it repeats, review Clio permissions, rate limits, and the endpoint named in the reason code.";
@@ -692,7 +692,7 @@ export async function actionItemsCsv(filters: DashboardFilters = {}, origin = ""
   return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
-async function getLogicIssueRows(filters: DashboardFilters = {}): Promise<LogicIssueRow[]> {
+export async function getLogicIssueRows(filters: DashboardFilters = {}): Promise<LogicIssueRow[]> {
   await initDb();
   const sql = db();
   const overallCondition =

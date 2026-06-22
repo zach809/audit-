@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-broader-proof-reading-2026-06-20";
+export const APP_VERSION = "cwca-ai-diagnostics-assistant-2026-06-22";

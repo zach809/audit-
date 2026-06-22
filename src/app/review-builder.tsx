@@ -78,6 +78,14 @@ type ReviewState = {
 
 type DownloadType = "text" | "word" | "pdf";
 
+type AiReviewDraft = {
+  resultsDetails: string;
+  reportSummary: string;
+  teamsMessage: string;
+  suggestedNextStep: string;
+  caution: string;
+};
+
 const STATUS_FILTERS = ["All", ...REVIEW_DECISIONS] as const;
 const ALERT_TYPE_FILTERS = [
   "All",
@@ -236,6 +244,9 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
   const [saveStatus, setSaveStatus] = useState("");
   const [pendingDownload, setPendingDownload] = useState<DownloadType | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState(generatedAt());
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiStatus, setAiStatus] = useState("");
+  const [aiDraft, setAiDraft] = useState<{ itemId: string; draft: AiReviewDraft } | null>(null);
 
   const weeklyItems = useMemo(
     () => items.filter((item) => dateInRange(item.due ?? item.found, reportFrom, reportTo)),
@@ -381,6 +392,55 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
       const nextItem = nextUnresolvedItem(selected.id, nextReviews);
       if (nextItem) setSelectedId(nextItem.id);
     }
+  }
+
+  async function generateAiDraft() {
+    if (!selected) return;
+    const review = reviews[selected.id] ?? defaultReview();
+    setAiLoading(true);
+    setAiStatus("Drafting plain-English wording...");
+    setAiDraft(null);
+
+    const response = await fetch("/api/ai/review-draft", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        matter: {
+          clientName: selected.clientName,
+          matterNumber: selected.matterNumber,
+          attorney: selected.attorney,
+          caseManager: selectedCaseManagerName,
+          auditItem: selected.auditItem,
+          status: selected.status,
+          why: plainAlertText(selected),
+          due: selected.due,
+          found: selected.found,
+        },
+        review: {
+          decision: review.decision,
+          resultsDetails: review.resultsDetails,
+          nextStep: review.nextStep,
+          reportSummary: review.reportSummary,
+          proofType: review.proofType,
+        },
+      }),
+    });
+
+    setAiLoading(false);
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !body?.draft) {
+      setAiStatus(body?.error || "AI draft could not be created.");
+      return;
+    }
+
+    const draft = body.draft as AiReviewDraft;
+    updateReview(selected.id, {
+      resultsDetails: draft.resultsDetails || review.resultsDetails,
+      reportSummary: draft.reportSummary || review.reportSummary,
+      nextStep: normalizeNextStep(draft.suggestedNextStep) || review.nextStep,
+    });
+    setAiDraft({ itemId: selected.id, draft });
+    setAiStatus("AI draft added. Review it before saving.");
   }
 
   const reportText = useMemo(() => {
@@ -718,6 +778,28 @@ export function ReviewBuilder({ items, initialFrom = "", initialTo = "" }: { ite
               <strong>Why This Appeared</strong>
               <p>The system alerted because {plainAlertText(selected)}</p>
               <small>This does not always mean the item was not done. It means the item needs to be reviewed, confirmed, or explained.</small>
+            </div>
+
+            <div className="ai-review-assistant">
+              <div>
+                <span className="label">AI Review Assistant</span>
+                <strong>Draft clean wording from this audit item</strong>
+                <p>Uses only the selected audit metadata and your typed notes. It does not change Clio or save the review.</p>
+              </div>
+              <button className="primary compact" type="button" onClick={generateAiDraft} disabled={aiLoading}>
+                {aiLoading ? "Drafting..." : "Draft with AI"}
+              </button>
+              {aiStatus ? <small>{aiStatus}</small> : null}
+              {aiDraft?.itemId === selected.id ? (
+                <div className="ai-draft-result">
+                  <strong>Teams message draft</strong>
+                  <p>{aiDraft.draft.teamsMessage}</p>
+                  {aiDraft.draft.caution ? <small>{aiDraft.draft.caution}</small> : null}
+                  <button className="compact" type="button" onClick={() => copyText(aiDraft.draft.teamsMessage).then(() => setAiStatus("Teams message copied."))}>
+                    Copy Teams Message
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             <div className="review-decision-buttons" aria-label="Status">
