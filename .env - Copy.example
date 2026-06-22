@@ -1,0 +1,27 @@
+# Vercel/Neon
+DATABASE_URL="postgres://user:password@host/db?sslmode=require"
+
+# Clio OAuth app
+CLIO_CLIENT_ID=""
+CLIO_CLIENT_SECRET=""
+CLIO_REDIRECT_URI="https://your-vercel-app.vercel.app/api/auth/clio/callback"
+CLIO_BASE_URL="https://app.clio.com"
+
+# App security
+DASHBOARD_PASSWORD="change-this"
+SESSION_SECRET="generate-a-long-random-secret"
+TOKEN_ENCRYPTION_KEY="generate-a-32-byte-base64-key"
+CRON_SECRET="generate-a-long-random-secret"
+
+# Audit behavior
+AUDIT_BATCH_SIZE="10"
+AUDIT_COOLDOWN_SECONDS="30"
+CLIO_INITIAL_LOOKBACK_DAYS="90"
+CLIO_RATE_LIMIT_PER_MINUTE="40"
+AUDIT_RUN_RETENTION_DAYS="90"
+AUDIT_METRIC_RETENTION_DAYS="365"
+CLOSED_MATTER_RETENTION_DAYS="30"
+
+# Optional AI drafting helper
+OPENAI_API_KEY=""
+AI_MODEL="gpt-4o-mini"

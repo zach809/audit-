@@ -1,0 +1,75 @@
+CWCA deployment check
+
+Expected visible version in the app header:
+cwca-clean-dashboard-ui-2026-05-27
+
+Expected visible dark UI:
+- App background is near-black, not light gray
+- Header and cards use dark surfaces with cream text
+- Accent colors include cyan, stone, charcoal, and deep teal like the reference
+- Status colors still remain readable for follow-up/review/timing
+
+Expected visible theme toggle:
+- Header has a Day/Night toggle button
+- Night mode uses the dark card reference style
+- Day mode restores the light Apple-style dashboard look
+- The selected theme is remembered in the browser
+
+Expected visible cleanup:
+- Deployment proof banner is no longer visible in the main dashboard
+- Top navigation uses compact labels without descriptions
+- Review Matters panel is shorter and uses a small status summary
+- Header title is shorter and less wordy
+
+Expected visible banner:
+A dark blue banner directly below the header that says "Updated court audit logic is active".
+
+Expected visible Apple-style polish:
+- Softer glass-style header with more rounded corners
+- Cleaner segmented tab bar
+- More polished metric cards and chart surfaces
+- Lighter Apple-style color palette and spacing
+
+Expected visible report changes:
+- No Overview tab in the top navigation
+- Opening "/" should show Attorney Workspace, not Overview
+- Old "?tab=overview" links should not show the Overview page
+- Reports tab has Report From and Report To date fields directly inside the Missing Items Review card
+- Reports tab shows a Report Format Preview matching the requested structure
+- Text export downloads as cwca-case-manager-missing-items-review.txt
+- Text export uses the Pam-style missing-items review format with no Case Manager line inside each matter
+
+Expected visible Overview panel:
+A section called "Court Workflow Rules In Use" with four cards: Appearance Hold, 48-Hour Results Window, 24-Hour Call Window, and Flexible Detection.
+
+Expected visible Overview sections:
+- Quick Workspace Views
+- Workflow Health
+- Issue Type Breakdown
+- Initial Client Setup
+- Workflow Area Breakdown
+
+Expected coaching wording:
+Some required steps were completed after the target time. Review the matter handoff and coach the team to complete setup items sooner.
+
+Expected safer audit behavior:
+If CWCA cannot confidently confirm template/calendar proof for Welcome Letter, Appearance Filed, Court Results, or Post-Court Call, it should show Needs Review instead of immediately treating it as missed work.
+
+Expected court follow-up behavior:
+Court Results should only become relevant after an actual court event has ended.
+Future court dates should show Court Results and Post-Court Call as not due yet.
+Court Results should be due within 48 hours after court ends.
+Court Results should show Not Due Yet during the 48-hour window before being treated as missing/review.
+Post-Court Call should only become relevant after court results are found and there is a future next court date.
+Post-Court Call should be due within 24 hours after court results are found.
+Post-Court Call should show Not Due Yet before the 24-hour post-result window expires.
+
+Expected calendar detection behavior:
+Court events should be detected from strong court words like plea/status/hearing/trial/continuance.
+If a matter-linked calendar entry has a vague title, CWCA may treat it as a possible court event unless it is clearly a phone call, reminder, task, billing, filing, intake, or other non-court item.
+
+Expected attorney call behavior:
+Attorney Call is required unless the matter can be identified as petty traffic from the matter number.
+Attorney Call should recognize flexible calendar wording such as Phone, Phone Call, PhoneCall, Client Call, Call With Client, Atty Call, Initial Call, Spanish Call, Telephonic, and Llamada.
+
+If the deployed site does not show this version, the newest files were not deployed.
