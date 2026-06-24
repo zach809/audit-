@@ -16,8 +16,14 @@ type MatterAiHelpProps = {
   auditItemLabel: string;
   status: string;
   reason: string;
+  reasonCode?: string | null;
+  operationalState?: string | null;
   due?: string | null;
   found?: string | null;
+  evidenceSource?: string | null;
+  evidenceRefId?: string | null;
+  auditVersion?: string | null;
+  lastEvaluatedAt?: string | null;
   clioUrl: string;
   proofUrl?: string | null;
 };
@@ -36,8 +42,9 @@ export function MatterAiHelp(props: MatterAiHelpProps) {
   async function askAi(nextQuestion: string) {
     const trimmed = nextQuestion.trim();
     if (!trimmed || loading) return;
+
     setLoading(true);
-    setMessage("Asking about this one issue only...");
+    setMessage("Asking about this one flag...");
     const nextMessages: ChatMessage[] = [...messages, { role: "user", text: trimmed }];
     setMessages(nextMessages);
     setQuestion("");
@@ -60,8 +67,14 @@ export function MatterAiHelp(props: MatterAiHelpProps) {
           auditItemLabel: props.auditItemLabel,
           status: props.status,
           reason: props.reason,
+          reasonCode: props.reasonCode,
+          operationalState: props.operationalState,
           due: props.due,
           found: props.found,
+          evidenceSource: props.evidenceSource,
+          evidenceRefId: props.evidenceRefId,
+          auditVersion: props.auditVersion,
+          lastEvaluatedAt: props.lastEvaluatedAt,
           proofUrl: props.proofUrl,
         },
       }),
@@ -93,54 +106,62 @@ export function MatterAiHelp(props: MatterAiHelpProps) {
   ];
 
   return (
-    <div className="matter-ai-help">
+    <div className="matter-ai-help matter-ai-compact">
       <div className="matter-ai-help-head">
         <div>
           <span className="matter-ai-kicker">Manual AI</span>
-          <strong>Ask about this flag</strong>
-          <small>Ask where CWCA looked, why it flagged, or what rule may need tuning.</small>
+          <strong>Ask CWCA AI</strong>
+          <small>Ask about this one flag only.</small>
         </div>
         <a className="button compact" href={props.clioUrl} target="_blank" rel="noreferrer">Open Clio</a>
       </div>
-      {message ? <p className="matter-ai-status">{message}</p> : null}
-      <div className="matter-ai-prompts">
-        {quickQuestions.map((item) => (
-          <button className="compact" type="button" key={item} onClick={() => askAi(item)} disabled={loading}>
-            {item}
-          </button>
-        ))}
-      </div>
-      <div className="matter-ai-chat-log">
-        {messages.length ? (
-          messages.map((item, index) => (
-            <div className={`matter-ai-bubble ${item.role}`} key={`${item.role}-${index}`}>
-              <span>{item.role === "user" ? "You asked" : "CWCA AI"}</span>
-              <p>{item.text}</p>
-            </div>
-          ))
-        ) : (
-          <p className="matter-ai-empty">Ask a direct question about this flag. AI only sees this matter's audit metadata, not communication bodies.</p>
-        )}
-      </div>
+
       <form className="matter-ai-chat-form" onSubmit={submitQuestion}>
-        <textarea
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          placeholder="Example: Why did CWCA flag this if I can see the email in Communications?"
-          rows={2}
-        />
-        <div className="matter-ai-footer">
-          <small>Use this to debug CWCA logic. Human review still makes the final call.</small>
-          {lastAnswer ? (
-            <button className="compact" type="button" onClick={() => copyText(lastAnswer).then(() => setMessage("Answer copied."))}>
-              Copy Answer
-            </button>
-          ) : null}
+        <div className="matter-ai-input-row">
+          <textarea
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Ask where CWCA looked, why it flagged, or what rule may need tuning..."
+            rows={1}
+          />
           <button className="compact primary" type="submit" disabled={loading || !question.trim()}>
             {loading ? "Asking..." : "Ask"}
           </button>
         </div>
       </form>
+
+      <details className="matter-ai-suggestions">
+        <summary>Suggested questions</summary>
+        <div className="matter-ai-prompts">
+          {quickQuestions.map((item) => (
+            <button className="compact" type="button" key={item} onClick={() => askAi(item)} disabled={loading}>
+              {item}
+            </button>
+          ))}
+        </div>
+      </details>
+
+      {message ? <p className="matter-ai-status">{message}</p> : null}
+
+      {messages.length ? (
+        <div className="matter-ai-chat-log">
+          {messages.map((item, index) => (
+            <div className={`matter-ai-bubble ${item.role}`} key={`${item.role}-${index}`}>
+              <span>{item.role === "user" ? "You asked" : "CWCA AI"}</span>
+              <p>{item.text}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {lastAnswer ? (
+        <div className="matter-ai-footer">
+          <small>Use this to debug CWCA logic. Human review still makes the final call.</small>
+          <button className="compact" type="button" onClick={() => copyText(lastAnswer).then(() => setMessage("Answer copied."))}>
+            Copy Answer
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

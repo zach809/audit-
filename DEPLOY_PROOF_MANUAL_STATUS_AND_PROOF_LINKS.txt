@@ -1,9 +1,20 @@
 CWCA update proof
 
 Version marker:
-cwca-openai-matter-ai-chat-2026-06-22
+cwca-communication-date-welcome-fix-2026-06-24
 
 What changed:
+- Fixed communication date handling so CWCA uses the most precise Clio timestamp available.
+- This prevents same-day emails from being treated like they happened at midnight before the matter was created.
+- Welcome Letter matching should now correctly count template emails such as "Welcome Letter", "Carta de bienvenida", and "Welcome to Hirsch Law Group" when they are visible in matter Communications.
+- The same timestamp fix also helps Appearance Filed, Client Contact, Court Results, and other communication-based proof checks.
+- Evidence links in matter cards now say "Open Proof in Clio" so auditors know the link goes straight to Clio for confirmation.
+- The manual AI chat now receives the saved audit row details, including reason code, operational state, proof reference, audit version, and last checked time.
+- When asked what is wrong or how to improve a rule, AI should now explain the actual saved CWCA issue instead of repeating generic guidance.
+- Made the matter AI helper a small chat box by default.
+- Removed the empty AI answer panel before a question is asked.
+- Moved quick prompts into a Suggested questions dropdown.
+- The main visible control is now a compact one-line question box with an Ask button.
 - Changed the matter AI helper into a direct mini chat for each flagged item.
 - Auditors can now type their own question about a flag instead of only receiving a fixed AI summary.
 - Added quick buttons for: Where did CWCA look, Could this be a false positive, What proof should I check, and How can we improve this rule.
@@ -17,7 +28,7 @@ What changed:
 - Polished the matter-level AI helper panel so it is shorter, easier to scan, and less system-looking.
 - The AI result now shows one Summary, a short checklist of what to check, and a collapsed copy-ready team note.
 - The copy button now says Copy Note instead of Copy AI Note.
-- Added a manual AI helper button on individual matter problem cards: Ask AI About This.
+- Added a manual AI chat box on individual matter problem cards.
 - AI now runs only when a user clicks that specific issue button or the existing Draft with AI button in the weekly review builder.
 - Removed the broad AI Diagnostics panel from the visible Reports tab so AI does not feel like an automatic/bulk analyzer.
 - The new manual AI helper sends only selected matter/audit-item metadata to OpenAI.

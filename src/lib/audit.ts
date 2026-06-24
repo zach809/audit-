@@ -62,8 +62,16 @@ function parseDate(value?: string | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function isDateOnly(value?: string | null): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test((value ?? "").trim());
+}
+
 function commDate(comm: ClioCommunication): Date | null {
-  return parseDate(comm.date ?? comm.received_at ?? comm.created_at);
+  const preciseDate = [comm.date, comm.received_at, comm.created_at]
+    .filter((value) => value && !isDateOnly(value))
+    .map((value) => parseDate(value))
+    .find((value): value is Date => Boolean(value));
+  return preciseDate ?? parseDate(comm.date ?? comm.received_at ?? comm.created_at);
 }
 
 function communicationSearchText(comm: ClioCommunication, includeBody = false): string {

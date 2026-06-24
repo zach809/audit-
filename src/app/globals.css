@@ -6493,6 +6493,67 @@ th,
   flex: 1;
 }
 
+.matter-ai-compact {
+  gap: 8px;
+  padding: 10px;
+}
+
+.matter-ai-compact .matter-ai-help-head {
+  align-items: center;
+}
+
+.matter-ai-compact .matter-ai-help-head strong {
+  font-size: 13px;
+}
+
+.matter-ai-compact .matter-ai-help-head small {
+  font-size: 12px;
+}
+
+.matter-ai-input-row {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.matter-ai-input-row textarea {
+  background: rgba(2, 8, 14, 0.72);
+  border: 1px solid rgba(222, 235, 248, 0.14);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+  min-height: 40px;
+  padding: 9px 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.matter-ai-suggestions {
+  margin: 0;
+}
+
+.matter-ai-suggestions summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.matter-ai-suggestions summary::-webkit-details-marker {
+  display: none;
+}
+
+.matter-ai-suggestions[open] summary {
+  margin-bottom: 7px;
+}
+
+.matter-ai-compact .matter-ai-chat-log {
+  max-height: 240px;
+}
+
 @media (max-width: 980px) {
   .matter-head,
   .matter-compact-sections {
@@ -6547,6 +6608,10 @@ th,
   .matter-ai-footer {
     align-items: stretch;
     display: grid;
+  }
+
+  .matter-ai-input-row {
+    grid-template-columns: 1fr;
   }
 
 }

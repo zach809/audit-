@@ -39,7 +39,7 @@ Stored locally for this feature:
 
 CWCA can use AI only when an auditor clicks a button. It does not run during audit batches, page loads, or bulk matter review.
 
-The matter card can show **Ask AI About This** on a single flagged issue. The Reports review builder can also use **Draft with AI** to draft plain-English Results Details, Report Summary, and a Teams message for the selected flagged matter. These are helper features only:
+The matter card can show a small **Ask CWCA AI** chat box on a single flagged issue. The Reports review builder can also use **Draft with AI** to draft plain-English Results Details, Report Summary, and a Teams message for the selected flagged matter. These are helper features only:
 
 - It does not write to Clio.
 - It does not save the review automatically.

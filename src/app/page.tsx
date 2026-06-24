@@ -375,8 +375,14 @@ function problemList(context: { matterId: string; matterNumber: string; clientNa
               auditItemLabel={workflowLabel(item.stepCode)}
               status={currentItemStatus(item)}
               reason={problemText(item)}
+              reasonCode={item.reasonCode ?? null}
+              operationalState={item.operationalState ?? null}
               due={item.deadlineAt ? formatLocal(item.deadlineAt) : null}
               found={item.evidenceAt ? formatLocal(item.evidenceAt) : null}
+              evidenceSource={item.evidenceSource ?? null}
+              evidenceRefId={item.evidenceRefId ?? null}
+              auditVersion={item.auditVersion ?? null}
+              lastEvaluatedAt={item.lastEvaluatedAt ? formatLocal(item.lastEvaluatedAt) : null}
               clioUrl={clioLinks[0]?.href ?? clioMatterPath(context.matterId)}
               proofUrl={href || null}
             />
@@ -1519,7 +1525,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div className="ai-tool-card">
               <span>1</span>
               <strong>Ask AI about one item</strong>
-              <p>Open a flagged matter, expand Problems, then click <b>Ask AI About This</b> on the issue you want help with.</p>
+              <p>Open a flagged matter, expand Problems, then type a question in the small <b>Ask CWCA AI</b> box.</p>
             </div>
             <div className="ai-tool-card">
               <span>2</span>
@@ -1861,7 +1867,7 @@ Items Still Needing Action
                     <p><b>Why?</b> {problemText(nextAction)}</p>
                     <div className="next-action-links">
                       <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
-                      {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof</a> : null}
+                      {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof in Clio</a> : null}
                     </div>
                   </div>
                 </details>
@@ -1932,7 +1938,7 @@ Items Still Needing Action
                     evidenceItems.map((i) => (
                       <p className="evidence-links" key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
                         <span>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</span>
-                        <a href={evidencePath(i, true)} target="_blank" rel="noreferrer">Proof Details</a>
+                        <a href={evidencePath(i, true)} target="_blank" rel="noreferrer">Open Proof in Clio</a>
                       </p>
                     ))
                   ) : (

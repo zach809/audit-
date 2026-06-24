@@ -212,8 +212,17 @@ export async function POST(request: NextRequest) {
       auditItemLabel: cleanText(issue.auditItemLabel, 120) || workflowLabel(stepCode),
       status: cleanText(issue.status, 120),
       reason: cleanText(issue.reason, 900),
+      reasonCode: cleanText(issue.reasonCode, 180),
+      operationalState: cleanText(issue.operationalState, 180),
       due: cleanText(issue.due, 100),
       found: cleanText(issue.found, 100),
+      evidenceSource: cleanText(issue.evidenceSource, 80),
+      evidenceRefId: cleanText(issue.evidenceRefId, 80),
+      savedProof: cleanText(issue.evidenceSource, 80) && cleanText(issue.evidenceRefId, 80)
+        ? `${cleanText(issue.evidenceSource, 80)} #${cleanText(issue.evidenceRefId, 80)}`
+        : "No saved proof reference for this flagged item.",
+      auditVersion: cleanText(issue.auditVersion, 160),
+      lastEvaluatedAt: cleanText(issue.lastEvaluatedAt, 120),
       proofUrl: cleanText(issue.proofUrl, 300),
     },
     workflowRule: {
@@ -245,6 +254,9 @@ export async function POST(request: NextRequest) {
     "You are CWCA's manual AI debugging chat for one selected audit issue.",
     "Answer the auditor's question directly. Keep it practical, short, and specific to this selected issue.",
     "Focus on: where CWCA looked, why it flagged, whether this could be a false positive, what exact proof to verify in Clio, and what app rule/date-window/linkage may need improvement.",
+    "Use the saved issue fields. Mention reasonCode, operationalState, due/found times, savedProof, auditVersion, and lastEvaluatedAt when they help explain the bug.",
+    "If the question asks how to improve the rule, answer with: 1) what CWCA knows from the saved row, 2) likely false-positive causes, 3) exact Clio proof to capture, 4) concrete matcher/date/linkage improvement.",
+    "If the context does not include candidate communication/calendar rows, say CWCA only has the saved audit row in this chat and the auditor should capture the exact subject/title/date/link from Clio.",
     "Use only the provided context. Do not invent evidence. If the auditor says they can see proof in Clio, explain what exact wording/date/link/type they should capture so CWCA can be tuned.",
     "Do not give legal advice. Do not write to Clio. Do not mark anything resolved.",
     "Use plain English. Prefer 3 to 6 short bullets. Avoid long disclaimers.",
