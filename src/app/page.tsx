@@ -508,10 +508,10 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 }
 
 type DashboardTab = "workspace" | "matters" | "case-manager" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
+const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
-  { id: "case-manager", label: "Case Manager Tasks", description: "Proof-based task clearing" },
   { id: "kpi", label: "KPI Score", description: "Weekly score and attorney view" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
@@ -879,14 +879,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     checked: allWorkspaceRows.filter((item) => item.row.stepCode === code).length,
   }));
   const maxWorkflowCount = Math.max(1, ...workflowAreaBreakdown.map((item) => item.followUp));
-  const kpiRows = allWorkspaceRows.filter((item) => item.row.status !== "Not Due Yet" && item.row.status !== "Pending");
+  const kpiRows = allWorkspaceRows.filter(
+    (item) =>
+      KPI_WORKFLOW_CODES.has(item.row.stepCode) &&
+      !["Not Due Yet", "Pending", "N/A", "Not Checked"].includes(item.row.status),
+  );
   const kpiTotal = kpiRows.length;
   const kpiFollowUp = kpiRows.filter((item) => isFollowUpStatus(item.row.status)).length;
-  const kpiResolved = kpiRows.filter((item) => isClosedByReview(item.row)).length;
-  const kpiOnTrack = kpiRows.filter((item) => item.row.status === "On Track").length + kpiResolved;
+  const kpiClear = Math.max(0, kpiTotal - kpiFollowUp);
+  const kpiOnTrack = kpiClear;
   const kpiLate = kpiRows.filter((item) => item.row.status === "Late").length;
   const kpiReview = kpiRows.filter((item) => REVIEW_STATUSES.has(item.row.status)).length;
-  const kpiScore = kpiTotal ? Math.max(0, Math.min(100, Math.round((kpiOnTrack / kpiTotal) * 100))) : 0;
+  const kpiScore = kpiTotal ? Math.max(0, Math.min(100, Math.round((kpiClear / kpiTotal) * 100))) : 0;
   const kpiGrade = kpiScore >= 90 ? "Strong" : kpiScore >= 75 ? "Watch" : "Needs Focus";
   const kpiAttorneyScores = Array.from(
     kpiRows.reduce((map, item) => {
@@ -899,9 +903,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .map(([attorney, rows]) => {
       const total = rows.length;
       const followUp = rows.filter((row) => isFollowUpStatus(row.status)).length;
-      const resolved = rows.filter(isClosedByReview).length;
-      const onTrack = rows.filter((row) => row.status === "On Track").length + resolved;
-      const score = total ? Math.max(0, Math.min(100, Math.round((onTrack / total) * 100))) : 0;
+      const clear = Math.max(0, total - followUp);
+      const score = total ? Math.max(0, Math.min(100, Math.round((clear / total) * 100))) : 0;
       const late = rows.filter((row) => row.status === "Late").length;
       const review = rows.filter((row) => REVIEW_STATUSES.has(row.status)).length;
       const needsAction = rows.filter((row) => row.status === "Missing").length;
@@ -912,17 +915,29 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           : late > 0
             ? "Timing"
             : "On track";
-      return { attorney, total, followUp, onTrack, score, late, review, needsAction, topArea };
+      return { attorney, total, followUp, onTrack: clear, score, late, review, needsAction, topArea };
     })
-    .sort((a, b) => a.score - b.score || b.followUp - a.followUp || a.attorney.localeCompare(b.attorney));
+    .sort((a, b) => b.followUp - a.followUp || a.score - b.score || a.attorney.localeCompare(b.attorney));
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
+  const kpiWorkflowFocus = WORKFLOW_COLUMNS
+    .filter(([code]) => KPI_WORKFLOW_CODES.has(code))
+    .map(([code, label]) => ({
+      code,
+      label,
+      followUp: kpiRows.filter((item) => item.row.stepCode === code && isFollowUpStatus(item.row.status)).length,
+      checked: kpiRows.filter((item) => item.row.stepCode === code).length,
+    }))
+    .filter((item) => item.followUp > 0)
+    .sort((a, b) => b.followUp - a.followUp || a.label.localeCompare(b.label));
+  const maxKpiWorkflowCount = Math.max(1, ...kpiWorkflowFocus.map((item) => item.followUp));
   const kpiReportLines = [
     `Weekly CWCA KPI Score Report`,
     `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
+    `KPI areas: Welcome Letter, Attorney Call, Court Date Added`,
     ``,
     `Overall score: ${kpiScore}% (${kpiGrade})`,
     `Checked workflow items: ${kpiTotal}`,
-    `On track or reviewed/resolved: ${kpiOnTrack}`,
+    `Clear items: ${kpiClear}`,
     `Still needs follow-up: ${kpiFollowUp}`,
     `Late timing items: ${kpiLate}`,
     `Needs review items: ${kpiReview}`,
@@ -1419,7 +1434,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Weekly Report</span>
               <h2>KPI Score</h2>
-              <p className="muted small">A simple weekly score based on audited workflow items in the selected date range.</p>
+              <p className="muted small">A simple weekly score for Welcome Letter, Attorney Call, and Court Date Added.</p>
             </div>
             <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
           </div>
@@ -1457,8 +1472,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </section>
 
         <section className="kpi-cards">
-          <div className="kpi-card"><span>Checked Items</span><strong>{kpiTotal}</strong><p>Due or completed items in range.</p></div>
-          <div className="kpi-card"><span>On Track / Resolved</span><strong>{kpiOnTrack}</strong><p>Clear or reviewed as resolved.</p></div>
+          <div className="kpi-card"><span>Checked Items</span><strong>{kpiTotal}</strong><p>Setup items due or completed this week.</p></div>
+          <div className="kpi-card"><span>Clear Items</span><strong>{kpiOnTrack}</strong><p>No current follow-up needed.</p></div>
           <div className="kpi-card attention"><span>Needs Follow-Up</span><strong>{kpiFollowUp}</strong><p>Items to verify or complete.</p></div>
           <div className="kpi-card"><span>Late Timing</span><strong>{kpiLate}</strong><p>Completed after target.</p></div>
         </section>
@@ -1468,7 +1483,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div className="panel-heading">
               <div>
                 <h2>Attorney Scoreboard</h2>
-                <p className="muted small">Sorted by lowest score first so the team knows where to start.</p>
+                <p className="muted small">Sorted by follow-up count so the team knows where to start.</p>
               </div>
             </div>
             {kpiAttorneyScores.length ? (
@@ -1501,17 +1516,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               </div>
             </div>
             <div className="workflow-area-bars">
-              {workflowAreaBreakdown.map((item) => (
+              {kpiWorkflowFocus.length ? kpiWorkflowFocus.map((item) => (
                 <div className="workflow-area-row" key={item.code}>
                   <div>
                     <strong>{item.label}</strong>
                     <small>{item.followUp} follow-up / {item.checked} checked</small>
                   </div>
                   <div className="workflow-track">
-                    <span style={{ width: item.followUp ? `${Math.max(3, Math.round((item.followUp / maxWorkflowCount) * 100))}%` : "0%" }} />
+                    <span style={{ width: `${Math.max(3, Math.round((item.followUp / maxKpiWorkflowCount) * 100))}%` }} />
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="workspace-empty">
+                  <strong>No KPI follow-up areas this week.</strong>
+                  <p>Welcome Letter, Attorney Call, and Court Date Added are clear for this date range.</p>
+                </div>
+              )}
             </div>
           </div>
         </section>

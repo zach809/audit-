@@ -146,6 +146,7 @@ Do not enable write permissions.
 - `CLIO_REDIRECT_URI`: OAuth callback URL.
 - `CLIO_BASE_URL`: `https://app.clio.com` for US.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
+- `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`, for example `Maria:strong-password,Juan:strong-password`.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.

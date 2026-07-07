@@ -29,6 +29,7 @@ export function appConfig() {
     clioBaseUrl: optionalEnv("CLIO_BASE_URL", "https://app.clio.com").replace(/\/$/, ""),
     dashboardPassword: optionalEnv("DASHBOARD_PASSWORD"),
     sessionSecret: optionalEnv("SESSION_SECRET", optionalEnv("TOKEN_ENCRYPTION_KEY", "dev-session-secret")),
+    caseManagerUsers: optionalEnv("CASE_MANAGER_USERS"),
     cronSecret: optionalEnv("CRON_SECRET"),
     tokenEncryptionKey: env("TOKEN_ENCRYPTION_KEY"),
     auditBatchSize: numberEnv("AUDIT_BATCH_SIZE", "5"),

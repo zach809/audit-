@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-case-manager-proof-tasks-2026-07-07";
+export const APP_VERSION = "cwca-independent-cm-portal-proof-recheck-2026-07-07";

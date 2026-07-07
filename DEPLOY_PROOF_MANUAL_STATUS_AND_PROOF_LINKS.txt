@@ -1,9 +1,16 @@
 CWCA update proof
 
 Version marker:
-cwca-case-manager-proof-tasks-2026-07-07
+cwca-independent-cm-portal-proof-recheck-2026-07-07
 
 What changed:
+- Added a separate /case-manager portal for case managers.
+- Case managers have their own login using CASE_MANAGER_USERS.
+- The auditor dashboard no longer shows the Case Manager Tasks tab.
+- Case managers can mark work complete, but CWCA immediately rechecks Clio before clearing the item.
+- If CWCA does not find proof in Clio, the item stays open and is saved as In Progress.
+- KPI Score now only measures Welcome Letter, Attorney Call, and Court Date Added.
+- KPI Score now uses a simple weekly clear-vs-follow-up score so 0 follow-up does not create a misleading low score.
 - Workflow Checks are now always visible on matter cards instead of hidden behind a dropdown.
 - Added a Case Manager Tasks tab where case managers can add what happened, their name, and a Clio proof link.
 - Resolved, No Action Needed, and Approved Exception decisions are now proof-locked.
