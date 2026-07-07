@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-communication-date-welcome-fix-2026-06-24";
+export const APP_VERSION = "cwca-weekly-kpi-postclosure-2026-only-2026-07-07";

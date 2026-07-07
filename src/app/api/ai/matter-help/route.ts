@@ -131,11 +131,11 @@ function guidanceForStep(stepCode: string) {
     },
     CLIENT_FOLLOWUP: {
       clioArea: "Communications tab",
-      expectedProof: "A firm response after inbound client messages so client follow-up does not build up unanswered.",
-      searchTips: "Open Communications and review the thread order: inbound client messages followed by outgoing firm response.",
+      expectedProof: "A current firm response after the latest inbound client messages, so the client does not have an unresolved follow-up buildup.",
+      searchTips: "Open Communications and review the most recent thread order. If the firm responded or called after the client messages, this should not remain a current follow-up risk.",
       ifProofExists: "If the firm responded, mark Resolved and note the response date/type.",
-      ifProofMissing: "If the client still has unanswered follow-up, keep Still Needs Follow-Up and ask the team to respond.",
-      possibleFalsePositive: "If CWCA counted non-client or duplicate inbound messages, note that so the communication matching can be tuned.",
+      ifProofMissing: "If the latest client messages still have no firm response after them, keep Still Needs Follow-Up and ask the team to respond.",
+      possibleFalsePositive: "If the client was contacted after the inbound messages, or if CWCA counted non-client/duplicate messages, note the exact response date/type so the rule can be tuned.",
     },
     WEEKLY_CLIENT_CHECKIN: {
       clioArea: "Calendar and Communications tabs",
@@ -256,6 +256,7 @@ export async function POST(request: NextRequest) {
     "Focus on: where CWCA looked, why it flagged, whether this could be a false positive, what exact proof to verify in Clio, and what app rule/date-window/linkage may need improvement.",
     "Use the saved issue fields. Mention reasonCode, operationalState, due/found times, savedProof, auditVersion, and lastEvaluatedAt when they help explain the bug.",
     "If the question asks how to improve the rule, answer with: 1) what CWCA knows from the saved row, 2) likely false-positive causes, 3) exact Clio proof to capture, 4) concrete matcher/date/linkage improvement.",
+    "For Client Follow-Up, explain that CWCA should care about the current unresolved inbound streak, not old inbound messages that were later answered. A later firm email/call should clear the risk.",
     "If the context does not include candidate communication/calendar rows, say CWCA only has the saved audit row in this chat and the auditor should capture the exact subject/title/date/link from Clio.",
     "Use only the provided context. Do not invent evidence. If the auditor says they can see proof in Clio, explain what exact wording/date/link/type they should capture so CWCA can be tuned.",
     "Do not give legal advice. Do not write to Clio. Do not mark anything resolved.",

@@ -6054,6 +6054,229 @@ th,
   }
 }
 
+/* Weekly KPI Score */
+.kpi-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.kpi-hero,
+.kpi-panel,
+.kpi-report-copy {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025)),
+    rgba(17, 28, 42, 0.78);
+  border: 1px solid rgba(222, 235, 248, 0.16);
+}
+
+.kpi-range-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto;
+  margin: 16px 0;
+}
+
+.kpi-range-form label {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 7px;
+  text-transform: uppercase;
+}
+
+.kpi-range-form input,
+.kpi-range-form select {
+  background: rgba(8, 13, 20, 0.92);
+  border: 1px solid rgba(222, 235, 248, 0.18);
+  border-radius: 12px;
+  color: var(--text);
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.kpi-score-row {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+}
+
+.kpi-score-ring {
+  align-items: center;
+  background:
+    radial-gradient(circle at center, rgba(17, 28, 42, 0.96) 0 58%, transparent 59%),
+    conic-gradient(#9fbfbc var(--score), rgba(222, 235, 248, 0.12) 0);
+  border: 1px solid rgba(222, 235, 248, 0.16);
+  border-radius: 999px;
+  display: grid;
+  flex: 0 0 126px;
+  height: 126px;
+  justify-items: center;
+  place-items: center;
+  width: 126px;
+}
+
+.kpi-score-ring span {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 950;
+}
+
+.kpi-score-copy strong {
+  color: var(--text);
+  display: block;
+  font-size: 26px;
+  margin-bottom: 4px;
+}
+
+.kpi-score-copy p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.kpi-cards {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.kpi-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(17, 28, 42, 0.78);
+  border: 1px solid rgba(222, 235, 248, 0.14);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.kpi-card.attention {
+  border-color: rgba(219, 151, 80, 0.42);
+}
+
+.kpi-card span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.kpi-card strong {
+  color: var(--text);
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.kpi-card p {
+  color: var(--muted);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.kpi-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+}
+
+.kpi-attorney-list {
+  display: grid;
+  gap: 10px;
+}
+
+.kpi-attorney-row {
+  align-items: center;
+  background: rgba(8, 13, 20, 0.42);
+  border: 1px solid rgba(222, 235, 248, 0.12);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(170px, 1fr) minmax(120px, 0.8fr) 52px 92px;
+  padding: 12px;
+}
+
+.kpi-attorney-row strong {
+  color: var(--text);
+  display: block;
+}
+
+.kpi-attorney-row span,
+.kpi-attorney-row small {
+  color: var(--muted);
+}
+
+.kpi-attorney-row b {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.kpi-mini-track {
+  background: rgba(222, 235, 248, 0.11);
+  border-radius: 999px;
+  height: 9px;
+  overflow: hidden;
+}
+
+.kpi-mini-track span {
+  background: linear-gradient(90deg, #7f8cff, #9fbfbc);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.kpi-report-copy summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+}
+
+.kpi-report-copy summary::-webkit-details-marker {
+  display: none;
+}
+
+.kpi-report-copy textarea {
+  background: rgba(8, 13, 20, 0.92);
+  border: 1px solid rgba(222, 235, 248, 0.16);
+  border-radius: 14px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  margin-top: 12px;
+  min-height: 220px;
+  padding: 14px;
+  width: 100%;
+}
+
+@media (max-width: 980px) {
+  .kpi-range-form,
+  .kpi-cards,
+  .kpi-grid,
+  .kpi-attorney-row {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-range-form button,
+  .kpi-range-form .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .kpi-score-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 /* Compact matter-card dropdown layout */
 .matter-dropdown {
   background:

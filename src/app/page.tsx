@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { CSSProperties } from "react";
 import { getDashboardData, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
@@ -420,6 +421,23 @@ function monthStartInput(date: Date): string {
   return `${today.slice(0, 8)}01`;
 }
 
+function weekStartInput(date: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: APP_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  const localNoon = new Date(`${parts.year}-${parts.month}-${parts.day}T12:00:00`);
+  const day = localNoon.getDay();
+  const daysFromMonday = (day + 6) % 7;
+  localNoon.setDate(localNoon.getDate() - daysFromMonday);
+  return dateInput(localNoon);
+}
+
 function filterLink(filters: Record<string, string>, next: Record<string, string>) {
   const params = new URLSearchParams({ ...filters, ...next });
   for (const [key, value] of Array.from(params.entries())) {
@@ -481,10 +499,11 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "post-closure" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
+  { id: "kpi", label: "KPI Score", description: "Weekly score and attorney view" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
   { id: "guide", label: "Guide", description: "How to read the results" },
@@ -632,14 +651,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const closureStageFilter = searchParams.closure_stage ?? "";
   const closureAttorneyFilter = searchParams.closure_attorney ?? "";
   const closureWindowFilter = searchParams.closure_window ?? "current";
+  const today = dateInput(new Date());
+  const weekStart = weekStartInput(new Date());
+  const monthStart = monthStartInput(new Date());
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
-    from: searchParams.from ?? "",
-    to: searchParams.to ?? "",
+    from: searchParams.from ?? (activeTab === "kpi" ? weekStart : ""),
+    to: searchParams.to ?? (activeTab === "kpi" ? today : ""),
   };
-  const today = dateInput(new Date());
-  const monthStart = monthStartInput(new Date());
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
   let postClosure: Awaited<ReturnType<typeof getPostClosureData>> | null = null;
@@ -837,6 +857,64 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     checked: allWorkspaceRows.filter((item) => item.row.stepCode === code).length,
   }));
   const maxWorkflowCount = Math.max(1, ...workflowAreaBreakdown.map((item) => item.followUp));
+  const kpiRows = allWorkspaceRows.filter((item) => item.row.status !== "Not Due Yet" && item.row.status !== "Pending");
+  const kpiTotal = kpiRows.length;
+  const kpiFollowUp = kpiRows.filter((item) => isFollowUpStatus(item.row.status)).length;
+  const kpiResolved = kpiRows.filter((item) => isClosedByReview(item.row)).length;
+  const kpiOnTrack = kpiRows.filter((item) => item.row.status === "On Track").length + kpiResolved;
+  const kpiLate = kpiRows.filter((item) => item.row.status === "Late").length;
+  const kpiReview = kpiRows.filter((item) => REVIEW_STATUSES.has(item.row.status)).length;
+  const kpiScore = kpiTotal ? Math.max(0, Math.min(100, Math.round((kpiOnTrack / kpiTotal) * 100))) : 0;
+  const kpiGrade = kpiScore >= 90 ? "Strong" : kpiScore >= 75 ? "Watch" : "Needs Focus";
+  const kpiAttorneyScores = Array.from(
+    kpiRows.reduce((map, item) => {
+      const rows = map.get(item.attorney) ?? [];
+      rows.push(item.row);
+      map.set(item.attorney, rows);
+      return map;
+    }, new Map<string, WorkspaceRow[]>()),
+  )
+    .map(([attorney, rows]) => {
+      const total = rows.length;
+      const followUp = rows.filter((row) => isFollowUpStatus(row.status)).length;
+      const resolved = rows.filter(isClosedByReview).length;
+      const onTrack = rows.filter((row) => row.status === "On Track").length + resolved;
+      const score = total ? Math.max(0, Math.min(100, Math.round((onTrack / total) * 100))) : 0;
+      const late = rows.filter((row) => row.status === "Late").length;
+      const review = rows.filter((row) => REVIEW_STATUSES.has(row.status)).length;
+      const needsAction = rows.filter((row) => row.status === "Missing").length;
+      const topArea = needsAction >= late && needsAction >= review && needsAction > 0
+        ? "Needs action"
+        : review >= late && review > 0
+          ? "Needs review"
+          : late > 0
+            ? "Timing"
+            : "On track";
+      return { attorney, total, followUp, onTrack, score, late, review, needsAction, topArea };
+    })
+    .sort((a, b) => a.score - b.score || b.followUp - a.followUp || a.attorney.localeCompare(b.attorney));
+  const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
+  const kpiReportLines = [
+    `Weekly CWCA KPI Score Report`,
+    `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
+    ``,
+    `Overall score: ${kpiScore}% (${kpiGrade})`,
+    `Checked workflow items: ${kpiTotal}`,
+    `On track or reviewed/resolved: ${kpiOnTrack}`,
+    `Still needs follow-up: ${kpiFollowUp}`,
+    `Late timing items: ${kpiLate}`,
+    `Needs review items: ${kpiReview}`,
+    ``,
+    `Attorney focus:`,
+    ...(kpiTopAttention.length
+      ? kpiTopAttention.map((item) => `- ${item.attorney}: ${item.score}% score, ${item.followUp} follow-up item(s), main area: ${item.topArea}`)
+      : ["- No attorney follow-up items in this date range."]),
+    ``,
+    `Suggested next step:`,
+    kpiFollowUp
+      ? `Open the Matters tab, filter to Needs Follow-Up, and verify the highest-priority proof links in Clio.`
+      : `No current weekly follow-up items are showing in this date range.`,
+  ].join("\n");
   const setupSnapshot = WORKFLOW_COLUMNS
     .filter(([code]) => workspaceFocusMatches(code, "initial-client-setup"))
     .map(([code, label]) => {
@@ -1312,6 +1390,127 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
       ) : null}
 
+      {activeTab === "kpi" ? (
+      <section className="kpi-layout">
+        <section className="panel kpi-hero">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Weekly Report</span>
+              <h2>KPI Score</h2>
+              <p className="muted small">A simple weekly score based on audited workflow items in the selected date range.</p>
+            </div>
+            <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
+          </div>
+          <form className="kpi-range-form" action="/" method="get">
+            <input type="hidden" name="tab" value="kpi" />
+            <label>
+              From
+              <input name="from" type="date" defaultValue={filters.from || weekStart} />
+            </label>
+            <label>
+              To
+              <input name="to" type="date" defaultValue={filters.to || today} />
+            </label>
+            <label>
+              Attorney
+              <select name="attorney" defaultValue={filters.attorney}>
+                <option value="">All attorneys</option>
+                {dashboardData.attorneys.map((a) => (
+                  <option key={a.id ?? "none"} value={a.id ?? ""}>{a.name || "Unassigned"} ({a.count})</option>
+                ))}
+              </select>
+            </label>
+            <button className="primary" type="submit">Update Score</button>
+            <a className="button" href={filterLink({ tab: "kpi" }, { from: weekStart, to: today })}>This Week</a>
+          </form>
+          <div className="kpi-score-row">
+            <div className="kpi-score-ring" style={{ "--score": `${kpiScore * 3.6}deg` } as CSSProperties}>
+              <span>{kpiScore}%</span>
+            </div>
+            <div className="kpi-score-copy">
+              <strong>{kpiGrade}</strong>
+              <p>{kpiFollowUp ? `${kpiFollowUp} workflow item${kpiFollowUp === 1 ? "" : "s"} still need follow-up this week.` : "No current weekly follow-up items are showing."}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="kpi-cards">
+          <div className="kpi-card"><span>Checked Items</span><strong>{kpiTotal}</strong><p>Due or completed items in range.</p></div>
+          <div className="kpi-card"><span>On Track / Resolved</span><strong>{kpiOnTrack}</strong><p>Clear or reviewed as resolved.</p></div>
+          <div className="kpi-card attention"><span>Needs Follow-Up</span><strong>{kpiFollowUp}</strong><p>Items to verify or complete.</p></div>
+          <div className="kpi-card"><span>Late Timing</span><strong>{kpiLate}</strong><p>Completed after target.</p></div>
+        </section>
+
+        <section className="kpi-grid">
+          <div className="panel kpi-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Attorney Scoreboard</h2>
+                <p className="muted small">Sorted by lowest score first so the team knows where to start.</p>
+              </div>
+            </div>
+            {kpiAttorneyScores.length ? (
+              <div className="kpi-attorney-list">
+                {kpiAttorneyScores.map((item) => (
+                  <div className="kpi-attorney-row" key={item.attorney}>
+                    <div>
+                      <strong>{item.attorney}</strong>
+                      <span>{item.topArea}</span>
+                    </div>
+                    <div className="kpi-mini-track"><span style={{ width: `${item.score}%` }} /></div>
+                    <b>{item.score}%</b>
+                    <small>{item.followUp} follow-up</small>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="workspace-empty">
+                <strong>No KPI data in this range yet.</strong>
+                <p>Run an audit batch or choose a date range with audited matters.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="panel kpi-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Workflow Focus</h2>
+                <p className="muted small">Areas creating the most follow-up this week.</p>
+              </div>
+            </div>
+            <div className="workflow-area-bars">
+              {workflowAreaBreakdown.map((item) => (
+                <div className="workflow-area-row" key={item.code}>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <small>{item.followUp} follow-up / {item.checked} checked</small>
+                  </div>
+                  <div className="workflow-track">
+                    <span style={{ width: item.followUp ? `${Math.max(3, Math.round((item.followUp / maxWorkflowCount) * 100))}%` : "0%" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <details className="panel kpi-report-copy">
+          <summary>
+            <div>
+              <span className="label">Copy-Ready</span>
+              <h3>Weekly KPI summary for Teams</h3>
+              <p className="muted small">Open when you want a short note to paste to the team.</p>
+            </div>
+            <span className="summary-action">Open Summary</span>
+          </summary>
+          <div className="post-closure-note-toolbar">
+            <CopyTextButton targetId="kpi-weekly-report" label="Copy KPI Report" />
+          </div>
+          <textarea id="kpi-weekly-report" readOnly rows={Math.min(16, Math.max(8, kpiReportLines.split("\n").length + 1))} defaultValue={kpiReportLines} />
+        </details>
+      </section>
+      ) : null}
+
       {activeTab === "post-closure" ? (
       <section className="post-closure-layout">
         <section className="panel post-closure-hero">
@@ -1319,8 +1518,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Closed Matter Follow-Up</span>
               <h2>Post-Closure Client Follow-Up</h2>
-              <p className="muted small">Internal reminders for 1-month, 6-month, and 12-month client satisfaction calls after a matter closes.</p>
+              <p className="muted small">Internal reminders for 1-month, 6-month, and 12-month client satisfaction calls after a matter closes. This view only shows matters closed in 2026.</p>
             </div>
+            <span className="badge Pending">2026 only</span>
             <form action="/api/post-closure/sync" method="post">
               <button className="primary" type="submit">Refresh Closed Matters</button>
             </form>
@@ -1394,7 +1594,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </label>
             <button className="primary" type="submit">Show Results</button>
             <a className="button" href="/?tab=post-closure">Reset</a>
-            <p>Current Window shows reminders due recently or coming up soon. Use Older Backlog only when you want old clean-up items.</p>
+            <p>Current Window shows 2026 closed-matter reminders due recently or coming up soon. Use Older Backlog only when you want older 2026 clean-up items.</p>
           </form>
 
           <details className="post-closure-team-note">

@@ -576,19 +576,32 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   );
 
   const unknownDirection = evidence.communications.some((comm) => isOutbound(comm, record.client_id) === null);
-  const inboundStreak = evidence.communications
+  const followUpState = evidence.communications
     .map((comm) => ({ comm, at: commDate(comm), direction: isOutbound(comm, record.client_id) }))
     .filter((entry) => entry.at)
     .sort((a, b) => a.at!.getTime() - b.at!.getTime())
     .reduce(
       (state, entry) => {
-        if (entry.direction === false) state.streak += 1;
-        if (entry.direction === true) state.streak = 0;
-        state.max = Math.max(state.max, state.streak);
+        if (entry.direction === false) {
+          state.unansweredInboundCount += 1;
+          state.firstUnansweredInboundAt ??= entry.at!;
+          state.lastInboundAt = entry.at!;
+        }
+        if (entry.direction === true) {
+          state.unansweredInboundCount = 0;
+          state.firstUnansweredInboundAt = null;
+          state.lastFirmResponseAt = entry.at!;
+        }
         return state;
       },
-      { streak: 0, max: 0 },
+      {
+        unansweredInboundCount: 0,
+        firstUnansweredInboundAt: null as Date | null,
+        lastInboundAt: null as Date | null,
+        lastFirmResponseAt: null as Date | null,
+      },
     );
+  const currentClientFollowUpRisk = followUpState.unansweredInboundCount >= 2;
 
   const items: AuditItemResult[] = [
     classify("SETUP_WELCOME", welcomeEvidence, setup.twoBusinessHours, {
@@ -629,8 +642,15 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     postCourtCallItem,
     commError
       ? base("CLIENT_FOLLOWUP", "Unknown", "Unknown", null, null, commError)
-      : inboundStreak.max >= 2
-      ? base("CLIENT_FOLLOWUP", "Missing", "Client Follow-Up Risk", null, null, "TWO_INBOUND_BEFORE_RESPONSE")
+      : currentClientFollowUpRisk
+      ? base(
+          "CLIENT_FOLLOWUP",
+          "Missing",
+          "Client Follow-Up Risk",
+          followUpState.firstUnansweredInboundAt,
+          null,
+          "CURRENT_UNANSWERED_CLIENT_MESSAGES",
+        )
       : base("CLIENT_FOLLOWUP", unknownDirection ? "Unknown" : "On Time", unknownDirection ? "Unknown" : "No Risk", null, null, unknownDirection ? "DIRECTION_UNCLEAR" : null),
     weeklyCheckInItem,
   ];
