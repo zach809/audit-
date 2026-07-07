@@ -19,6 +19,10 @@ type MatterReviewControlsProps = {
   currentNote?: string | null;
   currentNextStep?: string | null;
   currentReviewedBy?: string | null;
+  currentCaseManagerName?: string | null;
+  currentProofReference?: string | null;
+  existingProofUrl?: string | null;
+  mode?: "auditor" | "case-manager";
 };
 
 function suggestedNextStep(decision: ReviewDecision): ReviewNextStep {
@@ -39,6 +43,10 @@ export function MatterReviewControls({
   currentNote,
   currentNextStep,
   currentReviewedBy,
+  currentCaseManagerName,
+  currentProofReference,
+  existingProofUrl,
+  mode = "auditor",
 }: MatterReviewControlsProps) {
   const router = useRouter();
   const initialDecision = useMemo(() => normalizeReviewDecision(currentDecision), [currentDecision]);
@@ -50,6 +58,8 @@ export function MatterReviewControls({
   const [note, setNote] = useState(currentNote ?? "");
   const [nextStep, setNextStep] = useState<ReviewNextStep>(initialNextStep);
   const [reviewedBy, setReviewedBy] = useState(currentReviewedBy ?? "");
+  const [caseManagerName, setCaseManagerName] = useState(currentCaseManagerName ?? "");
+  const [proofReference, setProofReference] = useState(currentProofReference ?? "");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -69,11 +79,12 @@ export function MatterReviewControls({
           resultsDetails: note,
           note,
           proofType: "Clio Check",
-          proofReference: "",
+          proofReference,
           nextStep,
           reportSummary: note,
           internalNotes: "",
           includeInReport: true,
+          caseManagerName,
           reviewedBy,
         }),
       });
@@ -99,7 +110,8 @@ export function MatterReviewControls({
           <strong>Auditor Status</strong>
           <span>{hasReview ? decision : "Not reviewed yet"}</span>
           {hasReview && note ? <small>{note}</small> : null}
-          {!hasReview ? <small>Click to add the auditor decision.</small> : null}
+          {!hasReview ? <small>{mode === "case-manager" ? "Add what was done and a Clio proof link." : "Click to add the auditor decision."}</small> : null}
+          {mode === "case-manager" ? <small>Resolved items require Clio proof. CWCA will not clear this from a note alone.</small> : null}
           {message ? <small className={saveState === "error" ? "error" : "success"}>{message}</small> : null}
         </div>
         <button className="matter-review-toggle" type="button" onClick={() => setExpanded((value) => !value)}>
@@ -138,11 +150,24 @@ export function MatterReviewControls({
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder={`Example: ${auditItemLabel} was checked in Clio and the item was resolved.`}
+              placeholder={`Example: ${auditItemLabel} was completed in Clio. Proof link pasted below.`}
               rows={3}
             />
           </label>
+          <label>
+            Clio Proof Link
+            <input
+              value={proofReference}
+              onChange={(event) => setProofReference(event.target.value)}
+              placeholder={existingProofUrl ? "CWCA already has saved Clio proof for this item." : "Paste the Clio communication, calendar, or matter link"}
+            />
+            <small>{existingProofUrl ? "Saved CWCA proof exists. Add a link here only if you want to point to newer proof." : "Required before this can be marked Resolved, No Action Needed, or Approved Exception."}</small>
+          </label>
           <div className="matter-review-footer">
+            <label>
+              Case Manager
+              <input value={caseManagerName} onChange={(event) => setCaseManagerName(event.target.value)} placeholder="Name" />
+            </label>
             <label>
               Reviewed By
               <input value={reviewedBy} onChange={(event) => setReviewedBy(event.target.value)} placeholder="Name" />

@@ -95,6 +95,11 @@ type WorkspaceRow = {
   reviewHistory?: unknown;
 };
 
+type CaseManagerTask = {
+  attorney: string;
+  row: WorkspaceRow;
+};
+
 function evidencePath(item: DashboardItem, directToClio = false): string {
   const suffix = directToClio ? "?open=clio" : "";
   if (item.evidenceRefId && item.evidenceSource === "Communication") return `/evidence/communications/${item.evidenceRefId}${suffix}`;
@@ -366,6 +371,9 @@ function problemList(context: { matterId: string; matterNumber: string; clientNa
               currentNote={item.reviewNote}
               currentNextStep={item.nextStep}
               currentReviewedBy={item.reviewedBy}
+              currentCaseManagerName={item.caseManagerName}
+              currentProofReference={item.reviewProofReference}
+              existingProofUrl={href || null}
             />
             <MatterAiHelp
               matterId={context.matterId}
@@ -499,10 +507,11 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "case-manager" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
+  { id: "case-manager", label: "Case Manager Tasks", description: "Proof-based task clearing" },
   { id: "kpi", label: "KPI Score", description: "Weekly score and attorney view" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
@@ -775,6 +784,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .filter((item) => isFollowUpStatus(item.row.status))
     .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
     .slice(0, 8);
+  const caseManagerTasks: CaseManagerTask[] = allWorkspaceRows
+    .filter((item) => isFollowUpStatus(item.row.status) && !isClosedByReview(item.row))
+    .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName));
+  const caseManagerOpen = caseManagerTasks.filter((item) => !item.row.reviewDecision || item.row.reviewDecision === "Needs Review").length;
+  const caseManagerInProgress = caseManagerTasks.filter((item) => item.row.reviewDecision === "In Progress").length;
+  const caseManagerProofNeeded = caseManagerTasks.filter((item) => !item.row.evidenceRefId && !item.row.reviewProofReference).length;
+  const caseManagerTeamsNote = [
+    "Hey team - these CWCA items need case-manager follow-up.",
+    "Please update the item in Clio first, then paste the Clio proof link in CWCA.",
+    "CWCA will not clear resolved tasks from a note alone.",
+    "",
+    ...caseManagerTasks.slice(0, 40).map((item) => `- ${item.row.clientName} (${item.row.matterNumber}) - ${workflowLabel(item.row.stepCode)} - ${displayAuditStatus(item.row.status)} - ${clioMatterPath(item.row.matterId)}`),
+  ].join("\n");
   const initialClientSetupRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "initial-client-setup"));
   const initialClientSetupFollowUp = initialClientSetupRows.filter((item) => isFollowUpStatus(item.row.status)).length;
   const initialClientSetupTotal = initialClientSetupRows.length;
@@ -2007,6 +2029,86 @@ Items Still Needing Action
       </section>
       ) : null}
 
+      {activeTab === "case-manager" ? (
+      <section className="case-manager-layout">
+        <section className="panel case-manager-hero">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Case Manager Workspace</span>
+              <h2>Clear Tasks With Clio Proof</h2>
+              <p className="muted small">Case managers can explain what happened, but a task only clears when there is proof in Clio or a Clio proof link is pasted.</p>
+            </div>
+            <span className="badge Pending">{caseManagerTasks.length} tasks</span>
+          </div>
+          <div className="case-manager-stats">
+            <div><span>Open</span><strong>{caseManagerOpen}</strong></div>
+            <div><span>In Progress</span><strong>{caseManagerInProgress}</strong></div>
+            <div><span>Needs Proof</span><strong>{caseManagerProofNeeded}</strong></div>
+          </div>
+          <details className="case-manager-note">
+            <summary>
+              <span>Copy Teams message</span>
+              <b>Open</b>
+            </summary>
+            <div className="post-closure-note-toolbar">
+              <CopyTextButton targetId="case-manager-teams-note" label="Copy Message" />
+            </div>
+            <textarea id="case-manager-teams-note" readOnly rows={Math.min(14, Math.max(7, caseManagerTeamsNote.split("\n").length + 1))} defaultValue={caseManagerTeamsNote} />
+          </details>
+        </section>
+
+        <section className="case-manager-task-list">
+          {caseManagerTasks.length ? (
+            caseManagerTasks.map((item) => {
+              const href = evidencePath(item.row as DashboardItem, true);
+              return (
+                <article className={`panel case-manager-task status-row-${statusClass(item.row.status)}`} key={`${item.row.matterId}-${item.row.stepCode}`}>
+                  <div className="case-manager-task-head">
+                    <div>
+                      <span className="label">{workflowLabel(item.row.stepCode)}</span>
+                      <h3>{item.row.clientName}</h3>
+                      <p>{item.row.matterNumber}</p>
+                    </div>
+                    <div>
+                      <span className="label">Attorney</span>
+                      <strong>{item.attorney}</strong>
+                    </div>
+                    <div>
+                      <span className="label">Status</span>
+                      {badge(currentItemStatus(item.row))}
+                    </div>
+                    <div className="case-manager-task-actions">
+                      <a className="button compact primary" href={clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Open in Clio</a>
+                      {href ? <a className="button compact" href={href} target="_blank" rel="noreferrer">Saved Proof</a> : null}
+                    </div>
+                  </div>
+                  <p className="case-manager-task-reason">{actionFor(item.row.stepCode, item.row.status, item.row.reasonCode)}</p>
+                  <MatterReviewControls
+                    matterId={item.row.matterId}
+                    stepCode={item.row.stepCode}
+                    auditItemLabel={workflowLabel(item.row.stepCode)}
+                    currentDecision={item.row.reviewDecision}
+                    currentNote={item.row.reviewNote}
+                    currentNextStep={item.row.nextStep}
+                    currentReviewedBy={item.row.reviewedBy}
+                    currentCaseManagerName={item.row.caseManagerName}
+                    currentProofReference={item.row.reviewProofReference}
+                    existingProofUrl={href || null}
+                    mode="case-manager"
+                  />
+                </article>
+              );
+            })
+          ) : (
+            <section className="panel workspace-empty">
+              <strong>No case-manager tasks need follow-up right now.</strong>
+              <p>When CWCA finds items that need attention, they will show here with proof-based clearing controls.</p>
+            </section>
+          )}
+        </section>
+      </section>
+      ) : null}
+
       {activeTab === "matters" ? (
       <section className="matter-list">
         {dashboardData.matters.length ? dashboardData.matters.map((m) => {
@@ -2079,14 +2181,11 @@ Items Still Needing Action
                   <span>The saved result is from an older incomplete API run, so it is not proof of undone work yet.</span>
                 </div>
               ) : (
-                <details className="matter-dropdown workflow-dropdown">
-                  <summary>
-                    <span>
-                      <span className="label">Workflow Checks</span>
-                      <strong>{attentionItems.length ? `${attentionItems.length} items need follow-up` : "View all workflow check results"}</strong>
-                    </span>
-                    <span className="dropdown-pill" aria-hidden="true" />
-                  </summary>
+                <section className="workflow-always-visible">
+                  <div className="workflow-always-head">
+                    <span className="label">Workflow Checks</span>
+                    <strong>{attentionItems.length ? `${attentionItems.length} item${attentionItems.length === 1 ? "" : "s"} need follow-up` : "All workflow checks visible"}</strong>
+                  </div>
                   <div className="step-grid">
                     {WORKFLOW_COLUMNS.map(([code, label]) => (
                       <div className="step-block" key={code}>
@@ -2095,7 +2194,7 @@ Items Still Needing Action
                       </div>
                     ))}
                   </div>
-                </details>
+                </section>
               )}
 
               <div className={`matter-compact-sections ${attentionItems.length ? "" : "evidence-only"}`}>

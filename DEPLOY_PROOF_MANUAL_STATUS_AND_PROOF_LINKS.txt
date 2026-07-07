@@ -1,9 +1,13 @@
 CWCA update proof
 
 Version marker:
-cwca-weekly-kpi-postclosure-2026-only-2026-07-07
+cwca-case-manager-proof-tasks-2026-07-07
 
 What changed:
+- Workflow Checks are now always visible on matter cards instead of hidden behind a dropdown.
+- Added a Case Manager Tasks tab where case managers can add what happened, their name, and a Clio proof link.
+- Resolved, No Action Needed, and Approved Exception decisions are now proof-locked.
+- CWCA refuses to clear a task unless saved Clio proof already exists or a Clio proof link is pasted.
 - Added a KPI Score tab for a weekly score report.
 - KPI Score defaults to the current week and includes date range controls.
 - KPI Score shows overall score, checked items, on-track/resolved items, follow-up items, late timing, attorney scoreboard, workflow focus, and a copy-ready Teams summary.
