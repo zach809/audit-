@@ -1,9 +1,17 @@
 CWCA update proof
 
 Version marker:
-cwca-independent-cm-portal-proof-recheck-2026-07-07
+cwca-false-positive-pending-deadline-cleanup-2026-07-07
 
 What changed:
+- Not Due Yet items now show the saved escalation deadline when available.
+- Pending items stay quiet until the deadline passes, then become follow-up automatically on recheck.
+- The pending filter now says Not Due Yet for clearer staff wording.
+- Late items now show as Timing Review instead of looking like missing work.
+- Late items no longer count as Needs Follow-Up tasks.
+- If proof exists in Clio but happened after the goal, reports explain it as timing, not missing proof.
+- Added exact phone-call naming patterns from the screenshots, including SB-Phone Call and IC/PhoneCall styles.
+- Updated the AI helper so Late items are explained as proof found after the goal, not as matcher failures.
 - Added a separate /case-manager portal for case managers.
 - Case managers have their own login using CASE_MANAGER_USERS.
 - The auditor dashboard no longer shows the Case Manager Tasks tab.
@@ -12,7 +20,6 @@ What changed:
 - KPI Score now only measures Welcome Letter, Attorney Call, and Court Date Added.
 - KPI Score now uses a simple weekly clear-vs-follow-up score so 0 follow-up does not create a misleading low score.
 - Workflow Checks are now always visible on matter cards instead of hidden behind a dropdown.
-- Added a Case Manager Tasks tab where case managers can add what happened, their name, and a Clio proof link.
 - Resolved, No Action Needed, and Approved Exception decisions are now proof-locked.
 - CWCA refuses to clear a task unless saved Clio proof already exists or a Clio proof link is pasted.
 - Added a KPI Score tab for a weekly score report.

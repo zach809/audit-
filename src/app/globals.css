@@ -7157,6 +7157,12 @@ th,
   text-align: center;
 }
 
+.Timing-Review {
+  background: var(--amber-soft);
+  border-color: rgba(255, 149, 0, 0.28);
+  color: var(--amber);
+}
+
 @media (max-width: 760px) {
   .cm-login-shell,
   .cm-portal-shell {

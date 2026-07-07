@@ -241,7 +241,7 @@ function matterCardStatus(items: DashboardItem[], fallback: string): string {
   const activeItems = items.filter(itemNeedsAttention);
   if (activeItems.some((item) => item.status === "Missing")) return "Needs Follow-Up";
   if (activeItems.some((item) => item.status === "Unknown")) return "Needs Review";
-  if (activeItems.some((item) => item.status === "Late")) return "Late";
+  if (activeItems.some((item) => item.status === "Late")) return "Timing Review";
   if (items.some(isClosedByReview)) return "Resolved";
   if (items.some((item) => item.status === "Pending")) return "Not Due Yet";
   return displayAuditStatus(fallback);
@@ -250,8 +250,8 @@ function matterCardStatus(items: DashboardItem[], fallback: string): string {
 function stepDetail(item: DashboardItem | undefined, status: string): string {
   if (!item) return status === "Pending" ? "Waiting for audit" : "";
   if (status === "Pending") {
-    if (item.operationalState && item.operationalState !== "Pending") return item.operationalState;
-    if (item.deadlineAt) return `Due: ${formatLocal(item.deadlineAt)}`;
+    const state = item.operationalState && item.operationalState !== "Pending" ? item.operationalState : "Not due yet";
+    if (item.deadlineAt) return `${state}. Escalates after ${formatLocal(item.deadlineAt)}`;
     return "Not due yet";
   }
   if (status === "Missing") {
@@ -261,7 +261,8 @@ function stepDetail(item: DashboardItem | undefined, status: string): string {
     return isGenericApiError(item.reasonCode) ? "Click Recheck Matter" : isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
   }
   if (status === "Late") {
-    return isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
+    if (item.evidenceAt) return `Found: ${formatLocal(item.evidenceAt)}`;
+    return isInternalPlaceholder(item.reasonCode) ? "Proof found after target time" : item.reasonCode ?? "";
   }
   return "";
 }
@@ -297,7 +298,7 @@ function problemText(item: DashboardItem): string {
     late: "Evidence was found late.",
   };
   if (item.status === "Missing") return `${info.missing} ${info.action}`;
-  if (item.status === "Late") return info.late;
+  if (item.status === "Late") return `${info.late} Proof exists in Clio; this is a timing review, not a missing-proof task.`;
   if (item.status === "Unknown") {
     if (isLegacyWelcomeReview(item)) {
       return "Welcome letter communication was not confirmed in Clio. Check or send the Welcome Letter / Carta de bienvenida / Welcome to Hirsch Law Group template.";
@@ -325,9 +326,18 @@ function problemList(context: { matterId: string; matterNumber: string; clientNa
     if (reviewed) {
       return <p>The flagged items on this matter have been reviewed in CWCA. No open follow-up is showing on this card right now.</p>;
     }
-    return pending ? (
-      <p>No problem yet. These steps are still pending because the deadline has not passed or the matter has not needed that step yet.</p>
-    ) : (
+    if (pending) {
+      const nextPending = items
+        .filter((item) => item.status === "Pending" && item.deadlineAt)
+        .sort((a, b) => new Date(a.deadlineAt!).getTime() - new Date(b.deadlineAt!).getTime())[0];
+      return (
+        <p>
+          No problem yet. Pending items stay quiet until their deadline passes.
+          {nextPending ? ` Next escalation: ${workflowLabel(nextPending.stepCode)} after ${formatLocal(nextPending.deadlineAt)}.` : ""}
+        </p>
+      );
+    }
+    return (
       <p>No problems found for this matter.</p>
     );
   }
@@ -538,7 +548,7 @@ const WORKSPACE_STATUS_FILTERS = [
   { id: "missing", label: "Needs Action" },
   { id: "review", label: "Needs Review" },
   { id: "late", label: "Late" },
-  { id: "pending", label: "Pending" },
+  { id: "pending", label: "Not Due Yet" },
   { id: "all", label: "All Items" },
 ];
 
@@ -1106,7 +1116,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="grid">
         <div className="stat focus-stat stat-red"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Items that need action, timing review, or verification.</p></div>
         <div className="stat stat-green"><span>On Track</span><strong>{dashboardData.summary.pass}</strong><p>No current workflow problems found.</p></div>
-        <div className="stat stat-blue"><span>Not Due Yet</span><strong>{dashboardData.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
+        <div className="stat stat-blue"><span>Not Due Yet</span><strong>{dashboardData.summary.pending}</strong><p>These will escalate automatically after their saved deadline.</p></div>
         <div className="stat stat-purple"><span>Needs Review</span><strong>{dashboardData.summary.review}</strong><p>Check visibility before coaching.</p></div>
         <div className="stat stat-amber"><span>Late Timing</span><strong>{dashboardData.summary.late}</strong><p>Evidence was found after the goal.</p></div>
         <div className="stat stat-slate"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>

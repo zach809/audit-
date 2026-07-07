@@ -872,7 +872,7 @@ function matterActionItem(stepCode: string): string {
 function alertDescription(row: ActionCsvRow): string {
   const status = String(row.item_status ?? "");
   const area = workflowLabel(row.step_code);
-  if (status === "Late") return `Alert: ${area} was completed after the expected timeframe.`;
+  if (status === "Late") return `Timing Review: ${area} was completed after the expected timeframe.`;
   if (status === "Unknown") return `Flagged Matter: ${area} could not be confirmed from the available Clio proof.`;
   return `Alert: ${area} was not completed within the required timeframe.`;
 }
@@ -881,7 +881,7 @@ function whatHappened(row: ActionCsvRow): string {
   const status = String(row.item_status ?? "");
   const area = workflowLabel(row.step_code);
   if (status === "Late") {
-    return `${area} was found, but it appears to have happened after the target time.`;
+    return `${area} proof was found in Clio, but it appears to have happened after the target time.`;
   }
   if (status === "Unknown") {
     return `${area} needs review because CWCA could not clearly confirm the proof from Clio.`;
