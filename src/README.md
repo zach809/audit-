@@ -5,7 +5,8 @@ Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA 
 ## What It Does
 
 - Pulls Clio matters, communications, and calendar entries through read-only API calls.
-- Excludes Closed matters.
+- Excludes Closed matters from active audit views.
+- Provides a separate Post-Closure tab for closed-matter client follow-up reminders.
 - Groups the dashboard by the matter's responsible attorney.
 - Applies Monday-Friday, 8 AM-5 PM America/Chicago deadline rules.
 - Tracks setup, client contact, appearance filing, court results, post-court calls, and client follow-up risks.
@@ -13,21 +14,59 @@ Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA 
 - Provides manual refresh, Vercel Cron refresh, filters, historical metrics, and CSV export.
 - Provides a Case Manager action CSV named `cwca-case-manager-action-report.csv`.
 - Provides a Notepad-friendly Case Manager to-do list named `cwca-case-manager-to-do-list.txt`.
+- Optionally drafts plain-English review wording and single-issue AI help when `OPENAI_API_KEY` is configured.
 
-No AI is used.
+## Post-Closure Follow-Up
+
+The Post-Closure tab is an internal reminder queue for closed matters. It reads closed matters from Clio and creates follow-up touchpoints at:
+
+- 1 month after closure.
+- 6 months after closure.
+- 12 months after closure.
+
+Each reminder is an opportunity for staff to call the client, confirm satisfaction, identify unresolved concerns, and note any billing, document, new legal issue, or supervision concern. The app does not send client messages and does not update Clio.
+
+Stored locally for this feature:
+
+- Matter ID and matter number.
+- Client name.
+- Responsible attorney.
+- Matter close date.
+- Follow-up due date and stage.
+- Staff-entered follow-up status, contact method, issue type, note, reviewer, and completion date.
+
+## Optional Manual AI Help
+
+CWCA can use AI only when an auditor clicks a button. It does not run during audit batches, page loads, or bulk matter review.
+
+The matter card can show a small **Ask CWCA AI** chat box on a single flagged issue. The Reports review builder can also use **Draft with AI** to draft plain-English Results Details, Report Summary, and a Teams message for the selected flagged matter. These are helper features only:
+
+- It does not write to Clio.
+- It does not save the review automatically.
+- It does not decide whether an item is compliant.
+- It uses only selected audit metadata and auditor-entered notes.
+- It should be reviewed by a human before saving or sending.
+- AI does not bulk-analyze every matter automatically.
+- AI does not repair logic automatically.
+
+To use the helper, set `OPENAI_API_KEY` and optionally `AI_MODEL`. The default model is `gpt-4o-mini` because it keeps these short manual helper prompts low-cost.
+
+If the OpenAI key is not configured, CWCA still works normally and shows a clear AI-not-configured message.
 
 ## Current Workflow Rules
 
 CWCA checks open matters using Illinois business time: Monday-Friday, 8:00 AM-5:00 PM America/Chicago. After-hours and weekend items roll into business-time handling so the audit is less strict than a plain clock timer.
 
-- Welcome Packet: welcome letter / bienvenida communication sent within 1 business hour of a new matter being created.
+- Welcome Letter: welcome letter / bienvenida communication sent within 2 business hours of a new matter being created.
 - Attorney Call: attorney/client call calendar event scheduled within 1 business hour of a new matter being created.
 - Court Date Added: court, hearing, status, or continuance calendar event added within 1 business hour when the court date is known.
 - Client Contact: outgoing client contact completed by the next business day at 5:00 PM.
-- Appearance Filed: appearance filing notification or template evidence completed by the second business day at 5:00 PM.
+- Appearance Filed: appearance filing notification or template evidence checked after 48 hours from matter creation, skipping non-business days.
 - Court Results: court result communication sent by the next business day at 5:00 PM after court.
 - Post-Court Call: post-court attorney/client call scheduled by the next business day at 5:00 PM after court when the case continues.
 - Client Follow-Up: flags when 2 or more inbound client messages appear before a firm response.
+
+Template proof is checked from matter-linked Clio Communications. CWCA looks at the email subject line for templates like Welcome Letter, Carta de bienvenida, Welcome to Hirsch Law Group, Court Appearance Has Been Filed Notification, and Court Result / Resultado messages.
 
 ## Compliance And Data Handling
 
@@ -41,6 +80,7 @@ Stored locally:
 - Workflow timestamps and statuses.
 - Evidence IDs and proof links.
 - Audit-run history.
+- Post-closure follow-up reminder metadata and staff-entered follow-up notes.
 - Encrypted OAuth tokens.
 
 Not stored locally:
@@ -50,6 +90,8 @@ Not stored locally:
 - Document contents.
 - Billing data.
 - Payment data.
+
+For AI help, CWCA sends only the selected matter/audit-item metadata and auditor-entered notes needed for that one request. It does not send stored communication bodies, note text, document contents, billing data, or payment data.
 
 Retention defaults:
 
@@ -104,6 +146,7 @@ Do not enable write permissions.
 - `CLIO_REDIRECT_URI`: OAuth callback URL.
 - `CLIO_BASE_URL`: `https://app.clio.com` for US.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
+- `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`. Current default CM setup uses the listed Hirsch emails with password `Hirsch12345678`.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.
@@ -114,6 +157,8 @@ Do not enable write permissions.
 - `AUDIT_RUN_RETENTION_DAYS`: audit-run history retention. Default `90`.
 - `AUDIT_METRIC_RETENTION_DAYS`: monthly snapshot retention. Default `365`.
 - `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
+- `OPENAI_API_KEY`: optional OpenAI API key for manual AI help.
+- `AI_MODEL`: optional OpenAI model name. Default `gpt-4o-mini`.
 
 ## Notes
 

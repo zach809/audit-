@@ -1,14 +1,17 @@
-import { addBusinessDaysDeadline, effectiveIntake, setupDeadlines } from "./business-time";
+import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
   haystack,
   isAppearanceTemplate,
   isAttorneyCall,
+  isCalendarEmailContact,
   isCourtEvent,
   isCourtResultTemplate,
   isPossibleCourtEvent,
+  isPhoneCallCommunication,
   isWelcomeTemplate,
+  isWeeklyClientCheckIn,
 } from "./patterns";
 import type {
   AuditItemResult,
@@ -21,6 +24,7 @@ import type {
   StepCode,
 } from "./types";
 import { appConfig } from "./config";
+import { APP_VERSION } from "./version";
 
 type Evidence<T> = { item: T; at: Date; source: AuditItemResult["evidenceSource"]; url: string };
 type EvidenceErrors = {
@@ -58,14 +62,45 @@ function parseDate(value?: string | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function isDateOnly(value?: string | null): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test((value ?? "").trim());
+}
+
 function commDate(comm: ClioCommunication): Date | null {
-  return parseDate(comm.date ?? comm.created_at ?? comm.received_at);
+  const preciseDate = [comm.date, comm.received_at, comm.created_at]
+    .filter((value) => value && !isDateOnly(value))
+    .map((value) => parseDate(value))
+    .find((value): value is Date => Boolean(value));
+  return preciseDate ?? parseDate(comm.date ?? comm.received_at ?? comm.created_at);
+}
+
+function communicationSearchText(comm: ClioCommunication, includeBody = false): string {
+  const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
+  const senderValues = comm.senders?.flatMap((sender) => [sender.name, sender.type]) ?? [];
+  const receiverValues = comm.receivers?.flatMap((receiver) => [receiver.name, receiver.type]) ?? [];
+  return haystack(comm.subject, comm.type, comm.user?.name, ...senderValues, ...receiverValues, ...externalValues, includeBody ? comm.body : null);
+}
+
+function communicationDirectionText(comm: ClioCommunication): string {
+  const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
+  const senderValues = comm.senders?.flatMap((sender) => [sender.name, sender.type]) ?? [];
+  const receiverValues = comm.receivers?.flatMap((receiver) => [receiver.name, receiver.type]) ?? [];
+  return haystack(comm.subject, comm.type, comm.user?.name, ...senderValues, ...receiverValues, ...externalValues);
+}
+
+function isReplySubject(subject?: string | null): boolean {
+  return /^\s*(re|fw|fwd)\s*:/i.test(subject ?? "");
 }
 
 function isOutbound(comm: ClioCommunication, clientId: string | null): boolean | null {
+  const directionText = communicationDirectionText(comm);
+  if (directionText.includes("inbound")) return false;
+  if (directionText.includes("outbound")) return true;
   if (comm.user?.id) return true;
   const receivers = comm.receivers ?? [];
   const senders = comm.senders ?? [];
+  if (senders.some((s) => haystack(s.type, s.name).includes("user") || haystack(s.type, s.name).includes("firm"))) return true;
+  if (senders.some((s) => haystack(s.type).includes("contact") || haystack(s.type).includes("client"))) return false;
   if (clientId && receivers.some((r) => String(r.id) === clientId)) return true;
   if (clientId && senders.some((s) => String(s.id) === clientId)) return false;
   return null;
@@ -79,12 +114,36 @@ function calendarEnd(cal: ClioCalendarEntry): Date | null {
   return parseDate(cal.end_at) ?? parseDate(cal.start_at);
 }
 
+function calendarSearchText(cal: ClioCalendarEntry): string {
+  return haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name, cal.calendar_owner?.name);
+}
+
 function isPettyTrafficMatter(record: MatterRecord): boolean {
   return haystack(record.matter_number).includes("petty traffic");
 }
 
 function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
+}
+
+function localDateKey(date: Date): string {
+  const parts = localParts(date);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function endOfLocalDay(date: Date): Date {
+  const parts = localParts(date);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 23, 59, 59);
+}
+
+function withEvidence<T extends { id: number }>(result: AuditItemResult, evidence: Evidence<T>): AuditItemResult {
+  return {
+    ...result,
+    evidenceAt: evidence.at,
+    evidenceSource: evidence.source,
+    evidenceRefId: String(evidence.item.id),
+    evidenceUrl: evidence.url,
+  };
 }
 
 function classify(
@@ -111,7 +170,7 @@ function classify(
   }
   if (!evidence) {
     const corrective = options.correctiveDeadlineAt ?? deadlineAt;
-    const stillPending = corrective && now <= corrective;
+    const stillPending = deadlineAt && now <= deadlineAt;
     if (!stillPending && options.missingAsReview) {
       return base(stepCode, "Unknown", "Needs Review", deadlineAt, corrective, options.reasonCode ?? "EVIDENCE_NOT_CONFIRMED");
     }
@@ -172,8 +231,20 @@ function evidenceUrl(type: "communications" | "calendar_entries", id: number): s
   return `/evidence/${type}/${id}`;
 }
 
+const AUDIT_STEP_CODES: StepCode[] = [
+  "SETUP_WELCOME",
+  "SETUP_ATTY_CALL",
+  "SETUP_COURT_DATE",
+  "CLIENT_CONTACT",
+  "APPEARANCE_FILING",
+  "COURT_RESULTS",
+  "POST_COURT_CALL",
+  "CLIENT_FOLLOWUP",
+  "WEEKLY_CLIENT_CHECKIN",
+];
+
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
 async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
@@ -221,13 +292,13 @@ async function upsertItems(matterId: string, items: AuditItemResult[], overallSt
     await sql`
       insert into audit_item (
         matter_id, step_code, status, operational_state, deadline_at, corrective_deadline_at,
-        evidence_at, evidence_source, evidence_ref_id, evidence_url, reason_code, last_evaluated_at
+        evidence_at, evidence_source, evidence_ref_id, evidence_url, reason_code, audit_version, last_evaluated_at
       )
       values (
         ${matterId}, ${item.stepCode}, ${item.status}, ${item.operationalState},
         ${item.deadlineAt}, ${item.correctiveDeadlineAt}, ${item.evidenceAt},
         ${item.evidenceSource}, ${item.evidenceRefId}, ${item.evidenceUrl},
-        ${item.reasonCode}, now()
+        ${item.reasonCode}, ${APP_VERSION}, now()
       )
       on conflict (matter_id, step_code) do update set
         status = excluded.status,
@@ -239,6 +310,7 @@ async function upsertItems(matterId: string, items: AuditItemResult[], overallSt
         evidence_ref_id = excluded.evidence_ref_id,
         evidence_url = excluded.evidence_url,
         reason_code = excluded.reason_code,
+        audit_version = excluded.audit_version,
         last_evaluated_at = now()
     `;
   }
@@ -267,19 +339,18 @@ export async function discoverMatters(client = new ClioClient(), lookbackDays = 
 }
 
 async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<EvidenceBundle> {
-  const since = matter.effective_intake_at.toISOString();
-  const to = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+  const calendarFrom = new Date(matter.matter_created_at.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const calendarTo = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const [communicationsResult, calendarsResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
-      fields: "id,subject,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name},receivers{id,name}",
+      fields: "id,subject,body,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}",
       matter_id: matter.matter_id,
-      created_since: since,
     }),
     client.list<ClioCalendarEntry>("/calendar_entries.json", {
       fields: "id,summary,description,start_at,end_at,created_at,all_day,matter{id},calendar_owner{id,name},calendar_entry_event_type{id,name}",
       matter_id: matter.matter_id,
-      from: since,
-      to,
+      from: calendarFrom,
+      to: calendarTo,
     }),
   ]);
   const errors: EvidenceErrors = {};
@@ -295,20 +366,43 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
 function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
   const setup = setupDeadlines(record.matter_created_at);
   const clientDeadline = addBusinessDaysDeadline(record.effective_intake_at, 1);
-  const appearanceDeadline = addBusinessDaysDeadline(record.effective_intake_at, 2);
+  const appearanceDeadline = addWeekdayHours(record.matter_created_at, 48);
+  const firstWeeklyCheckInDeadline = addBusinessDaysDeadline(record.effective_intake_at, 5);
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
 
-  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date) =>
+  const communicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date, options: { allowUnclearDirection?: boolean; allowAnyDirection?: boolean; includeBodyText?: boolean } = {}) =>
     earliest(
       evidence.communications
         .map((comm): Evidence<ClioCommunication> | null => {
           const at = commDate(comm);
           if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
-          const text = haystack(comm.subject, comm.body);
+          const text = communicationSearchText(comm, options.includeBodyText);
           if (!matcher(text)) return null;
           const direction = isOutbound(comm, record.client_id);
-          if (direction !== true) return null;
+          if (options.allowAnyDirection) return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+          if (direction !== true && !options.allowUnclearDirection) return null;
+          if (direction === false) return null;
+          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+        })
+        .filter(Boolean) as Evidence<ClioCommunication>[],
+    );
+
+  const templateCommunicationEvidence = (matcher: (text: string) => boolean, deadlineWindowStart?: Date) =>
+    earliest(
+      evidence.communications
+        .map((comm): Evidence<ClioCommunication> | null => {
+          const at = commDate(comm);
+          if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
+          const direction = isOutbound(comm, record.client_id);
+          if (direction === false) return null;
+          if (direction !== true && isReplySubject(comm.subject)) return null;
+
+          const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
+          const subjectText = haystack(comm.subject, ...externalValues);
+          const fullText = communicationSearchText(comm, true);
+          if (!matcher(subjectText) && !matcher(fullText)) return null;
+
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
         })
         .filter(Boolean) as Evidence<ClioCommunication>[],
@@ -319,17 +413,73 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       .map((cal): Evidence<ClioCalendarEntry> | null => {
         const at = parseDate(cal.created_at ?? cal.start_at);
         if (!at) return null;
-        if (!isAttorneyCall(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
+        if (!isAttorneyCall(calendarSearchText(cal))) return null;
         return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
       })
       .filter(Boolean) as Evidence<ClioCalendarEntry>[],
   );
+  const attorneyCallCommunicationEvidence = communicationEvidence(isPhoneCallCommunication, record.effective_intake_at, {
+    allowUnclearDirection: true,
+    includeBodyText: false,
+  });
+  const attorneyCallEvidence = callEvidence ?? attorneyCallCommunicationEvidence;
+
+  const weeklyCheckInEvents = evidence.calendars
+    .map((cal): Evidence<ClioCalendarEntry> | null => {
+      const at = parseDate(cal.start_at);
+      if (!at) return null;
+      if (!isWeeklyClientCheckIn(calendarSearchText(cal))) return null;
+      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
+
+  const pastOrTodayWeeklyCheckIn = weeklyCheckInEvents
+    .filter((event) => event.at <= now)
+    .sort((a, b) => b.at.getTime() - a.at.getTime())[0] ?? null;
+  const nextWeeklyCheckIn = weeklyCheckInEvents
+    .filter((event) => event.at > now)
+    .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
+  const weeklyCheckInEvent = pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
+  const weeklyCheckInDeadline = weeklyCheckInEvent ? endOfLocalDay(weeklyCheckInEvent.at) : firstWeeklyCheckInDeadline;
+  const weeklyCheckInCall = weeklyCheckInEvent
+    ? earliest(
+        evidence.communications
+          .map((comm): Evidence<ClioCommunication> | null => {
+            const at = commDate(comm);
+            if (!at || localDateKey(at) !== localDateKey(weeklyCheckInEvent.at)) return null;
+            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
+            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+          })
+          .filter(Boolean) as Evidence<ClioCommunication>[],
+      )
+    : null;
+  const weeklyCheckInItem = (() => {
+    if (calendarError) {
+      return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
+    }
+    if (!weeklyCheckInEvent) {
+      return classify("WEEKLY_CLIENT_CHECKIN", null, firstWeeklyCheckInDeadline, {
+        operationalState: "Waiting for weekly check-in window",
+        now,
+      });
+    }
+    if (weeklyCheckInCall) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null), weeklyCheckInCall);
+    }
+    if (now <= weeklyCheckInDeadline) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Waiting for same-day call proof", weeklyCheckInDeadline, null), weeklyCheckInEvent);
+    }
+    if (commError) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError), weeklyCheckInEvent);
+    }
+    return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "CALL_NOT_FOUND_SAME_DAY"), weeklyCheckInEvent);
+  })();
 
   const courtEvents = evidence.calendars
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.start_at);
       if (!at) return null;
-      const text = haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name);
+      const text = calendarSearchText(cal);
       if (!isCourtEvent(text) && !isPossibleCourtEvent(text)) return null;
       return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
     })
@@ -358,7 +508,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 
   const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
-  const courtResult = lastCourtEnd ? communicationEvidence(isCourtResultTemplate, lastCourtEnd) : null;
+  const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
@@ -368,7 +518,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .map((cal): Evidence<ClioCalendarEntry> | null => {
             const at = parseDate(cal.created_at ?? cal.start_at);
             if (!at || at < courtResult.at) return null;
-            if (!isAttorneyCall(haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name))) return null;
+            if (!isAttorneyCall(calendarSearchText(cal))) return null;
             return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
           })
           .filter(Boolean) as Evidence<ClioCalendarEntry>[],
@@ -399,8 +549,14 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
 
-  const clientContact = earliest(
-    evidence.communications
+  const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
+  const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart);
+  const appearanceWindowStart = new Date(record.matter_created_at.getTime() - 24 * 60 * 60 * 1000);
+  const appearanceEvidence =
+    templateCommunicationEvidence(isAppearanceTemplate, appearanceWindowStart) ??
+    communicationEvidence(isAppearanceTemplate, appearanceWindowStart, { allowUnclearDirection: true, includeBodyText: true });
+
+  const clientContactCommunication = evidence.communications
       .map((comm): Evidence<ClioCommunication> | null => {
         const at = commDate(comm);
         if (!at) return null;
@@ -408,34 +564,59 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         if (direction !== true) return null;
         return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
       })
-      .filter(Boolean) as Evidence<ClioCommunication>[],
+      .filter(Boolean) as Evidence<ClioCommunication>[];
+
+  const clientContactCalendar = evidence.calendars
+    .map((cal): Evidence<ClioCalendarEntry> | null => {
+      const at = parseDate(cal.created_at ?? cal.start_at);
+      if (!at) return null;
+      const text = calendarSearchText(cal);
+      if (!isCalendarEmailContact(text)) return null;
+      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
+
+  const clientContact = earliest(
+    [...clientContactCommunication, ...clientContactCalendar],
   );
 
   const unknownDirection = evidence.communications.some((comm) => isOutbound(comm, record.client_id) === null);
-  const inboundStreak = evidence.communications
+  const followUpState = evidence.communications
     .map((comm) => ({ comm, at: commDate(comm), direction: isOutbound(comm, record.client_id) }))
     .filter((entry) => entry.at)
     .sort((a, b) => a.at!.getTime() - b.at!.getTime())
     .reduce(
       (state, entry) => {
-        if (entry.direction === false) state.streak += 1;
-        if (entry.direction === true) state.streak = 0;
-        state.max = Math.max(state.max, state.streak);
+        if (entry.direction === false) {
+          state.unansweredInboundCount += 1;
+          state.firstUnansweredInboundAt ??= entry.at!;
+          state.lastInboundAt = entry.at!;
+        }
+        if (entry.direction === true) {
+          state.unansweredInboundCount = 0;
+          state.firstUnansweredInboundAt = null;
+          state.lastFirmResponseAt = entry.at!;
+        }
         return state;
       },
-      { streak: 0, max: 0 },
+      {
+        unansweredInboundCount: 0,
+        firstUnansweredInboundAt: null as Date | null,
+        lastInboundAt: null as Date | null,
+        lastFirmResponseAt: null as Date | null,
+      },
     );
+  const currentClientFollowUpRisk = followUpState.unansweredInboundCount >= 2;
 
   const items: AuditItemResult[] = [
-    classify("SETUP_WELCOME", communicationEvidence(isWelcomeTemplate), setup.onTime, {
-      correctiveDeadlineAt: setup.corrective,
-      operationalState: "Needs Welcome Packet",
+    classify("SETUP_WELCOME", welcomeEvidence, setup.twoBusinessHours, {
+      correctiveDeadlineAt: setup.twoBusinessHoursCorrective,
+      operationalState: "Waiting for Welcome Letter deadline",
       unknown: Boolean(commError),
       reasonCode: commError,
-      missingAsReview: true,
       now,
     }),
-    classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
+    classify("SETUP_ATTY_CALL", attorneyCallEvidence, setup.onTime, {
       required: !isPettyTrafficMatter(record),
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Attorney Call",
@@ -443,9 +624,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: calendarError,
       now,
     }),
-    classify("SETUP_COURT_DATE", courtAdded, setup.onTime, {
-      correctiveDeadlineAt: setup.corrective,
-      operationalState: "Needs Court Date",
+    classify("SETUP_COURT_DATE", courtAdded, setup.twoBusinessHours, {
+      correctiveDeadlineAt: setup.twoBusinessHoursCorrective,
+      operationalState: "Waiting for Court Date deadline",
       unknown: Boolean(calendarError),
       reasonCode: calendarError,
       now,
@@ -456,20 +637,27 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: commError || "DIRECTION_UNCLEAR",
       now,
     }),
-    classify("APPEARANCE_FILING", communicationEvidence(isAppearanceTemplate), appearanceDeadline, {
-      operationalState: "Needs Appearance Filing",
-      unknown: Boolean(commError),
+    classify("APPEARANCE_FILING", appearanceEvidence, appearanceDeadline, {
+      operationalState: "Waiting for 48-hour review window",
+      unknown: Boolean(commError && now > appearanceDeadline),
       reasonCode: commError,
-      missingAsReview: true,
       now,
     }),
     courtResultItem,
     postCourtCallItem,
     commError
       ? base("CLIENT_FOLLOWUP", "Unknown", "Unknown", null, null, commError)
-      : inboundStreak.max >= 2
-      ? base("CLIENT_FOLLOWUP", "Missing", "Client Follow-Up Risk", null, null, "TWO_INBOUND_BEFORE_RESPONSE")
+      : currentClientFollowUpRisk
+      ? base(
+          "CLIENT_FOLLOWUP",
+          "Missing",
+          "Client Follow-Up Risk",
+          followUpState.firstUnansweredInboundAt,
+          null,
+          "CURRENT_UNANSWERED_CLIENT_MESSAGES",
+        )
       : base("CLIENT_FOLLOWUP", unknownDirection ? "Unknown" : "On Time", unknownDirection ? "Unknown" : "No Risk", null, null, unknownDirection ? "DIRECTION_UNCLEAR" : null),
+    weeklyCheckInItem,
   ];
 
   return {
@@ -501,7 +689,7 @@ export async function auditNextBatch(
       await sleep(waitSeconds * 1000);
     }
   }
-  const runRows = await sql`insert into audit_run(status) values ('running') returning id`;
+  const runRows = await sql`insert into audit_run(status, app_version) values ('running', ${APP_VERSION}) returning id`;
   const runId = runRows[0].id;
   let discovered = 0;
   let audited = 0;
@@ -534,6 +722,20 @@ export async function auditNextBatch(
                   from audit_item ai_unchecked
                   where ai_unchecked.matter_id = m.matter_id
                 ) then 0
+                when not exists (
+                  select 1
+                  from audit_item ai_missing_weekly
+                  where ai_missing_weekly.matter_id = m.matter_id
+                    and ai_missing_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
+                ) then 0
+                when exists (
+                  select 1
+                  from audit_item ai_stale_appearance
+                  where ai_stale_appearance.matter_id = m.matter_id
+                    and ai_stale_appearance.step_code = 'APPEARANCE_FILING'
+                    and ai_stale_appearance.status = 'Unknown'
+                    and ai_stale_appearance.reason_code = 'EVIDENCE_NOT_CONFIRMED'
+                ) then 1
                 when exists (
                   select 1
                   from audit_item ai
@@ -560,6 +762,20 @@ export async function auditNextBatch(
                   from audit_item ai_unchecked
                   where ai_unchecked.matter_id = m.matter_id
                 ) then 0
+                when not exists (
+                  select 1
+                  from audit_item ai_missing_weekly
+                  where ai_missing_weekly.matter_id = m.matter_id
+                    and ai_missing_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
+                ) then 0
+                when exists (
+                  select 1
+                  from audit_item ai_stale_appearance
+                  where ai_stale_appearance.matter_id = m.matter_id
+                    and ai_stale_appearance.step_code = 'APPEARANCE_FILING'
+                    and ai_stale_appearance.status = 'Unknown'
+                    and ai_stale_appearance.reason_code = 'EVIDENCE_NOT_CONFIRMED'
+                ) then 1
                 when exists (
                   select 1
                   from audit_item ai
@@ -587,16 +803,7 @@ export async function auditNextBatch(
         audited += 1;
       } catch (error) {
         const status = apiReason(error, "matter");
-        const items: AuditItemResult[] = [
-          "SETUP_WELCOME",
-          "SETUP_ATTY_CALL",
-          "SETUP_COURT_DATE",
-          "CLIENT_CONTACT",
-          "APPEARANCE_FILING",
-          "COURT_RESULTS",
-          "POST_COURT_CALL",
-          "CLIENT_FOLLOWUP",
-        ].map((step) => base(step as StepCode, "Unknown", "Unknown", null, null, status));
+        const items = AUDIT_STEP_CODES.map((step) => base(step, "Unknown", "Unknown", null, null, status));
         await upsertItems(matter.matter_id, items, "Review", { last: null, next: null });
         audited += 1;
       }
@@ -607,10 +814,18 @@ export async function auditNextBatch(
       select count(*)::int as count
       from audit_matter m
       where ${batchConditions[0]} and ${batchConditions[1]} and ${batchConditions[2]} and ${batchConditions[3]}
-        and not exists (
-          select 1
-          from audit_item i
-          where i.matter_id = m.matter_id
+        and (
+          not exists (
+            select 1
+            from audit_item i
+            where i.matter_id = m.matter_id
+          )
+          or not exists (
+            select 1
+            from audit_item weekly_item
+            where weekly_item.matter_id = m.matter_id
+              and weekly_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
+          )
         )
     `;
     const remainingUnchecked = Number(remainingRows[0]?.count ?? 0);
@@ -649,16 +864,7 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
     await upsertItems(matter.matter_id, result.items, result.overallStatus, result.court);
   } catch (error) {
     const status = apiReason(error, "matter");
-    const items: AuditItemResult[] = [
-      "SETUP_WELCOME",
-      "SETUP_ATTY_CALL",
-      "SETUP_COURT_DATE",
-      "CLIENT_CONTACT",
-      "APPEARANCE_FILING",
-      "COURT_RESULTS",
-      "POST_COURT_CALL",
-      "CLIENT_FOLLOWUP",
-    ].map((step) => base(step as StepCode, "Unknown", "Unknown", null, null, status));
+    const items = AUDIT_STEP_CODES.map((step) => base(step, "Unknown", "Unknown", null, null, status));
     await upsertItems(matter.matter_id, items, "Review", { last: null, next: null });
     throw error;
   }
@@ -669,10 +875,18 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
     select count(*)::int as count
     from audit_matter m
     where lower(coalesce(m.matter_status, '')) <> 'closed'
-      and not exists (
-        select 1
-        from audit_item i
-        where i.matter_id = m.matter_id
+      and (
+        not exists (
+          select 1
+          from audit_item i
+          where i.matter_id = m.matter_id
+        )
+        or not exists (
+          select 1
+          from audit_item weekly_item
+          where weekly_item.matter_id = m.matter_id
+            and weekly_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
+        )
       )
   `;
   const name = `${matter.client_first_name} ${matter.client_last_name}`.trim() || matter.matter_number;

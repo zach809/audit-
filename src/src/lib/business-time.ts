@@ -129,13 +129,43 @@ export function addBusinessDaysDeadline(anchor: Date, businessDaysAfter: number)
   return businessDayEnd(cursor);
 }
 
+export function addWeekdayHours(start: Date, hours: number): Date {
+  let remainingMs = hours * 60 * 60 * 1000;
+  let cursor = start;
+
+  while (!isBusinessDay(cursor)) {
+    cursor = addLocalDays(cursor, 1);
+  }
+
+  while (remainingMs > 0) {
+    const p = localParts(cursor);
+    const nextLocalDay = zonedDateTimeToUtc(p.year, p.month, p.day + 1, 0, 0, 0);
+    const availableMs = Math.max(0, nextLocalDay.getTime() - cursor.getTime());
+
+    if (remainingMs <= availableMs) {
+      return new Date(cursor.getTime() + remainingMs);
+    }
+
+    remainingMs -= availableMs;
+    cursor = nextLocalDay;
+    while (!isBusinessDay(cursor)) {
+      cursor = addLocalDays(cursor, 1);
+    }
+  }
+
+  return cursor;
+}
+
 export function setupDeadlines(createdAt: Date) {
   const effective = effectiveIntake(createdAt);
   const onTime = addBusinessMinutes(effective, 60);
+  const twoBusinessHours = addBusinessMinutes(effective, 120);
   return {
     effective,
     onTime,
+    twoBusinessHours,
     corrective: businessDayEnd(onTime),
+    twoBusinessHoursCorrective: businessDayEnd(twoBusinessHours),
   };
 }
 

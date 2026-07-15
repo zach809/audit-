@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  await initDb();
   let result;
   const isManualDashboardRun = Boolean(request.cookies.get("cwca_session"));
   try {
+    await initDb();
     result = await auditNextBatch(undefined, {
       discover: true,
       discoverLookbackDays: isManualDashboardRun ? 7 : undefined,

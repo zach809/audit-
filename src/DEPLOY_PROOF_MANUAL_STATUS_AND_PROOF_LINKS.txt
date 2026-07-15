@@ -1,0 +1,102 @@
+CWCA update proof
+
+Version marker:
+cwca-late-proof-scores-lower-2026-07-15
+
+What changed:
+- Late proof now counts as proof found/completed, but Standards score gives it lower credit.
+- Attorney Standards rows now show "standards score" instead of plain completion when late proof exists.
+- Standards bars still show found proof like 1/1, but the label notes when one was late.
+- Standards CSV now includes late columns for Initial Meeting, Welcome Letter, and Court Date.
+- KPI Score is now labeled Standards in the app.
+- Standards now includes a by-attorney completion graphic for Welcome Letter, Initial Meeting, and Court Date Added.
+- The by-attorney Standards bars now show completion against each attorney's own cases, so 1 out of 1 complete shows as 100%.
+- Standards buttons are forced compact so Update Standards and Download Standards CSV do not stretch across the page.
+- Header buttons are forced compact so Run Audit Batch does not stretch across the header.
+- Standards Focus now always shows Welcome Letter, Attorney Call, and Court Date Added even when one area has 0 follow-up.
+- Standards wording now says Welcome Letter, not Welcome Packet.
+- Standards now has a CSV download named cwca-weekly-standards-scorecard.csv.
+- The Standards CSV uses spreadsheet-style columns: Case Manager, Date, # of new add to calendars, Initial Meeting Set, Welcome Letter Sent, New Matters, Court Date Added To Clio.
+- Matters and Workspace now default to the current week first.
+- Welcome Letter matching now accepts more English/Spanish template subject variants.
+- Attorney Call now checks calendar events first and can fall back to matching Clio phone-call communications if calendar proof is missed.
+- Attorney Call wording now says matching proof in Clio, not only calendar proof.
+- .env.example now includes zach@hirschlawgroup.com with the default case-manager password.
+- .env.example now includes the case-manager email logins with the default password Hirsch12345678.
+- Not Due Yet items now show the saved escalation deadline when available.
+- Pending items stay quiet until the deadline passes, then become follow-up automatically on recheck.
+- The pending filter now says Not Due Yet for clearer staff wording.
+- Late items now show as Timing Review instead of looking like missing work.
+- Late items no longer count as Needs Follow-Up tasks.
+- If proof exists in Clio but happened after the goal, reports explain it as timing, not missing proof.
+- Added exact phone-call naming patterns from the screenshots, including SB-Phone Call and IC/PhoneCall styles.
+- Updated the AI helper so Late items are explained as proof found after the goal, not as matcher failures.
+- Added a separate /case-manager portal for case managers.
+- Case managers have their own login using CASE_MANAGER_USERS.
+- The auditor dashboard no longer shows the Case Manager Tasks tab.
+- Case managers can mark work complete, but CWCA immediately rechecks Clio before clearing the item.
+- If CWCA does not find proof in Clio, the item stays open and is saved as In Progress.
+- KPI Score now only measures Welcome Letter, Attorney Call, and Court Date Added.
+- KPI Score now uses a simple weekly clear-vs-follow-up score so 0 follow-up does not create a misleading low score.
+- Workflow Checks are now always visible on matter cards instead of hidden behind a dropdown.
+- Resolved, No Action Needed, and Approved Exception decisions are now proof-locked.
+- CWCA refuses to clear a task unless saved Clio proof already exists or a Clio proof link is pasted.
+- Added a KPI Score tab for a weekly score report.
+- KPI Score defaults to the current week and includes date range controls.
+- KPI Score shows overall score, checked items, on-track/resolved items, follow-up items, late timing, attorney scoreboard, workflow focus, and a copy-ready Teams summary.
+- Post-Closure now only shows matters closed in 2026.
+- Post-Closure refresh now ignores closed matters outside 2026.
+- Fixed Client Follow-Up so it only flags the current unresolved inbound-message streak.
+- If two inbound client messages happened in the past but the firm later responded or called, CWCA should now clear the follow-up risk after the matter is rechecked.
+- Updated the AI helper guidance so it explains Client Follow-Up as a current unresolved issue, not a permanent historical flag.
+- Fixed communication date handling so CWCA uses the most precise Clio timestamp available.
+- This prevents same-day emails from being treated like they happened at midnight before the matter was created.
+- Welcome Letter matching should now correctly count template emails such as "Welcome Letter", "Carta de bienvenida", and "Welcome to Hirsch Law Group" when they are visible in matter Communications.
+- The same timestamp fix also helps Appearance Filed, Client Contact, Court Results, and other communication-based proof checks.
+- Evidence links in matter cards now say "Open Proof in Clio" so auditors know the link goes straight to Clio for confirmation.
+- The manual AI chat now receives the saved audit row details, including reason code, operational state, proof reference, audit version, and last checked time.
+- When asked what is wrong or how to improve a rule, AI should now explain the actual saved CWCA issue instead of repeating generic guidance.
+- Made the matter AI helper a small chat box by default.
+- Removed the empty AI answer panel before a question is asked.
+- Moved quick prompts into a Suggested questions dropdown.
+- The main visible control is now a compact one-line question box with an Ask button.
+- Changed the matter AI helper into a direct mini chat for each flagged item.
+- Auditors can now type their own question about a flag instead of only receiving a fixed AI summary.
+- Added quick buttons for: Where did CWCA look, Could this be a false positive, What proof should I check, and How can we improve this rule.
+- The chat is still manual-only and only uses the selected matter/audit item metadata.
+- The chat is meant to help debug CWCA logic and understand possible app false positives.
+- Improved the manual AI helper so it gives more useful auditor guidance instead of generic "check Clio" wording.
+- The AI helper now receives the specific workflow rule, goal, expected proof type, and suggested Clio area for the selected item.
+- AI output now includes: expected proof, where to check, why it was flagged, recommended auditor action, possible CWCA issue, and a copy-ready team note.
+- The AI helper includes an Open Clio shortcut that points to the most relevant Clio area for that issue.
+- Reverted the AI helper back to the OpenAI setup.
+- Polished the matter-level AI helper panel so it is shorter, easier to scan, and less system-looking.
+- The AI result now shows one Summary, a short checklist of what to check, and a collapsed copy-ready team note.
+- The copy button now says Copy Note instead of Copy AI Note.
+- Added a manual AI chat box on individual matter problem cards.
+- AI now runs only when a user clicks that specific issue button or the existing Draft with AI button in the weekly review builder.
+- Removed the broad AI Diagnostics panel from the visible Reports tab so AI does not feel like an automatic/bulk analyzer.
+- The new manual AI helper sends only selected matter/audit-item metadata to OpenAI.
+- It does not send communication bodies, note text, document contents, billing data, or payment data.
+- The helper explains the selected issue in plain English, suggests what to check in Clio, flags possible CWCA matching/rule issues, and gives a copyable team note.
+- AI does not write to Clio, does not mark anything resolved, and does not change audit results.
+- The app remains read-only against Clio.
+- Version cwca-cm-assignment-standards-csv-2026-07-15 adds the case-manager assignment map to the case-manager-only portal.
+- Case managers now see tasks assigned to them by the same attorney-to-CM ownership rules used in the Standards CSV.
+- Admin Zach can see all case-manager assignments from the case-manager portal.
+- Case-manager task cards now show the assigned case manager so staff know whose task it is.
+- Standards CSV now uses clearer columns and removes the extra "# add to calendars" column.
+- Standards CSV now keeps New Matters plus the three tracked standards: Initial Meeting Calendar Event Set, Welcome Letter Sent, and Court Date Calendar Event Created.
+- Version cwca-polished-header-cm-week-filter-2026-07-15 updates the main dashboard header to a larger polished hero/control-panel layout.
+- The case-manager portal now defaults to this week's tasks only.
+- Case managers can switch to Past Week if they need to review last week's tasks.
+- Older backlog items are no longer shown by default on the case-manager page.
+- Version cwca-compact-polished-header-2026-07-15 shrinks the polished header so it no longer takes over the first screen.
+- The Run Audit Batch button now has enough width so the label fits cleanly.
+- Version cwca-standards-csv-case-manager-fix-2026-07-15 fixes the Standards CSV owner column.
+- Standards CSV now groups only by the approved case-manager assignment map and no longer leaks attorney names or lowercase manual names into the Case Manager column.
+- Standards CSV now seeds rows only from Welcome Letter, Initial Meeting, and Court Date standards items.
+
+Deployment check:
+- After deploying, open /api/health and confirm the version marker above appears.
+- If the version is different, Vercel is not deploying this updated folder.

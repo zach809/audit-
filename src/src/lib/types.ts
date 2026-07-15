@@ -9,7 +9,8 @@ export type StepCode =
   | "APPEARANCE_FILING"
   | "COURT_RESULTS"
   | "POST_COURT_CALL"
-  | "CLIENT_FOLLOWUP";
+  | "CLIENT_FOLLOWUP"
+  | "WEEKLY_CLIENT_CHECKIN";
 
 export type EvidenceSource = "Communication" | "Calendar" | "Note" | "Activity" | "System";
 
@@ -32,6 +33,10 @@ export type ClioMatter = {
   display_number?: string | null;
   status?: string | null;
   created_at: string;
+  updated_at?: string | null;
+  close_date?: string | null;
+  closed_at?: string | null;
+  closed_date?: string | null;
   client?: {
     id?: number;
     first_name?: string | null;
@@ -52,9 +57,10 @@ export type ClioCommunication = {
   date?: string | null;
   created_at?: string | null;
   received_at?: string | null;
+  external_properties?: Array<{ name?: string | null; value?: string | null }>;
   user?: { id?: number; name?: string | null } | null;
-  senders?: Array<{ id?: number; name?: string | null }>;
-  receivers?: Array<{ id?: number; name?: string | null }>;
+  senders?: Array<{ id?: number; name?: string | null; type?: string | null }>;
+  receivers?: Array<{ id?: number; name?: string | null; type?: string | null }>;
 };
 
 export type ClioCalendarEntry = {

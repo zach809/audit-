@@ -125,13 +125,13 @@ function retryAfterMs(response: Response): number | null {
   const header = response.headers.get("retry-after");
   if (!header) return null;
   const seconds = Number(header);
-  if (Number.isFinite(seconds)) return seconds * 1000;
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
   const date = Date.parse(header);
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
 }
 
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
 function pageTokenFromNext(next?: string | null): string | undefined {

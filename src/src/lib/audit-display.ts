@@ -2,7 +2,7 @@ import { WORKFLOW_RULES, workflowLabel } from "./workflow-rules";
 
 export type AuditStatus = "Missing" | "Late" | "Unknown" | "Needs Recheck" | "Pending" | "On Time" | "On Track" | string;
 
-export const FOLLOW_UP_STATUSES = new Set(["Missing", "Late", "Unknown", "Needs Review", "Needs Recheck"]);
+export const FOLLOW_UP_STATUSES = new Set(["Missing", "Unknown", "Needs Review", "Needs Recheck"]);
 export const REVIEW_STATUSES = new Set(["Unknown", "Needs Review", "Needs Recheck"]);
 
 export function statusClass(value: string | null | undefined): string {
@@ -18,6 +18,8 @@ export function isInternalPlaceholder(reason?: string | null): boolean {
 }
 
 export function displayAuditStatus(status: string, reasonCode?: string | null): string {
+  if (status === "Missing") return "Needs Follow-Up";
+  if (status === "Late") return "Timing Review";
   if (status === "Unknown" && isGenericApiError(reasonCode)) return "Needs Recheck";
   if (status === "Unknown") return "Needs Review";
   if (status === "On Time") return "On Track";
@@ -56,14 +58,14 @@ export function workspaceFilterMatches(status: string, filter: string): boolean 
 
 export function actionFor(stepCode: string, status: string, reasonCode?: string | null): string {
   const info = WORKFLOW_RULES[stepCode];
-  if (status === "Missing") return info ? `${info.missing} ${info.action}` : "Complete or verify this missing workflow step in Clio.";
-  if (status === "Late") return info?.late ?? "Review timing. Evidence was found after the deadline.";
+  if (status === "Missing") return info ? `${info.missing} ${info.action}` : "Complete or verify this workflow step in Clio.";
+  if (status === "Late") return info?.late ?? "Proof was found, but after the target time. Review timing only.";
   if (status === "Unknown" || status === "Needs Recheck") {
     if (isGenericApiError(reasonCode)) {
       return "Recheck the matter before coaching. This is an audit visibility issue, not proof that work was missed.";
     }
     if (reasonCode === "EVIDENCE_NOT_CONFIRMED") {
-      return "Review the matter in Clio and confirm whether the proof exists before coaching the team.";
+      return "Review the matter's Communications tab and confirm whether the matching email subject exists before coaching the team.";
     }
     return info?.unknown ?? "Review this item in Clio. The app could not verify it from API-visible evidence.";
   }
@@ -72,16 +74,16 @@ export function actionFor(stepCode: string, status: string, reasonCode?: string 
 
 export function priorityFor(status: string): string {
   if (status === "Missing") return "Action Needed";
-  if (status === "Late") return "Timing Improvement";
+  if (status === "Late") return "Timing Review";
   if (status === "Unknown" || status === "Needs Recheck") return "Review First";
   return "Review";
 }
 
 export function whyFlagged(stepCode: string, status: string, reasonCode?: string | null): string {
-  if (status === "Missing") return `${workflowLabel(stepCode)} was not found from the allowed read-only Clio evidence.`;
+  if (status === "Missing") return `${workflowLabel(stepCode)} needs follow-up because CWCA did not find matching proof in Clio.`;
   if (status === "Late") return `${workflowLabel(stepCode)} was found, but after the expected timeliness goal.`;
   if (status === "Unknown" || status === "Needs Recheck") {
-    if (reasonCode === "EVIDENCE_NOT_CONFIRMED") return "CWCA could not confidently confirm this proof from read-only Clio evidence.";
+    if (reasonCode === "EVIDENCE_NOT_CONFIRMED") return "CWCA could not confidently confirm this proof from the matter's Communications tab.";
     if (reasonCode && !isInternalPlaceholder(reasonCode)) return `The auditor could not confirm this item from Clio: ${reasonCode}`;
     return "The auditor could not confirm this item from Clio-visible evidence.";
   }

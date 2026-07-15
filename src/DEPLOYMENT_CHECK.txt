@@ -53,7 +53,7 @@ Expected coaching wording:
 Some required steps were completed after the target time. Review the matter handoff and coach the team to complete setup items sooner.
 
 Expected safer audit behavior:
-If CWCA cannot confidently confirm template/calendar proof for Welcome Packet, Appearance Filed, Court Results, or Post-Court Call, it should show Needs Review instead of immediately treating it as missed work.
+If CWCA cannot confidently confirm template/calendar proof for Welcome Letter, Appearance Filed, Court Results, or Post-Court Call, it should show Needs Review instead of immediately treating it as missed work.
 
 Expected court follow-up behavior:
 Court Results should only become relevant after an actual court event has ended.
