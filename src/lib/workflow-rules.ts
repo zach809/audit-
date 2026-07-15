@@ -19,9 +19,9 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   SETUP_ATTY_CALL: {
     label: "Attorney Call",
     goal: "Schedule within 1 business hour of a new matter being created.",
-    missing: "Attorney/client phone call still needs a matching calendar event.",
-    action: "Add or verify a Phone Call / Client Call calendar event on the matter.",
-    late: "Attorney/client call was scheduled, but it was completed after the 1-hour setup goal.",
+    missing: "Attorney/client phone call still needs matching proof in Clio.",
+    action: "Add or verify a Phone Call / Client Call calendar event, or confirm the phone-call communication is logged on the matter.",
+    late: "Attorney/client call proof was found, but it was completed after the 1-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the attorney call from Clio.",
   },
   SETUP_COURT_DATE: {

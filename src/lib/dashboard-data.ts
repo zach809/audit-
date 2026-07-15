@@ -70,6 +70,7 @@ export type WorkspaceAuditItem = {
   matter_number: string;
   client_first_name: string | null;
   client_last_name: string | null;
+  matter_created_at: string | Date | null;
   responsible_attorney_id: string | null;
   responsible_attorney_name: string | null;
   step_code: string;
@@ -400,6 +401,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       m.matter_number,
       m.client_first_name,
       m.client_last_name,
+      m.matter_created_at,
       m.responsible_attorney_id,
       m.responsible_attorney_name,
       i.step_code,
@@ -800,6 +802,122 @@ export async function auditLogicIssuesCsv(filters: DashboardFilters = {}, origin
   ]);
 
   return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function isStandardComplete(status: string | null | undefined, evidenceRefId?: string | null): boolean {
+  return status === "On Track" || status === "Late" || Boolean(evidenceRefId);
+}
+
+function csvDateKey(value: unknown): string {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: APP_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function csvDisplayDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) return dateKey;
+  return `${month}/${day}/${String(year).slice(-2)}`;
+}
+
+function eachDateKey(from: string, to: string): string[] {
+  const result: string[] = [];
+  const start = new Date(`${from}T12:00:00`);
+  const end = new Date(`${to}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return result;
+  for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+    result.push(csvDateKey(cursor));
+  }
+  return result;
+}
+
+export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {
+  const { workspaceItems } = await getDashboardData(filters);
+  const today = csvDateKey(new Date());
+  const from = filters.from || today;
+  const to = filters.to || today;
+  const dates = eachDateKey(from, to);
+  const dateSet = new Set(dates);
+  const owners = Array.from(new Set(workspaceItems.map((item) => item.case_manager_name || item.responsible_attorney_name || "Unassigned"))).sort();
+  const rowsByOwnerDate = new Map<string, {
+    owner: string;
+    date: string;
+    newMatters: Set<string>;
+    calendarAdds: number;
+    attorneyCall: number;
+    welcome: number;
+    courtDate: number;
+  }>();
+  const getRow = (owner: string, date: string) => {
+    const key = `${owner}__${date}`;
+    const current = rowsByOwnerDate.get(key) ?? {
+      owner,
+      date,
+      newMatters: new Set<string>(),
+      calendarAdds: 0,
+      attorneyCall: 0,
+      welcome: 0,
+      courtDate: 0,
+    };
+    rowsByOwnerDate.set(key, current);
+    return current;
+  };
+
+  for (const owner of owners) {
+    for (const date of dates) getRow(owner, date);
+  }
+
+  for (const item of workspaceItems) {
+    const owner = item.case_manager_name || item.responsible_attorney_name || "Unassigned";
+    const createdKey = csvDateKey(item.matter_created_at);
+    if (createdKey && (!dateSet.size || dateSet.has(createdKey))) getRow(owner, createdKey).newMatters.add(String(item.matter_id));
+    if (!isStandardComplete(item.item_status, item.evidence_ref_id)) continue;
+    const proofKey = csvDateKey(item.evidence_at ?? item.matter_created_at);
+    if (!proofKey) continue;
+    if (dateSet.size && !dateSet.has(proofKey)) continue;
+    const row = getRow(owner, proofKey);
+    if (item.step_code === "SETUP_WELCOME") row.welcome += 1;
+    if (item.step_code === "SETUP_ATTY_CALL") {
+      row.attorneyCall += 1;
+      row.calendarAdds += 1;
+    }
+    if (item.step_code === "SETUP_COURT_DATE") {
+      row.courtDate += 1;
+      row.calendarAdds += 1;
+    }
+  }
+
+  const headers = [
+    "Case Manager",
+    "Date",
+    "# of new add to calendars",
+    "Initial Meeting Set",
+    "Welcome packet sent",
+    "New Matters",
+    "Court Date Added To Clio",
+  ];
+  const rows = Array.from(rowsByOwnerDate.values())
+    .sort((a, b) => a.owner.localeCompare(b.owner) || a.date.localeCompare(b.date))
+    .map((row) => [
+      row.owner,
+      csvDisplayDate(row.date),
+      row.calendarAdds,
+      row.attorneyCall,
+      row.welcome,
+      row.newMatters.size,
+      row.courtDate,
+    ]);
+
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
 function textLine(label: string, value: unknown): string {

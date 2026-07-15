@@ -418,6 +418,11 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       })
       .filter(Boolean) as Evidence<ClioCalendarEntry>[],
   );
+  const attorneyCallCommunicationEvidence = communicationEvidence(isPhoneCallCommunication, record.effective_intake_at, {
+    allowUnclearDirection: true,
+    includeBodyText: false,
+  });
+  const attorneyCallEvidence = callEvidence ?? attorneyCallCommunicationEvidence;
 
   const weeklyCheckInEvents = evidence.calendars
     .map((cal): Evidence<ClioCalendarEntry> | null => {
@@ -611,7 +616,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: commError,
       now,
     }),
-    classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
+    classify("SETUP_ATTY_CALL", attorneyCallEvidence, setup.onTime, {
       required: !isPettyTrafficMatter(record),
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Attorney Call",

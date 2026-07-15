@@ -71,6 +71,7 @@ type WorkspaceRow = {
   matterId: string;
   matterNumber: string;
   clientName: string;
+  matterCreatedAt?: string | null;
   stepCode: string;
   status: string;
   reasonCode?: string | null;
@@ -456,6 +457,12 @@ function weekStartInput(date: Date): string {
   return dateInput(localNoon);
 }
 
+function displayShortDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) return dateKey;
+  return `${month}/${day}/${String(year).slice(-2)}`;
+}
+
 function filterLink(filters: Record<string, string>, next: Record<string, string>) {
   const params = new URLSearchParams({ ...filters, ...next });
   for (const [key, value] of Array.from(params.entries())) {
@@ -522,7 +529,7 @@ const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_C
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
-  { id: "kpi", label: "KPI Score", description: "Weekly score and attorney view" },
+  { id: "kpi", label: "Standards", description: "Weekly attorney standards" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
   { id: "guide", label: "Guide", description: "How to read the results" },
@@ -673,11 +680,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const today = dateInput(new Date());
   const weekStart = weekStartInput(new Date());
   const monthStart = monthStartInput(new Date());
+  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "kpi";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
-    from: searchParams.from ?? (activeTab === "kpi" ? weekStart : ""),
-    to: searchParams.to ?? (activeTab === "kpi" ? today : ""),
+    from: searchParams.from ?? (defaultToCurrentWeek ? weekStart : ""),
+    to: searchParams.to ?? (defaultToCurrentWeek ? today : ""),
   };
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
@@ -733,6 +741,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       matterId: item.matter_id,
       matterNumber: item.matter_number,
       clientName: `${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`.trim() || "Unnamed Client",
+      matterCreatedAt: item.matter_created_at ? String(item.matter_created_at) : null,
       stepCode: item.step_code,
       status: workspaceStatus(item.item_status, item.reason_code),
       reasonCode: item.reason_code,
@@ -928,6 +937,53 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       return { attorney, total, followUp, onTrack: clear, score, late, review, needsAction, topArea };
     })
     .sort((a, b) => b.followUp - a.followUp || a.score - b.score || a.attorney.localeCompare(b.attorney));
+  const standardRows = Array.from(
+    allWorkspaceRows
+      .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode))
+      .reduce((map, item) => {
+        const current = map.get(item.attorney) ?? {
+          attorney: item.attorney,
+          matters: new Set<string>(),
+          welcome: 0,
+          attorneyCall: 0,
+          courtDate: 0,
+        };
+        current.matters.add(item.row.matterId);
+        const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
+        if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
+        if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
+        map.set(item.attorney, current);
+        return map;
+      }, new Map<string, { attorney: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number }>())
+      .values(),
+  )
+    .map((item) => ({
+      attorney: item.attorney,
+      cases: item.matters.size,
+      welcome: item.welcome,
+      attorneyCall: item.attorneyCall,
+      newMatters: item.matters.size,
+      courtDate: item.courtDate,
+    }))
+    .sort((a, b) => a.attorney.localeCompare(b.attorney));
+  const standardsDate = filters.to || today;
+  const standardsTotals = standardRows.reduce(
+    (totals, row) => ({
+      newMatters: totals.newMatters + row.newMatters,
+      initialMeeting: totals.initialMeeting + row.attorneyCall,
+      welcome: totals.welcome + row.welcome,
+      courtDate: totals.courtDate + row.courtDate,
+    }),
+    { newMatters: 0, initialMeeting: 0, welcome: 0, courtDate: 0 },
+  );
+  const standardsChart = [
+    { label: "# New Matters", value: standardsTotals.newMatters },
+    { label: "Initial Meeting Set", value: standardsTotals.initialMeeting },
+    { label: "Welcome Packet Sent", value: standardsTotals.welcome },
+    { label: "Court Date Added", value: standardsTotals.courtDate },
+  ];
+  const maxStandardsChart = Math.max(1, ...standardsChart.map((item) => item.value));
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
   const kpiWorkflowFocus = WORKFLOW_COLUMNS
     .filter(([code]) => KPI_WORKFLOW_CODES.has(code))
@@ -941,11 +997,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .sort((a, b) => b.followUp - a.followUp || a.label.localeCompare(b.label));
   const maxKpiWorkflowCount = Math.max(1, ...kpiWorkflowFocus.map((item) => item.followUp));
   const kpiReportLines = [
-    `Weekly CWCA KPI Score Report`,
+    `Weekly CWCA Standards Report`,
     `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
-    `KPI areas: Welcome Letter, Attorney Call, Court Date Added`,
+    `Standards: Welcome Packet Sent, Initial Meeting Set, Court Date Added To Clio`,
     ``,
-    `Overall score: ${kpiScore}% (${kpiGrade})`,
+    `Overall standards score: ${kpiScore}% (${kpiGrade})`,
     `Checked workflow items: ${kpiTotal}`,
     `Clear items: ${kpiClear}`,
     `Still needs follow-up: ${kpiFollowUp}`,
@@ -1443,8 +1499,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="panel-heading">
             <div>
               <span className="label">Weekly Report</span>
-              <h2>KPI Score</h2>
-              <p className="muted small">A simple weekly score for Welcome Letter, Attorney Call, and Court Date Added.</p>
+              <h2>Standards</h2>
+              <p className="muted small">Weekly attorney standards for Welcome Letter, Initial Meeting, and Court Date Added.</p>
             </div>
             <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
           </div>
@@ -1467,8 +1523,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 ))}
               </select>
             </label>
-            <button className="primary" type="submit">Update Score</button>
+            <button className="primary" type="submit">Update Standards</button>
             <a className="button" href={filterLink({ tab: "kpi" }, { from: weekStart, to: today })}>This Week</a>
+          </form>
+          <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
+            <input type="hidden" name="attorney" value={filters.attorney} />
+            <input type="hidden" name="overall" value={filters.overall} />
+            <input type="hidden" name="from" value={filters.from} />
+            <input type="hidden" name="to" value={filters.to} />
+            <button className="button primary" type="submit">Download Standards CSV</button>
           </form>
           <div className="kpi-score-row">
             <div className="kpi-score-ring" style={{ "--score": `${kpiScore * 3.6}deg` } as CSSProperties}>
@@ -1482,37 +1545,67 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </section>
 
         <section className="kpi-cards">
-          <div className="kpi-card"><span>Checked Items</span><strong>{kpiTotal}</strong><p>Setup items due or completed this week.</p></div>
-          <div className="kpi-card"><span>Clear Items</span><strong>{kpiOnTrack}</strong><p>No current follow-up needed.</p></div>
-          <div className="kpi-card attention"><span>Needs Follow-Up</span><strong>{kpiFollowUp}</strong><p>Items to verify or complete.</p></div>
-          <div className="kpi-card"><span>Late Timing</span><strong>{kpiLate}</strong><p>Completed after target.</p></div>
+          <div className="kpi-card"><span># New Matters</span><strong>{standardsTotals.newMatters}</strong><p>New matters in this date range.</p></div>
+          <div className="kpi-card"><span>Initial Meeting Set</span><strong>{standardsTotals.initialMeeting}</strong><p>Attorney call proof found.</p></div>
+          <div className="kpi-card"><span>Welcome Packet Sent</span><strong>{standardsTotals.welcome}</strong><p>Welcome letter proof found.</p></div>
+          <div className="kpi-card"><span>Court Date Added To Clio</span><strong>{standardsTotals.courtDate}</strong><p>Court date proof found.</p></div>
+        </section>
+
+        <section className="panel kpi-panel standards-graphic">
+          <div className="panel-heading">
+            <div>
+              <h2>Standards Graphic</h2>
+              <p className="muted small">Quick visual for the CSV columns.</p>
+            </div>
+          </div>
+          <div className="standards-bars">
+            {standardsChart.map((item) => (
+              <div className="standards-bar-row" key={item.label}>
+                <span>{item.label}</span>
+                <div className="standards-track">
+                  <b style={{ width: `${Math.max(4, Math.round((item.value / maxStandardsChart) * 100))}%` }} />
+                </div>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="kpi-grid">
           <div className="panel kpi-panel">
             <div className="panel-heading">
               <div>
-                <h2>Attorney Scoreboard</h2>
-                <p className="muted small">Sorted by follow-up count so the team knows where to start.</p>
+                <h2>Attorney Standards Scorecard</h2>
+                <p className="muted small">Simple weekly counts by attorney.</p>
               </div>
             </div>
-            {kpiAttorneyScores.length ? (
-              <div className="kpi-attorney-list">
-                {kpiAttorneyScores.map((item) => (
-                  <div className="kpi-attorney-row" key={item.attorney}>
-                    <div>
-                      <strong>{item.attorney}</strong>
-                      <span>{item.topArea}</span>
+            {standardRows.length ? (
+              <div className="standards-list">
+                {standardRows.map((item) => (
+                  <article className="standards-card" key={item.attorney}>
+                    <div className="standards-card-head">
+                      <div>
+                        <span className="label">Case Manager / Attorney</span>
+                        <strong>{item.attorney}</strong>
+                      </div>
+                      <div>
+                        <span className="label">Date</span>
+                        <strong>{standardsDate}</strong>
+                      </div>
                     </div>
-                    <div className="kpi-mini-track"><span style={{ width: `${item.score}%` }} /></div>
-                    <b>{item.score}%</b>
-                    <small>{item.followUp} follow-up</small>
-                  </div>
+                    <div className="standards-metrics">
+                      <div><span>Cases</span><strong>{item.cases}</strong></div>
+                      <div><span>Welcome Packet Sent</span><strong>{item.welcome}</strong></div>
+                      <div><span>Initial Meeting Set</span><strong>{item.attorneyCall}</strong></div>
+                      <div><span># New Matters</span><strong>{item.newMatters}</strong></div>
+                      <div><span>Court Date Added To Clio</span><strong>{item.courtDate}</strong></div>
+                    </div>
+                  </article>
                 ))}
               </div>
             ) : (
               <div className="workspace-empty">
-                <strong>No KPI data in this range yet.</strong>
+                <strong>No Standards data in this range yet.</strong>
                 <p>Run an audit batch or choose a date range with audited matters.</p>
               </div>
             )}
@@ -1550,13 +1643,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <summary>
             <div>
               <span className="label">Copy-Ready</span>
-              <h3>Weekly KPI summary for Teams</h3>
+              <h3>Weekly Standards summary for Teams</h3>
               <p className="muted small">Open when you want a short note to paste to the team.</p>
             </div>
             <span className="summary-action">Open Summary</span>
           </summary>
           <div className="post-closure-note-toolbar">
-            <CopyTextButton targetId="kpi-weekly-report" label="Copy KPI Report" />
+              <CopyTextButton targetId="kpi-weekly-report" label="Copy Standards Report" />
           </div>
           <textarea id="kpi-weekly-report" readOnly rows={Math.min(16, Math.max(8, kpiReportLines.split("\n").length + 1))} defaultValue={kpiReportLines} />
         </details>
@@ -1933,6 +2026,7 @@ Items Still Needing Action
         </form>
         <div className="quick-filters">
           <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: today, to: today })}>Today</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: weekStart, to: today })}>This Week</a>
           <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: monthStart, to: today })}>This Month</a>
           <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: "", to: "" })}>All Dates</a>
         </div>

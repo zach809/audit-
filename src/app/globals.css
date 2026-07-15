@@ -6137,6 +6137,12 @@ th,
   margin: 0;
 }
 
+.kpi-download-form {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 16px;
+}
+
 .kpi-cards {
   display: grid;
   gap: 12px;
@@ -6184,6 +6190,103 @@ th,
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+}
+
+.standards-graphic {
+  display: grid;
+  gap: 14px;
+}
+
+.standards-bars {
+  display: grid;
+  gap: 12px;
+}
+
+.standards-bar-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(170px, 0.45fr) minmax(180px, 1fr) 48px;
+}
+
+.standards-bar-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.standards-track {
+  background: rgba(222, 235, 248, 0.11);
+  border-radius: 999px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.standards-track b {
+  background: linear-gradient(90deg, #7f8cff, #9fbfbc);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.standards-bar-row strong {
+  color: var(--text);
+}
+
+.standards-list {
+  display: grid;
+  gap: 12px;
+}
+
+.standards-card {
+  background: rgba(8, 13, 20, 0.42);
+  border: 1px solid rgba(222, 235, 248, 0.12);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.standards-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.standards-card-head strong {
+  color: var(--text);
+  display: block;
+  font-size: 16px;
+}
+
+.standards-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.standards-metrics div {
+  background: rgba(222, 235, 248, 0.06);
+  border: 1px solid rgba(222, 235, 248, 0.1);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.standards-metrics span {
+  color: var(--muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.25;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.standards-metrics strong {
+  color: var(--text);
+  display: block;
+  font-size: 24px;
+  line-height: 1;
 }
 
 .kpi-attorney-list {
@@ -6260,6 +6363,8 @@ th,
   .kpi-range-form,
   .kpi-cards,
   .kpi-grid,
+  .standards-bar-row,
+  .standards-metrics,
   .kpi-attorney-row {
     grid-template-columns: 1fr;
   }

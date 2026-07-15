@@ -1,9 +1,19 @@
 CWCA update proof
 
 Version marker:
-cwca-false-positive-pending-deadline-cleanup-2026-07-07
+cwca-standards-scorecard-csv-2026-07-14
 
 What changed:
+- KPI Score is now labeled Standards in the app.
+- Standards now includes a graphic for New Matters, Initial Meeting Set, Welcome Packet Sent, and Court Date Added To Clio.
+- Standards now has a CSV download named cwca-weekly-standards-scorecard.csv.
+- The Standards CSV uses spreadsheet-style columns: Case Manager, Date, # of new add to calendars, Initial Meeting Set, Welcome packet sent, New Matters, Court Date Added To Clio.
+- Matters and Workspace now default to the current week first.
+- Welcome Letter matching now accepts more English/Spanish template subject variants.
+- Attorney Call now checks calendar events first and can fall back to matching Clio phone-call communications if calendar proof is missed.
+- Attorney Call wording now says matching proof in Clio, not only calendar proof.
+- .env.example now includes zach@hirschlawgroup.com with the default case-manager password.
+- .env.example now includes the case-manager email logins with the default password Hirsch12345678.
 - Not Due Yet items now show the saved escalation deadline when available.
 - Pending items stay quiet until the deadline passes, then become follow-up automatically on recheck.
 - The pending filter now says Not Due Yet for clearer staff wording.
