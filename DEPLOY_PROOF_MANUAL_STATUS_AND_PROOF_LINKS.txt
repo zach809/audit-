@@ -1,13 +1,16 @@
 CWCA update proof
 
 Version marker:
-cwca-standards-scorecard-csv-2026-07-14
+cwca-upload-this-standards-completion-bars-2026-07-14
 
 What changed:
 - KPI Score is now labeled Standards in the app.
-- Standards now includes a graphic for New Matters, Initial Meeting Set, Welcome Packet Sent, and Court Date Added To Clio.
+- Standards now includes a by-attorney completion graphic for Welcome Letter, Initial Meeting, and Court Date Added.
+- The by-attorney Standards bars now show completion against each attorney's own cases, so 1 out of 1 complete shows as 100%.
+- Standards buttons are forced compact so Update Standards and Download Standards CSV do not stretch across the page.
+- Standards wording now says Welcome Letter, not Welcome Packet.
 - Standards now has a CSV download named cwca-weekly-standards-scorecard.csv.
-- The Standards CSV uses spreadsheet-style columns: Case Manager, Date, # of new add to calendars, Initial Meeting Set, Welcome packet sent, New Matters, Court Date Added To Clio.
+- The Standards CSV uses spreadsheet-style columns: Case Manager, Date, # of new add to calendars, Initial Meeting Set, Welcome Letter Sent, New Matters, Court Date Added To Clio.
 - Matters and Workspace now default to the current week first.
 - Welcome Letter matching now accepts more English/Spanish template subject variants.
 - Attorney Call now checks calendar events first and can fall back to matching Clio phone-call communications if calendar proof is missed.
