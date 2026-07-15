@@ -6253,6 +6253,19 @@ th,
   margin-top: 5px;
 }
 
+.standards-attorney-name em {
+  background: rgba(135, 188, 165, 0.14);
+  border: 1px solid rgba(135, 188, 165, 0.32);
+  border-radius: 999px;
+  color: #a8d8c6;
+  display: inline-flex;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+  margin-top: 10px;
+  padding: 5px 8px;
+}
+
 .standards-attorney-bars {
   display: grid;
   gap: 9px;
@@ -7519,5 +7532,47 @@ th,
 
   .attorney-standard-line strong {
     text-align: left;
+  }
+}
+
+/* Final Standards tab overrides: keep action buttons compact even if older global button rules load above. */
+.kpi-layout .kpi-range-form {
+  align-items: end;
+  grid-template-columns: 180px 180px minmax(220px, 1fr) max-content max-content;
+}
+
+.kpi-layout .kpi-range-form button,
+.kpi-layout .kpi-range-form .button,
+.kpi-layout .kpi-download-form button,
+.kpi-layout .kpi-download-form .button {
+  flex: 0 0 auto !important;
+  justify-self: start !important;
+  max-width: max-content !important;
+  min-height: 38px !important;
+  padding: 8px 13px !important;
+  white-space: nowrap !important;
+  width: auto !important;
+}
+
+.kpi-layout .kpi-download-form {
+  justify-content: flex-start;
+}
+
+.kpi-layout .standards-graphic h2 {
+  margin-bottom: 4px;
+}
+
+@media (max-width: 980px) {
+  .kpi-layout .kpi-range-form {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-layout .kpi-range-form button,
+  .kpi-layout .kpi-range-form .button,
+  .kpi-layout .kpi-download-form button,
+  .kpi-layout .kpi-download-form .button {
+    justify-self: stretch !important;
+    max-width: none !important;
+    width: 100% !important;
   }
 }

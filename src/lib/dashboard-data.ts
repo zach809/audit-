@@ -901,7 +901,7 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     "Date",
     "# of new add to calendars",
     "Initial Meeting Set",
-    "Welcome packet sent",
+    "Welcome Letter Sent",
     "New Matters",
     "Court Date Added To Clio",
   ];

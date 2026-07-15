@@ -958,14 +958,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       }, new Map<string, { attorney: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number }>())
       .values(),
   )
-    .map((item) => ({
-      attorney: item.attorney,
-      cases: item.matters.size,
-      welcome: item.welcome,
-      attorneyCall: item.attorneyCall,
-      newMatters: item.matters.size,
-      courtDate: item.courtDate,
-    }))
+    .map((item) => {
+      const cases = item.matters.size;
+      const completedStandards = item.welcome + item.attorneyCall + item.courtDate;
+      const totalStandards = cases * 3;
+      return {
+        attorney: item.attorney,
+        cases,
+        welcome: item.welcome,
+        attorneyCall: item.attorneyCall,
+        newMatters: cases,
+        courtDate: item.courtDate,
+        completedStandards,
+        completionRate: totalStandards ? Math.round((completedStandards / totalStandards) * 100) : 0,
+      };
+    })
     .sort((a, b) => a.attorney.localeCompare(b.attorney));
   const standardsDate = filters.to || today;
   const standardsTotals = standardRows.reduce(
@@ -976,10 +983,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       courtDate: totals.courtDate + row.courtDate,
     }),
     { newMatters: 0, initialMeeting: 0, welcome: 0, courtDate: 0 },
-  );
-  const maxAttorneyStandard = Math.max(
-    1,
-    ...standardRows.flatMap((item) => [item.welcome, item.attorneyCall, item.courtDate]),
   );
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
   const kpiWorkflowFocus = WORKFLOW_COLUMNS
@@ -1186,7 +1189,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <a className="workspace-preset primary-preset" href={filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "initial-client-setup" }, {})}>
             <span className="label">Start Here</span>
             <strong>Initial Client Setup</strong>
-            <p>Welcome packet, attorney call, court date, client contact, and appearance filing.</p>
+            <p>Welcome letter, attorney call, court date, client contact, and appearance filing.</p>
             <b>{initialClientSetupFollowUp}</b>
             <small>needs follow-up</small>
           </a>
@@ -1562,22 +1565,23 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <div className="standards-attorney-name">
                     <strong>{item.attorney}</strong>
                     <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
+                    <em>{item.completionRate}% complete</em>
                   </div>
                   <div className="standards-attorney-bars">
                     <div className="attorney-standard-line welcome">
                       <span>Welcome Letter</span>
-                      <div><b style={{ width: `${Math.max(4, Math.round((item.welcome / maxAttorneyStandard) * 100))}%` }} /></div>
-                      <strong>{item.welcome}</strong>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.welcome / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.welcome}/{item.cases}</strong>
                     </div>
                     <div className="attorney-standard-line meeting">
                       <span>Initial Meeting</span>
-                      <div><b style={{ width: `${Math.max(4, Math.round((item.attorneyCall / maxAttorneyStandard) * 100))}%` }} /></div>
-                      <strong>{item.attorneyCall}</strong>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.attorneyCall / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.attorneyCall}/{item.cases}</strong>
                     </div>
                     <div className="attorney-standard-line court-date">
                       <span>Court Date</span>
-                      <div><b style={{ width: `${Math.max(4, Math.round((item.courtDate / maxAttorneyStandard) * 100))}%` }} /></div>
-                      <strong>{item.courtDate}</strong>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.courtDate / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.courtDate}/{item.cases}</strong>
                     </div>
                   </div>
                 </article>
