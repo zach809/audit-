@@ -7330,6 +7330,49 @@ th,
   justify-content: space-between;
 }
 
+.cm-queue-summary small {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.cm-window-tabs {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cm-window-tabs a {
+  align-items: center;
+  background: rgba(9, 17, 29, 0.42);
+  border: 1px solid rgba(167, 184, 210, 0.2);
+  border-radius: 999px;
+  color: var(--text);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 8px;
+  padding: 9px 12px;
+  text-decoration: none;
+}
+
+.cm-window-tabs a.active {
+  background: linear-gradient(135deg, rgba(155, 164, 255, 0.95), rgba(127, 140, 255, 0.9));
+  border-color: rgba(222, 235, 248, 0.38);
+  box-shadow: 0 14px 30px rgba(127, 140, 255, 0.22);
+  color: #fff;
+}
+
+.cm-window-tabs b {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  min-width: 24px;
+  padding: 2px 7px;
+  text-align: center;
+}
+
 .cm-simple-steps {
   display: grid;
   gap: 10px;
@@ -7624,5 +7667,258 @@ th,
   .app-header .header-actions a {
     max-width: none !important;
     width: 100% !important;
+  }
+}
+
+/* Final polished hero header: large control-panel layout inspired by the provided reference. */
+.shell > .app-header.topbar {
+  align-items: center !important;
+  background:
+    radial-gradient(circle at 10% 8%, rgba(191, 224, 255, 0.16), transparent 30%),
+    radial-gradient(circle at 86% 18%, rgba(129, 139, 255, 0.18), transparent 28%),
+    linear-gradient(145deg, rgba(51, 64, 86, 0.86), rgba(16, 26, 41, 0.96) 54%, rgba(12, 20, 32, 0.98)) !important;
+  border: 1px solid rgba(181, 205, 235, 0.24) !important;
+  border-radius: 34px !important;
+  box-shadow:
+    0 34px 90px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03) !important;
+  display: grid !important;
+  gap: 30px 44px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 520px) !important;
+  min-height: 360px !important;
+  overflow: hidden !important;
+  padding: clamp(28px, 4vw, 54px) !important;
+  position: relative !important;
+}
+
+.shell > .app-header.topbar::before {
+  background: #a8efff !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 18px rgba(168, 239, 255, 0.78) !important;
+  height: 8px !important;
+  left: clamp(28px, 4vw, 54px) !important;
+  top: clamp(28px, 4vw, 54px) !important;
+  width: 8px !important;
+}
+
+.shell > .app-header.topbar::after {
+  background:
+    linear-gradient(90deg, #d9f7ff 0 118px, #858cff 118px 242px, rgba(237, 242, 250, 0.82) 242px 354px, rgba(156, 207, 190, 0.74) 354px 460px) !important;
+  border-radius: 999px !important;
+  bottom: 30px !important;
+  box-shadow: 0 0 28px rgba(132, 140, 255, 0.34) !important;
+  height: 7px !important;
+  left: clamp(28px, 4vw, 54px) !important;
+  opacity: 0.9 !important;
+  width: min(460px, calc(100% - 80px)) !important;
+}
+
+.shell > .app-header.topbar .title {
+  max-width: 620px !important;
+  min-width: 0 !important;
+}
+
+.shell > .app-header.topbar .eyebrow-row {
+  align-items: flex-start !important;
+  display: grid !important;
+  gap: 12px !important;
+  justify-items: start !important;
+  margin-bottom: 28px !important;
+}
+
+.shell > .app-header.topbar .eyebrow,
+.shell > .app-header.topbar .badge.Pass {
+  backdrop-filter: blur(18px) saturate(1.14) !important;
+  border-radius: 18px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  min-height: 38px !important;
+  padding: 9px 18px !important;
+}
+
+.shell > .app-header.topbar .eyebrow {
+  background: rgba(8, 16, 28, 0.62) !important;
+  border-color: rgba(181, 205, 235, 0.16) !important;
+  color: #f4f7fb !important;
+  font-size: 12px !important;
+}
+
+.shell > .app-header.topbar .title h1 {
+  color: #f8fbff !important;
+  font-size: clamp(48px, 5.6vw, 82px) !important;
+  letter-spacing: 0 !important;
+  line-height: 0.98 !important;
+  margin: 0 0 20px !important;
+  max-width: 520px !important;
+  text-shadow: 0 10px 34px rgba(0, 0, 0, 0.36) !important;
+}
+
+.shell > .app-header.topbar .title p {
+  color: rgba(232, 240, 251, 0.82) !important;
+  font-size: clamp(17px, 1.7vw, 23px) !important;
+  line-height: 1.55 !important;
+  margin: 0 !important;
+  max-width: 500px !important;
+}
+
+.shell > .app-header.topbar .header-meta {
+  border-top: 1px solid rgba(214, 229, 248, 0.15) !important;
+  display: grid !important;
+  gap: 14px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  margin-top: 44px !important;
+  max-width: 760px !important;
+  padding-top: 22px !important;
+}
+
+.shell > .app-header.topbar .header-meta span {
+  align-items: center !important;
+  background: rgba(8, 15, 26, 0.44) !important;
+  border: 1px solid rgba(181, 205, 235, 0.18) !important;
+  border-radius: 22px !important;
+  color: rgba(231, 238, 248, 0.84) !important;
+  display: flex !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  min-height: 64px !important;
+  padding: 14px 18px !important;
+  white-space: normal !important;
+}
+
+.shell > .app-header.topbar .header-actions {
+  align-self: center !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 18px 20px !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  justify-self: end !important;
+  max-width: 520px !important;
+  padding: 0 !important;
+  width: 100% !important;
+}
+
+.shell > .app-header.topbar .header-actions > *,
+.shell > .app-header.topbar .header-actions form,
+.shell > .app-header.topbar .header-actions button,
+.shell > .app-header.topbar .header-actions .button,
+.shell > .app-header.topbar .header-actions a {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.shell > .app-header.topbar .header-actions > * {
+  order: 2 !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type {
+  grid-column: 1 / -1 !important;
+  order: 1 !important;
+}
+
+.shell > .app-header.topbar .header-actions form:last-of-type {
+  order: 3 !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type .primary {
+  align-items: center !important;
+  background:
+    linear-gradient(145deg, rgba(178, 185, 255, 0.96), rgba(119, 129, 242, 0.96)) !important;
+  border: 1px solid rgba(218, 225, 255, 0.52) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 22px 54px rgba(111, 119, 237, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32) !important;
+  color: #fff !important;
+  display: flex !important;
+  font-size: clamp(18px, 2.1vw, 26px) !important;
+  font-weight: 950 !important;
+  gap: 18px !important;
+  justify-content: center !important;
+  min-height: 86px !important;
+  padding: 18px 28px !important;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.18) !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type .primary::before {
+  border-bottom: 13px solid transparent;
+  border-left: 19px solid rgba(255, 255, 255, 0.9);
+  border-top: 13px solid transparent;
+  content: "";
+  display: inline-block;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.18));
+  height: 0;
+  width: 0;
+}
+
+.shell > .app-header.topbar .header-actions .badge,
+.shell > .app-header.topbar .header-actions form:last-of-type button,
+.shell > .app-header.topbar .header-actions > a.button {
+  align-items: center !important;
+  background: rgba(9, 17, 29, 0.52) !important;
+  border: 1px solid rgba(181, 205, 235, 0.18) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  color: #f7fbff !important;
+  display: flex !important;
+  font-size: 17px !important;
+  font-weight: 850 !important;
+  justify-content: center !important;
+  min-height: 66px !important;
+  padding: 12px 20px !important;
+}
+
+.shell > .app-header.topbar .header-actions .badge.Pass {
+  color: #d5ffe8 !important;
+}
+
+@media (max-width: 980px) {
+  .shell > .app-header.topbar {
+    grid-template-columns: 1fr !important;
+    min-height: auto !important;
+  }
+
+  .shell > .app-header.topbar .header-actions {
+    justify-self: stretch !important;
+    max-width: none !important;
+  }
+
+  .shell > .app-header.topbar .title h1 {
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell > .app-header.topbar {
+    border-radius: 24px !important;
+    gap: 24px !important;
+    padding: 22px !important;
+  }
+
+  .shell > .app-header.topbar::before {
+    left: 22px !important;
+    top: 22px !important;
+  }
+
+  .shell > .app-header.topbar::after {
+    bottom: 18px !important;
+    left: 22px !important;
+    width: calc(100% - 44px) !important;
+  }
+
+  .shell > .app-header.topbar .title h1 {
+    font-size: clamp(40px, 14vw, 58px) !important;
+  }
+
+  .shell > .app-header.topbar .header-meta,
+  .shell > .app-header.topbar .header-actions {
+    grid-template-columns: 1fr !important;
+  }
+
+  .shell > .app-header.topbar .header-actions form:first-of-type .primary {
+    min-height: 64px !important;
   }
 }

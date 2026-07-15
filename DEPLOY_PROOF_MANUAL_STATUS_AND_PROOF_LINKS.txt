@@ -87,6 +87,10 @@ What changed:
 - Case-manager task cards now show the assigned case manager so staff know whose task it is.
 - Standards CSV now uses clearer columns and removes the extra "# add to calendars" column.
 - Standards CSV now keeps New Matters plus the three tracked standards: Initial Meeting Calendar Event Set, Welcome Letter Sent, and Court Date Calendar Event Created.
+- Version cwca-polished-header-cm-week-filter-2026-07-15 updates the main dashboard header to a larger polished hero/control-panel layout.
+- The case-manager portal now defaults to this week's tasks only.
+- Case managers can switch to Past Week if they need to review last week's tasks.
+- Older backlog items are no longer shown by default on the case-manager page.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.
