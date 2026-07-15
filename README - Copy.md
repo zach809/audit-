@@ -39,7 +39,7 @@ Stored locally for this feature:
 
 CWCA can use AI only when an auditor clicks a button. It does not run during audit batches, page loads, or bulk matter review.
 
-The matter card can show **Ask AI About This** on a single flagged issue. The Reports review builder can also use **Draft with AI** to draft plain-English Results Details, Report Summary, and a Teams message for the selected flagged matter. These are helper features only:
+The matter card can show a small **Ask CWCA AI** chat box on a single flagged issue. The Reports review builder can also use **Draft with AI** to draft plain-English Results Details, Report Summary, and a Teams message for the selected flagged matter. These are helper features only:
 
 - It does not write to Clio.
 - It does not save the review automatically.
@@ -49,7 +49,9 @@ The matter card can show **Ask AI About This** on a single flagged issue. The Re
 - AI does not bulk-analyze every matter automatically.
 - AI does not repair logic automatically.
 
-If `OPENAI_API_KEY` is not configured, CWCA still works normally and shows a clear AI-not-configured message.
+To use the helper, set `OPENAI_API_KEY` and optionally `AI_MODEL`. The default model is `gpt-4o-mini` because it keeps these short manual helper prompts low-cost.
+
+If the OpenAI key is not configured, CWCA still works normally and shows a clear AI-not-configured message.
 
 ## Current Workflow Rules
 
@@ -144,6 +146,7 @@ Do not enable write permissions.
 - `CLIO_REDIRECT_URI`: OAuth callback URL.
 - `CLIO_BASE_URL`: `https://app.clio.com` for US.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
+- `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`. Current default CM setup uses the listed Hirsch emails with password `Hirsch12345678`.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.
@@ -155,7 +158,7 @@ Do not enable write permissions.
 - `AUDIT_METRIC_RETENTION_DAYS`: monthly snapshot retention. Default `365`.
 - `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
 - `OPENAI_API_KEY`: optional OpenAI API key for manual AI help.
-- `AI_MODEL`: optional model name for AI help. Default `gpt-4o-mini`.
+- `AI_MODEL`: optional OpenAI model name. Default `gpt-4o-mini`.
 
 ## Notes
 

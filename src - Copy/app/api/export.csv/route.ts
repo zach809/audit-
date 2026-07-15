@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { actionItemsCsv, auditLogicIssuesCsv, caseManagerTodoText, dashboardCsv } from "@/lib/dashboard-data";
+import { actionItemsCsv, auditLogicIssuesCsv, caseManagerTodoText, dashboardCsv, standardsCsv } from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
@@ -26,10 +26,13 @@ export async function POST(request: NextRequest) {
   const isActionList = exportType === "actions";
   const isCaseManagerText = exportType === "case-manager-text";
   const isLogicIssues = exportType === "logic-issues";
+  const isStandards = exportType === "standards";
   const body = isCaseManagerText
     ? await caseManagerTodoText(filters, url.origin)
     : isLogicIssues
       ? await auditLogicIssuesCsv(filters, url.origin)
+      : isStandards
+        ? await standardsCsv(filters)
       : isActionList
         ? await actionItemsCsv(filters, url.origin)
         : await dashboardCsv(filters);
@@ -37,6 +40,8 @@ export async function POST(request: NextRequest) {
     ? "cwca-end-of-week-case-manager-audit-report.txt"
     : isLogicIssues
       ? "cwca-audit-logic-issues.csv"
+      : isStandards
+        ? "cwca-weekly-standards-scorecard.csv"
       : isActionList
         ? "cwca-case-manager-action-report.csv"
         : "cwca-audit.csv";

@@ -9,6 +9,8 @@ export const POST_CLOSURE_TOUCHPOINTS = [
   { months: 12, label: "12 Months" },
 ] as const;
 
+const POST_CLOSURE_YEAR = 2026;
+
 export const POST_CLOSURE_REVIEW_STATUSES = [
   "In Progress",
   "Completed",
@@ -249,7 +251,10 @@ export async function syncPostClosureFollowups(
 ): Promise<{ syncedMatters: number; remindersChecked: number; remindersCreated: number; remindersRepaired: number; skippedWithoutCloseDate: number }> {
   await initDb();
   const sql = db();
-  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+  const defaultSince = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+  const currentYearStart = zonedDateTimeToUtc(POST_CLOSURE_YEAR, 1, 1, 0);
+  const currentYearEnd = zonedDateTimeToUtc(POST_CLOSURE_YEAR + 1, 1, 1, 0);
+  const since = defaultSince > currentYearStart ? defaultSince : currentYearStart;
   const matters = await listClosedMatterCandidates(client, since);
   let syncedMatters = 0;
   let remindersChecked = 0;
@@ -262,6 +267,7 @@ export async function syncPostClosureFollowups(
       skippedWithoutCloseDate += 1;
       continue;
     }
+    if (closedAt < currentYearStart || closedAt >= currentYearEnd) continue;
 
     const clientName = matter.client?.name ?? "";
     const splitName = clientName.split(" ");
@@ -309,6 +315,9 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
   const attorney = cleanText(filters.attorney, 160);
   const attorneyName = sql`coalesce(nullif(responsible_attorney_name, ''), 'Unassigned')`;
   const attorneyCondition = attorney ? sql`${attorneyName} = ${attorney}` : sql`true`;
+  const yearStart = zonedDateTimeToUtc(POST_CLOSURE_YEAR, 1, 1, 0);
+  const yearEnd = zonedDateTimeToUtc(POST_CLOSURE_YEAR + 1, 1, 1, 0);
+  const currentYearCondition = sql`matter_closed_at >= ${yearStart} and matter_closed_at < ${yearEnd}`;
   const window = filters.window || "current";
   const windowCondition =
     window === "all"
@@ -338,6 +347,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
     ) followups
     where ${stageCondition}
       and ${attorneyCondition}
+      and ${currentYearCondition}
       and ${windowCondition}
       and ${statusCondition}
     order by
@@ -373,6 +383,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
     ) followups
     where ${stageCondition}
       and ${attorneyCondition}
+      and ${currentYearCondition}
       and ${windowCondition}
   `;
 
@@ -388,6 +399,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
       from post_closure_followup
     ) followups
     where ${stageCondition}
+      and ${currentYearCondition}
       and ${windowCondition}
     group by 1
     order by open_count desc, responsible_attorney_name
@@ -406,6 +418,7 @@ export async function getPostClosureData(filters: PostClosureFilters = {}): Prom
       from post_closure_followup
     ) followups
     where ${attorneyCondition}
+      and ${currentYearCondition}
       and ${windowCondition}
     group by touchpoint_months, touchpoint_label
     order by touchpoint_months

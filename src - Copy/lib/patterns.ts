@@ -36,8 +36,17 @@ export const TEMPLATE_PATTERNS = {
     "welcome letter",
     "welcome letter -",
     "welcome letter:",
+    "welcome letter english",
+    "welcome letter spanish",
+    "welcome letter - english",
+    "welcome letter - spanish",
+    "welcome letter english",
+    "welcome letter spanish",
     "welcome email",
     "welcome packet",
+    "welcome template",
+    "client welcome",
+    "new client welcome",
     "welcome to hirsch law group",
     "welcome to hirsch law",
     "welcome to hirsch",
@@ -45,6 +54,11 @@ export const TEMPLATE_PATTERNS = {
     "carta bienvenida",
     "bienvenido",
     "bienvenida",
+    "bienvenidos",
+    "bienvenido a hirsch",
+    "bienvenida a hirsch",
+    "bienvenidos a hirsch",
+    "carta bienvenida hirsch",
     "bienvenido a hirsch law group",
     "bienvenida a hirsch law group",
     "bienvenido a hirsch law",
@@ -132,6 +146,14 @@ export const CALENDAR_PATTERNS = {
     "em-phonecall",
     "em phonecall",
     "em-spanish phone call",
+    "sb-phone call",
+    "sb phone call",
+    "sb-phonecall",
+    "sb phonecall",
+    "ic/phonecall",
+    "ic-phonecall",
+    "ic phonecall",
+    "ic phone call",
     "phone-client",
     "mf-phone-client",
     "phone client",
@@ -296,7 +318,13 @@ export const CALENDAR_PATTERNS = {
 
 export function isWelcomeTemplate(text: string): boolean {
   const normalized = normalizeText(text);
-  return normalized.startsWith("welcome letter") || includesAny(normalized, TEMPLATE_PATTERNS.welcome);
+  const compact = normalized.replace(/[^a-z0-9]+/g, "");
+  return normalized.startsWith("welcome letter") ||
+    normalized.startsWith("welcome to hirsch") ||
+    normalized.startsWith("carta de bienvenida") ||
+    compact.startsWith("welcomeletter") ||
+    compact.startsWith("cartadebienvenida") ||
+    includesAny(normalized, TEMPLATE_PATTERNS.welcome);
 }
 
 export function isAppearanceTemplate(text: string): boolean {

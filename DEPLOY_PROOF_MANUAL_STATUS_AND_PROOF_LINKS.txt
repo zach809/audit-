@@ -93,6 +93,13 @@ What changed:
 - Older backlog items are no longer shown by default on the case-manager page.
 - Version cwca-compact-polished-header-2026-07-15 shrinks the polished header so it no longer takes over the first screen.
 - The Run Audit Batch button now has enough width so the label fits cleanly.
+- Version cwca-standards-csv-case-manager-fix-2026-07-15 fixes the Standards CSV owner column.
+- Standards CSV now groups only by the approved case-manager assignment map and no longer leaks attorney names or lowercase manual names into the Case Manager column.
+- Standards CSV now seeds rows only from Welcome Letter, Initial Meeting, and Court Date standards items.
+- Version cwca-usa-theme-standards-weekly-fix-2026-07-15 applies a USA patriotic red/white/blue palette with semantic statuses.
+- Red now indicates negative/needs-action states, yellow indicates timing/caution, green indicates success, and blue indicates neutral/info.
+- Standards CSV now matches the simple case-manager sheet format: Case Manager, Cases / new matters #, Initial Meeting set - Phone call, Welcome letters sent, Court date event made, Workflow completion %, Date.
+- Weekly Client Check-In now marks nearby-date phone call proof as completed late/timing review instead of missing once the same-day window has passed.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.

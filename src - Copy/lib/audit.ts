@@ -62,8 +62,16 @@ function parseDate(value?: string | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function isDateOnly(value?: string | null): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test((value ?? "").trim());
+}
+
 function commDate(comm: ClioCommunication): Date | null {
-  return parseDate(comm.date ?? comm.received_at ?? comm.created_at);
+  const preciseDate = [comm.date, comm.received_at, comm.created_at]
+    .filter((value) => value && !isDateOnly(value))
+    .map((value) => parseDate(value))
+    .find((value): value is Date => Boolean(value));
+  return preciseDate ?? parseDate(comm.date ?? comm.received_at ?? comm.created_at);
 }
 
 function communicationSearchText(comm: ClioCommunication, includeBody = false): string {
@@ -121,6 +129,14 @@ function addHours(date: Date, hours: number): Date {
 function localDateKey(date: Date): string {
   const parts = localParts(date);
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function localDateDistanceDays(a: Date, b: Date): number {
+  const [ay, am, ad] = localDateKey(a).split("-").map(Number);
+  const [by, bm, bd] = localDateKey(b).split("-").map(Number);
+  const aUtc = Date.UTC(ay, am - 1, ad);
+  const bUtc = Date.UTC(by, bm - 1, bd);
+  return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
 }
 
 function endOfLocalDay(date: Date): Date {
@@ -410,6 +426,11 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       })
       .filter(Boolean) as Evidence<ClioCalendarEntry>[],
   );
+  const attorneyCallCommunicationEvidence = communicationEvidence(isPhoneCallCommunication, record.effective_intake_at, {
+    allowUnclearDirection: true,
+    includeBodyText: false,
+  });
+  const attorneyCallEvidence = callEvidence ?? attorneyCallCommunicationEvidence;
 
   const weeklyCheckInEvents = evidence.calendars
     .map((cal): Evidence<ClioCalendarEntry> | null => {
@@ -440,6 +461,18 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .filter(Boolean) as Evidence<ClioCommunication>[],
       )
     : null;
+  const nearbyWeeklyCheckInCall = weeklyCheckInEvent
+    ? (evidence.communications
+        .map((comm): (Evidence<ClioCommunication> & { distance: number }) | null => {
+          const at = commDate(comm);
+          if (!at || !isPhoneCallCommunication(communicationSearchText(comm))) return null;
+          const distance = Math.abs(localDateDistanceDays(at, weeklyCheckInEvent.at));
+          if (distance === 0 || distance > 3) return null;
+          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id), distance };
+        })
+        .filter(Boolean) as Array<Evidence<ClioCommunication> & { distance: number }>)
+        .sort((a, b) => a.distance - b.distance || a.at.getTime() - b.at.getTime())[0] ?? null
+    : null;
   const weeklyCheckInItem = (() => {
     if (calendarError) {
       return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
@@ -452,6 +485,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     }
     if (weeklyCheckInCall) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null), weeklyCheckInCall);
+    }
+    if (nearbyWeeklyCheckInCall && now > weeklyCheckInDeadline) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
     }
     if (now <= weeklyCheckInDeadline) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Waiting for same-day call proof", weeklyCheckInDeadline, null), weeklyCheckInEvent);
@@ -568,19 +604,32 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   );
 
   const unknownDirection = evidence.communications.some((comm) => isOutbound(comm, record.client_id) === null);
-  const inboundStreak = evidence.communications
+  const followUpState = evidence.communications
     .map((comm) => ({ comm, at: commDate(comm), direction: isOutbound(comm, record.client_id) }))
     .filter((entry) => entry.at)
     .sort((a, b) => a.at!.getTime() - b.at!.getTime())
     .reduce(
       (state, entry) => {
-        if (entry.direction === false) state.streak += 1;
-        if (entry.direction === true) state.streak = 0;
-        state.max = Math.max(state.max, state.streak);
+        if (entry.direction === false) {
+          state.unansweredInboundCount += 1;
+          state.firstUnansweredInboundAt ??= entry.at!;
+          state.lastInboundAt = entry.at!;
+        }
+        if (entry.direction === true) {
+          state.unansweredInboundCount = 0;
+          state.firstUnansweredInboundAt = null;
+          state.lastFirmResponseAt = entry.at!;
+        }
         return state;
       },
-      { streak: 0, max: 0 },
+      {
+        unansweredInboundCount: 0,
+        firstUnansweredInboundAt: null as Date | null,
+        lastInboundAt: null as Date | null,
+        lastFirmResponseAt: null as Date | null,
+      },
     );
+  const currentClientFollowUpRisk = followUpState.unansweredInboundCount >= 2;
 
   const items: AuditItemResult[] = [
     classify("SETUP_WELCOME", welcomeEvidence, setup.twoBusinessHours, {
@@ -590,7 +639,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: commError,
       now,
     }),
-    classify("SETUP_ATTY_CALL", callEvidence, setup.onTime, {
+    classify("SETUP_ATTY_CALL", attorneyCallEvidence, setup.onTime, {
       required: !isPettyTrafficMatter(record),
       correctiveDeadlineAt: setup.corrective,
       operationalState: "Needs Attorney Call",
@@ -621,8 +670,15 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     postCourtCallItem,
     commError
       ? base("CLIENT_FOLLOWUP", "Unknown", "Unknown", null, null, commError)
-      : inboundStreak.max >= 2
-      ? base("CLIENT_FOLLOWUP", "Missing", "Client Follow-Up Risk", null, null, "TWO_INBOUND_BEFORE_RESPONSE")
+      : currentClientFollowUpRisk
+      ? base(
+          "CLIENT_FOLLOWUP",
+          "Missing",
+          "Client Follow-Up Risk",
+          followUpState.firstUnansweredInboundAt,
+          null,
+          "CURRENT_UNANSWERED_CLIENT_MESSAGES",
+        )
       : base("CLIENT_FOLLOWUP", unknownDirection ? "Unknown" : "On Time", unknownDirection ? "Unknown" : "No Risk", null, null, unknownDirection ? "DIRECTION_UNCLEAR" : null),
     weeklyCheckInItem,
   ];

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { CSSProperties } from "react";
 import { getDashboardData, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
@@ -70,6 +71,7 @@ type WorkspaceRow = {
   matterId: string;
   matterNumber: string;
   clientName: string;
+  matterCreatedAt?: string | null;
   stepCode: string;
   status: string;
   reasonCode?: string | null;
@@ -92,6 +94,11 @@ type WorkspaceRow = {
   reviewCompletedAt?: string | null;
   reviewUpdatedAt?: string | null;
   reviewHistory?: unknown;
+};
+
+type CaseManagerTask = {
+  attorney: string;
+  row: WorkspaceRow;
 };
 
 function evidencePath(item: DashboardItem, directToClio = false): string {
@@ -235,7 +242,7 @@ function matterCardStatus(items: DashboardItem[], fallback: string): string {
   const activeItems = items.filter(itemNeedsAttention);
   if (activeItems.some((item) => item.status === "Missing")) return "Needs Follow-Up";
   if (activeItems.some((item) => item.status === "Unknown")) return "Needs Review";
-  if (activeItems.some((item) => item.status === "Late")) return "Late";
+  if (activeItems.some((item) => item.status === "Late")) return "Timing Review";
   if (items.some(isClosedByReview)) return "Resolved";
   if (items.some((item) => item.status === "Pending")) return "Not Due Yet";
   return displayAuditStatus(fallback);
@@ -244,8 +251,8 @@ function matterCardStatus(items: DashboardItem[], fallback: string): string {
 function stepDetail(item: DashboardItem | undefined, status: string): string {
   if (!item) return status === "Pending" ? "Waiting for audit" : "";
   if (status === "Pending") {
-    if (item.operationalState && item.operationalState !== "Pending") return item.operationalState;
-    if (item.deadlineAt) return `Due: ${formatLocal(item.deadlineAt)}`;
+    const state = item.operationalState && item.operationalState !== "Pending" ? item.operationalState : "Not due yet";
+    if (item.deadlineAt) return `${state}. Escalates after ${formatLocal(item.deadlineAt)}`;
     return "Not due yet";
   }
   if (status === "Missing") {
@@ -255,7 +262,8 @@ function stepDetail(item: DashboardItem | undefined, status: string): string {
     return isGenericApiError(item.reasonCode) ? "Click Recheck Matter" : isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
   }
   if (status === "Late") {
-    return isInternalPlaceholder(item.reasonCode) ? "" : item.reasonCode ?? "";
+    if (item.evidenceAt) return `Found: ${formatLocal(item.evidenceAt)}`;
+    return isInternalPlaceholder(item.reasonCode) ? "Proof found after target time" : item.reasonCode ?? "";
   }
   return "";
 }
@@ -291,7 +299,7 @@ function problemText(item: DashboardItem): string {
     late: "Evidence was found late.",
   };
   if (item.status === "Missing") return `${info.missing} ${info.action}`;
-  if (item.status === "Late") return info.late;
+  if (item.status === "Late") return `${info.late} Proof exists in Clio; this is a timing review, not a missing-proof task.`;
   if (item.status === "Unknown") {
     if (isLegacyWelcomeReview(item)) {
       return "Welcome letter communication was not confirmed in Clio. Check or send the Welcome Letter / Carta de bienvenida / Welcome to Hirsch Law Group template.";
@@ -319,9 +327,18 @@ function problemList(context: { matterId: string; matterNumber: string; clientNa
     if (reviewed) {
       return <p>The flagged items on this matter have been reviewed in CWCA. No open follow-up is showing on this card right now.</p>;
     }
-    return pending ? (
-      <p>No problem yet. These steps are still pending because the deadline has not passed or the matter has not needed that step yet.</p>
-    ) : (
+    if (pending) {
+      const nextPending = items
+        .filter((item) => item.status === "Pending" && item.deadlineAt)
+        .sort((a, b) => new Date(a.deadlineAt!).getTime() - new Date(b.deadlineAt!).getTime())[0];
+      return (
+        <p>
+          No problem yet. Pending items stay quiet until their deadline passes.
+          {nextPending ? ` Next escalation: ${workflowLabel(nextPending.stepCode)} after ${formatLocal(nextPending.deadlineAt)}.` : ""}
+        </p>
+      );
+    }
+    return (
       <p>No problems found for this matter.</p>
     );
   }
@@ -365,6 +382,9 @@ function problemList(context: { matterId: string; matterNumber: string; clientNa
               currentNote={item.reviewNote}
               currentNextStep={item.nextStep}
               currentReviewedBy={item.reviewedBy}
+              currentCaseManagerName={item.caseManagerName}
+              currentProofReference={item.reviewProofReference}
+              existingProofUrl={href || null}
             />
             <MatterAiHelp
               matterId={context.matterId}
@@ -375,9 +395,15 @@ function problemList(context: { matterId: string; matterNumber: string; clientNa
               auditItemLabel={workflowLabel(item.stepCode)}
               status={currentItemStatus(item)}
               reason={problemText(item)}
+              reasonCode={item.reasonCode ?? null}
+              operationalState={item.operationalState ?? null}
               due={item.deadlineAt ? formatLocal(item.deadlineAt) : null}
               found={item.evidenceAt ? formatLocal(item.evidenceAt) : null}
-              clioUrl={clioMatterPath(context.matterId)}
+              evidenceSource={item.evidenceSource ?? null}
+              evidenceRefId={item.evidenceRefId ?? null}
+              auditVersion={item.auditVersion ?? null}
+              lastEvaluatedAt={item.lastEvaluatedAt ? formatLocal(item.lastEvaluatedAt) : null}
+              clioUrl={clioLinks[0]?.href ?? clioMatterPath(context.matterId)}
               proofUrl={href || null}
             />
             <div className="problem-meta">
@@ -412,6 +438,29 @@ function dateInput(date: Date): string {
 function monthStartInput(date: Date): string {
   const today = dateInput(date);
   return `${today.slice(0, 8)}01`;
+}
+
+function weekStartInput(date: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: APP_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  const localNoon = new Date(`${parts.year}-${parts.month}-${parts.day}T12:00:00`);
+  const day = localNoon.getDay();
+  const daysFromMonday = (day + 6) % 7;
+  localNoon.setDate(localNoon.getDate() - daysFromMonday);
+  return dateInput(localNoon);
+}
+
+function displayShortDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) return dateKey;
+  return `${month}/${day}/${String(year).slice(-2)}`;
 }
 
 function filterLink(filters: Record<string, string>, next: Record<string, string>) {
@@ -475,10 +524,12 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "post-closure" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "case-manager" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
+const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
+  { id: "kpi", label: "Standards", description: "Weekly attorney standards" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
   { id: "guide", label: "Guide", description: "How to read the results" },
@@ -504,7 +555,7 @@ const WORKSPACE_STATUS_FILTERS = [
   { id: "missing", label: "Needs Action" },
   { id: "review", label: "Needs Review" },
   { id: "late", label: "Late" },
-  { id: "pending", label: "Pending" },
+  { id: "pending", label: "Not Due Yet" },
   { id: "all", label: "All Items" },
 ];
 
@@ -626,14 +677,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const closureStageFilter = searchParams.closure_stage ?? "";
   const closureAttorneyFilter = searchParams.closure_attorney ?? "";
   const closureWindowFilter = searchParams.closure_window ?? "current";
+  const today = dateInput(new Date());
+  const weekStart = weekStartInput(new Date());
+  const monthStart = monthStartInput(new Date());
+  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "kpi";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
-    from: searchParams.from ?? "",
-    to: searchParams.to ?? "",
+    from: searchParams.from ?? (defaultToCurrentWeek ? weekStart : ""),
+    to: searchParams.to ?? (defaultToCurrentWeek ? today : ""),
   };
-  const today = dateInput(new Date());
-  const monthStart = monthStartInput(new Date());
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
   let postClosure: Awaited<ReturnType<typeof getPostClosureData>> | null = null;
@@ -688,6 +741,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       matterId: item.matter_id,
       matterNumber: item.matter_number,
       clientName: `${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`.trim() || "Unnamed Client",
+      matterCreatedAt: item.matter_created_at ? String(item.matter_created_at) : null,
       stepCode: item.step_code,
       status: workspaceStatus(item.item_status, item.reason_code),
       reasonCode: item.reason_code,
@@ -749,6 +803,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .filter((item) => isFollowUpStatus(item.row.status))
     .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
     .slice(0, 8);
+  const caseManagerTasks: CaseManagerTask[] = allWorkspaceRows
+    .filter((item) => isFollowUpStatus(item.row.status) && !isClosedByReview(item.row))
+    .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName));
+  const caseManagerOpen = caseManagerTasks.filter((item) => !item.row.reviewDecision || item.row.reviewDecision === "Needs Review").length;
+  const caseManagerInProgress = caseManagerTasks.filter((item) => item.row.reviewDecision === "In Progress").length;
+  const caseManagerProofNeeded = caseManagerTasks.filter((item) => !item.row.evidenceRefId && !item.row.reviewProofReference).length;
+  const caseManagerTeamsNote = [
+    "Hey team - these CWCA items need case-manager follow-up.",
+    "Please update the item in Clio first, then paste the Clio proof link in CWCA.",
+    "CWCA will not clear resolved tasks from a note alone.",
+    "",
+    ...caseManagerTasks.slice(0, 40).map((item) => `- ${item.row.clientName} (${item.row.matterNumber}) - ${workflowLabel(item.row.stepCode)} - ${displayAuditStatus(item.row.status)} - ${clioMatterPath(item.row.matterId)}`),
+  ].join("\n");
   const initialClientSetupRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, "initial-client-setup"));
   const initialClientSetupFollowUp = initialClientSetupRows.filter((item) => isFollowUpStatus(item.row.status)).length;
   const initialClientSetupTotal = initialClientSetupRows.length;
@@ -831,6 +898,142 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     checked: allWorkspaceRows.filter((item) => item.row.stepCode === code).length,
   }));
   const maxWorkflowCount = Math.max(1, ...workflowAreaBreakdown.map((item) => item.followUp));
+  const kpiRows = allWorkspaceRows.filter(
+    (item) =>
+      KPI_WORKFLOW_CODES.has(item.row.stepCode) &&
+      !["Not Due Yet", "Pending", "N/A", "Not Checked"].includes(item.row.status),
+  );
+  const kpiTotal = kpiRows.length;
+  const kpiFollowUp = kpiRows.filter((item) => isFollowUpStatus(item.row.status)).length;
+  const kpiClear = Math.max(0, kpiTotal - kpiFollowUp);
+  const kpiOnTrack = kpiClear;
+  const kpiLate = kpiRows.filter((item) => item.row.status === "Late").length;
+  const kpiReview = kpiRows.filter((item) => REVIEW_STATUSES.has(item.row.status)).length;
+  const kpiScore = kpiTotal ? Math.max(0, Math.min(100, Math.round((kpiClear / kpiTotal) * 100))) : 0;
+  const kpiGrade = kpiScore >= 90 ? "Strong" : kpiScore >= 75 ? "Watch" : "Needs Focus";
+  const kpiAttorneyScores = Array.from(
+    kpiRows.reduce((map, item) => {
+      const rows = map.get(item.attorney) ?? [];
+      rows.push(item.row);
+      map.set(item.attorney, rows);
+      return map;
+    }, new Map<string, WorkspaceRow[]>()),
+  )
+    .map(([attorney, rows]) => {
+      const total = rows.length;
+      const followUp = rows.filter((row) => isFollowUpStatus(row.status)).length;
+      const clear = Math.max(0, total - followUp);
+      const score = total ? Math.max(0, Math.min(100, Math.round((clear / total) * 100))) : 0;
+      const late = rows.filter((row) => row.status === "Late").length;
+      const review = rows.filter((row) => REVIEW_STATUSES.has(row.status)).length;
+      const needsAction = rows.filter((row) => row.status === "Missing").length;
+      const topArea = needsAction >= late && needsAction >= review && needsAction > 0
+        ? "Needs action"
+        : review >= late && review > 0
+          ? "Needs review"
+          : late > 0
+            ? "Timing"
+            : "On track";
+      return { attorney, total, followUp, onTrack: clear, score, late, review, needsAction, topArea };
+    })
+    .sort((a, b) => b.followUp - a.followUp || a.score - b.score || a.attorney.localeCompare(b.attorney));
+  const standardRows = Array.from(
+    allWorkspaceRows
+      .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode))
+      .reduce((map, item) => {
+        const current = map.get(item.attorney) ?? {
+          attorney: item.attorney,
+          matters: new Set<string>(),
+          welcome: 0,
+          attorneyCall: 0,
+          courtDate: 0,
+          welcomeLate: 0,
+          attorneyCallLate: 0,
+          courtDateLate: 0,
+        };
+        current.matters.add(item.row.matterId);
+        const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        const late = item.row.status === "Late";
+        if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
+        if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
+        if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
+        if (late && item.row.stepCode === "SETUP_WELCOME") current.welcomeLate += 1;
+        if (late && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCallLate += 1;
+        if (late && item.row.stepCode === "SETUP_COURT_DATE") current.courtDateLate += 1;
+        map.set(item.attorney, current);
+        return map;
+      }, new Map<string, { attorney: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; welcomeLate: number; attorneyCallLate: number; courtDateLate: number }>())
+      .values(),
+  )
+    .map((item) => {
+      const cases = item.matters.size;
+      const completedStandards = item.welcome + item.attorneyCall + item.courtDate;
+      const lateStandards = item.welcomeLate + item.attorneyCallLate + item.courtDateLate;
+      const onTimeStandards = Math.max(0, completedStandards - lateStandards);
+      const totalStandards = cases * 3;
+      const scorePoints = onTimeStandards + lateStandards * 0.5;
+      return {
+        attorney: item.attorney,
+        cases,
+        welcome: item.welcome,
+        attorneyCall: item.attorneyCall,
+        newMatters: cases,
+        courtDate: item.courtDate,
+        welcomeLate: item.welcomeLate,
+        attorneyCallLate: item.attorneyCallLate,
+        courtDateLate: item.courtDateLate,
+        lateStandards,
+        completedStandards,
+        completionRate: totalStandards ? Math.round((scorePoints / totalStandards) * 100) : 0,
+      };
+    })
+    .sort((a, b) => a.attorney.localeCompare(b.attorney));
+  const standardsDate = filters.to || today;
+  const standardsTotals = standardRows.reduce(
+    (totals, row) => ({
+      newMatters: totals.newMatters + row.newMatters,
+      initialMeeting: totals.initialMeeting + row.attorneyCall,
+      welcome: totals.welcome + row.welcome,
+      courtDate: totals.courtDate + row.courtDate,
+    }),
+    { newMatters: 0, initialMeeting: 0, welcome: 0, courtDate: 0 },
+  );
+  const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
+  const kpiWorkflowFocus = [
+    ["SETUP_WELCOME", "Welcome Letter"],
+    ["SETUP_ATTY_CALL", "Attorney Call"],
+    ["SETUP_COURT_DATE", "Court Date Added"],
+  ] as const;
+  const kpiWorkflowFocusRows = kpiWorkflowFocus
+    .map(([code, label]) => ({
+      code,
+      label,
+      followUp: kpiRows.filter((item) => item.row.stepCode === code && isFollowUpStatus(item.row.status)).length,
+      checked: kpiRows.filter((item) => item.row.stepCode === code).length,
+    }));
+  const maxKpiWorkflowCount = Math.max(1, ...kpiWorkflowFocusRows.map((item) => item.followUp));
+  const kpiReportLines = [
+    `Weekly CWCA Standards Report`,
+    `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
+    `Standards: Welcome Letter Sent, Initial Meeting Set, Court Date Added To Clio`,
+    ``,
+    `Overall standards score: ${kpiScore}% (${kpiGrade})`,
+    `Checked workflow items: ${kpiTotal}`,
+    `Clear items: ${kpiClear}`,
+    `Still needs follow-up: ${kpiFollowUp}`,
+    `Late timing items: ${kpiLate}`,
+    `Needs review items: ${kpiReview}`,
+    ``,
+    `Attorney focus:`,
+    ...(kpiTopAttention.length
+      ? kpiTopAttention.map((item) => `- ${item.attorney}: ${item.score}% score, ${item.followUp} follow-up item(s), main area: ${item.topArea}`)
+      : ["- No attorney follow-up items in this date range."]),
+    ``,
+    `Suggested next step:`,
+    kpiFollowUp
+      ? `Open the Matters tab, filter to Needs Follow-Up, and verify the highest-priority proof links in Clio.`
+      : `No current weekly follow-up items are showing in this date range.`,
+  ].join("\n");
   const setupSnapshot = WORKFLOW_COLUMNS
     .filter(([code]) => workspaceFocusMatches(code, "initial-client-setup"))
     .map(([code, label]) => {
@@ -985,7 +1188,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="grid">
         <div className="stat focus-stat stat-red"><span>Needs Follow-Up</span><strong>{needsFollowUpCount}</strong><p>Items that need action, timing review, or verification.</p></div>
         <div className="stat stat-green"><span>On Track</span><strong>{dashboardData.summary.pass}</strong><p>No current workflow problems found.</p></div>
-        <div className="stat stat-blue"><span>Not Due Yet</span><strong>{dashboardData.summary.pending}</strong><p>Waiting on a future deadline.</p></div>
+        <div className="stat stat-blue"><span>Not Due Yet</span><strong>{dashboardData.summary.pending}</strong><p>These will escalate automatically after their saved deadline.</p></div>
         <div className="stat stat-purple"><span>Needs Review</span><strong>{dashboardData.summary.review}</strong><p>Check visibility before coaching.</p></div>
         <div className="stat stat-amber"><span>Late Timing</span><strong>{dashboardData.summary.late}</strong><p>Evidence was found after the goal.</p></div>
         <div className="stat stat-slate"><span>Still To Audit</span><strong>{uncheckedCount}</strong><p>{batchesLeft} safe {batchLabel} left.</p></div>
@@ -1002,7 +1205,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <a className="workspace-preset primary-preset" href={filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "initial-client-setup" }, {})}>
             <span className="label">Start Here</span>
             <strong>Initial Client Setup</strong>
-            <p>Welcome packet, attorney call, court date, client contact, and appearance filing.</p>
+            <p>Welcome letter, attorney call, court date, client contact, and appearance filing.</p>
             <b>{initialClientSetupFollowUp}</b>
             <small>needs follow-up</small>
           </a>
@@ -1306,6 +1509,188 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
       ) : null}
 
+      {activeTab === "kpi" ? (
+      <section className="kpi-layout">
+        <section className="panel kpi-hero">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Weekly Report</span>
+              <h2>Standards</h2>
+              <p className="muted small">Weekly attorney standards for Welcome Letter, Initial Meeting, and Court Date Added.</p>
+            </div>
+            <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
+          </div>
+          <form className="kpi-range-form" action="/" method="get">
+            <input type="hidden" name="tab" value="kpi" />
+            <label>
+              From
+              <input name="from" type="date" defaultValue={filters.from || weekStart} />
+            </label>
+            <label>
+              To
+              <input name="to" type="date" defaultValue={filters.to || today} />
+            </label>
+            <label>
+              Attorney
+              <select name="attorney" defaultValue={filters.attorney}>
+                <option value="">All attorneys</option>
+                {dashboardData.attorneys.map((a) => (
+                  <option key={a.id ?? "none"} value={a.id ?? ""}>{a.name || "Unassigned"} ({a.count})</option>
+                ))}
+              </select>
+            </label>
+            <button className="primary" type="submit">Update Standards</button>
+            <a className="button" href={filterLink({ tab: "kpi" }, { from: weekStart, to: today })}>This Week</a>
+          </form>
+          <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
+            <input type="hidden" name="attorney" value={filters.attorney} />
+            <input type="hidden" name="overall" value={filters.overall} />
+            <input type="hidden" name="from" value={filters.from} />
+            <input type="hidden" name="to" value={filters.to} />
+            <button className="button primary" type="submit">Download Standards CSV</button>
+          </form>
+          <div className="kpi-score-row">
+            <div className="kpi-score-ring" style={{ "--score": `${kpiScore * 3.6}deg` } as CSSProperties}>
+              <span>{kpiScore}%</span>
+            </div>
+            <div className="kpi-score-copy">
+              <strong>{kpiGrade}</strong>
+              <p>{kpiFollowUp ? `${kpiFollowUp} workflow item${kpiFollowUp === 1 ? "" : "s"} still need follow-up this week.` : "No current weekly follow-up items are showing."}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="kpi-cards">
+          <div className="kpi-card"><span># New Matters</span><strong>{standardsTotals.newMatters}</strong><p>New matters in this date range.</p></div>
+          <div className="kpi-card"><span>Initial Meeting Set</span><strong>{standardsTotals.initialMeeting}</strong><p>Attorney call proof found.</p></div>
+          <div className="kpi-card"><span>Welcome Letter Sent</span><strong>{standardsTotals.welcome}</strong><p>Welcome letter proof found.</p></div>
+          <div className="kpi-card"><span>Court Date Added To Clio</span><strong>{standardsTotals.courtDate}</strong><p>Court date proof found.</p></div>
+        </section>
+
+        <section className="panel kpi-panel standards-graphic">
+          <div className="panel-heading">
+            <div>
+              <h2>Standards By Attorney</h2>
+              <p className="muted small">Quick visual for Welcome Letter, Initial Meeting, and Court Date Added.</p>
+            </div>
+          </div>
+          {standardRows.length ? (
+            <div className="standards-attorney-chart">
+              {standardRows.map((item) => (
+                <article className="standards-attorney-row" key={item.attorney}>
+                  <div className="standards-attorney-name">
+                    <strong>{item.attorney}</strong>
+                    <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
+                    <em>{item.completionRate}% standards score</em>
+                  </div>
+                  <div className="standards-attorney-bars">
+                    <div className="attorney-standard-line welcome">
+                      <span>Welcome Letter{item.welcomeLate ? ` - ${item.welcomeLate} late` : ""}</span>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.welcome / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.welcome}/{item.cases}</strong>
+                    </div>
+                    <div className="attorney-standard-line meeting">
+                      <span>Initial Meeting{item.attorneyCallLate ? ` - ${item.attorneyCallLate} late` : ""}</span>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.attorneyCall / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.attorneyCall}/{item.cases}</strong>
+                    </div>
+                    <div className="attorney-standard-line court-date">
+                      <span>Court Date{item.courtDateLate ? ` - ${item.courtDateLate} late` : ""}</span>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.courtDate / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.courtDate}/{item.cases}</strong>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="workspace-empty compact">
+              <strong>No Standards data in this range yet.</strong>
+              <p>Run an audit batch or choose a date range with audited matters.</p>
+            </div>
+          )}
+        </section>
+
+        <section className="kpi-grid">
+          <div className="panel kpi-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Attorney Standards Scorecard</h2>
+                <p className="muted small">Simple weekly counts by attorney.</p>
+              </div>
+            </div>
+            {standardRows.length ? (
+              <div className="standards-list">
+                {standardRows.map((item) => (
+                  <article className="standards-card" key={item.attorney}>
+                    <div className="standards-card-head">
+                      <div>
+                        <span className="label">Case Manager / Attorney</span>
+                        <strong>{item.attorney}</strong>
+                      </div>
+                      <div>
+                        <span className="label">Date</span>
+                        <strong>{standardsDate}</strong>
+                      </div>
+                    </div>
+                    <div className="standards-metrics">
+                      <div className="standard-metric cases"><span>Cases</span><strong>{item.cases}</strong><em>opened</em></div>
+                      <div className="standard-metric welcome"><span>Welcome Letter</span><strong>{item.welcome}</strong><em>sent</em></div>
+                      <div className="standard-metric meeting"><span>Initial Meeting</span><strong>{item.attorneyCall}</strong><em>set</em></div>
+                      <div className="standard-metric new-matters"><span>New Matters</span><strong>{item.newMatters}</strong><em>added</em></div>
+                      <div className="standard-metric court-date"><span>Court Date</span><strong>{item.courtDate}</strong><em>added to Clio</em></div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="workspace-empty">
+                <strong>No Standards data in this range yet.</strong>
+                <p>Run an audit batch or choose a date range with audited matters.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="panel kpi-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Standards Focus</h2>
+                <p className="muted small">Welcome Letter, Attorney Call, and Court Date Added follow-up.</p>
+              </div>
+            </div>
+            <div className="workflow-area-bars">
+              {kpiWorkflowFocusRows.map((item) => (
+                <div className="workflow-area-row" key={item.code}>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <small>{item.followUp} follow-up / {item.checked} checked</small>
+                  </div>
+                  <div className="workflow-track">
+                    <span style={{ width: `${item.followUp ? Math.max(3, Math.round((item.followUp / maxKpiWorkflowCount) * 100)) : 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <details className="panel kpi-report-copy">
+          <summary>
+            <div>
+              <span className="label">Copy-Ready</span>
+              <h3>Weekly Standards summary for Teams</h3>
+              <p className="muted small">Open when you want a short note to paste to the team.</p>
+            </div>
+            <span className="summary-action">Open Summary</span>
+          </summary>
+          <div className="post-closure-note-toolbar">
+              <CopyTextButton targetId="kpi-weekly-report" label="Copy Standards Report" />
+          </div>
+          <textarea id="kpi-weekly-report" readOnly rows={Math.min(16, Math.max(8, kpiReportLines.split("\n").length + 1))} defaultValue={kpiReportLines} />
+        </details>
+      </section>
+      ) : null}
+
       {activeTab === "post-closure" ? (
       <section className="post-closure-layout">
         <section className="panel post-closure-hero">
@@ -1313,8 +1698,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Closed Matter Follow-Up</span>
               <h2>Post-Closure Client Follow-Up</h2>
-              <p className="muted small">Internal reminders for 1-month, 6-month, and 12-month client satisfaction calls after a matter closes.</p>
+              <p className="muted small">Internal reminders for 1-month, 6-month, and 12-month client satisfaction calls after a matter closes. This view only shows matters closed in 2026.</p>
             </div>
+            <span className="badge Pending">2026 only</span>
             <form action="/api/post-closure/sync" method="post">
               <button className="primary" type="submit">Refresh Closed Matters</button>
             </form>
@@ -1388,7 +1774,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </label>
             <button className="primary" type="submit">Show Results</button>
             <a className="button" href="/?tab=post-closure">Reset</a>
-            <p>Current Window shows reminders due recently or coming up soon. Use Older Backlog only when you want old clean-up items.</p>
+            <p>Current Window shows 2026 closed-matter reminders due recently or coming up soon. Use Older Backlog only when you want older 2026 clean-up items.</p>
           </form>
 
           <details className="post-closure-team-note">
@@ -1519,7 +1905,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div className="ai-tool-card">
               <span>1</span>
               <strong>Ask AI about one item</strong>
-              <p>Open a flagged matter, expand Problems, then click <b>Ask AI About This</b> on the issue you want help with.</p>
+              <p>Open a flagged matter, expand Problems, then type a question in the small <b>Ask CWCA AI</b> box.</p>
             </div>
             <div className="ai-tool-card">
               <span>2</span>
@@ -1675,6 +2061,7 @@ Items Still Needing Action
         </form>
         <div className="quick-filters">
           <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: today, to: today })}>Today</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: weekStart, to: today })}>This Week</a>
           <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: monthStart, to: today })}>This Month</a>
           <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: "", to: "" })}>All Dates</a>
         </div>
@@ -1801,6 +2188,86 @@ Items Still Needing Action
       </section>
       ) : null}
 
+      {activeTab === "case-manager" ? (
+      <section className="case-manager-layout">
+        <section className="panel case-manager-hero">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Case Manager Workspace</span>
+              <h2>Clear Tasks With Clio Proof</h2>
+              <p className="muted small">Case managers can explain what happened, but a task only clears when there is proof in Clio or a Clio proof link is pasted.</p>
+            </div>
+            <span className="badge Pending">{caseManagerTasks.length} tasks</span>
+          </div>
+          <div className="case-manager-stats">
+            <div><span>Open</span><strong>{caseManagerOpen}</strong></div>
+            <div><span>In Progress</span><strong>{caseManagerInProgress}</strong></div>
+            <div><span>Needs Proof</span><strong>{caseManagerProofNeeded}</strong></div>
+          </div>
+          <details className="case-manager-note">
+            <summary>
+              <span>Copy Teams message</span>
+              <b>Open</b>
+            </summary>
+            <div className="post-closure-note-toolbar">
+              <CopyTextButton targetId="case-manager-teams-note" label="Copy Message" />
+            </div>
+            <textarea id="case-manager-teams-note" readOnly rows={Math.min(14, Math.max(7, caseManagerTeamsNote.split("\n").length + 1))} defaultValue={caseManagerTeamsNote} />
+          </details>
+        </section>
+
+        <section className="case-manager-task-list">
+          {caseManagerTasks.length ? (
+            caseManagerTasks.map((item) => {
+              const href = evidencePath(item.row as DashboardItem, true);
+              return (
+                <article className={`panel case-manager-task status-row-${statusClass(item.row.status)}`} key={`${item.row.matterId}-${item.row.stepCode}`}>
+                  <div className="case-manager-task-head">
+                    <div>
+                      <span className="label">{workflowLabel(item.row.stepCode)}</span>
+                      <h3>{item.row.clientName}</h3>
+                      <p>{item.row.matterNumber}</p>
+                    </div>
+                    <div>
+                      <span className="label">Attorney</span>
+                      <strong>{item.attorney}</strong>
+                    </div>
+                    <div>
+                      <span className="label">Status</span>
+                      {badge(currentItemStatus(item.row))}
+                    </div>
+                    <div className="case-manager-task-actions">
+                      <a className="button compact primary" href={clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Open in Clio</a>
+                      {href ? <a className="button compact" href={href} target="_blank" rel="noreferrer">Saved Proof</a> : null}
+                    </div>
+                  </div>
+                  <p className="case-manager-task-reason">{actionFor(item.row.stepCode, item.row.status, item.row.reasonCode)}</p>
+                  <MatterReviewControls
+                    matterId={item.row.matterId}
+                    stepCode={item.row.stepCode}
+                    auditItemLabel={workflowLabel(item.row.stepCode)}
+                    currentDecision={item.row.reviewDecision}
+                    currentNote={item.row.reviewNote}
+                    currentNextStep={item.row.nextStep}
+                    currentReviewedBy={item.row.reviewedBy}
+                    currentCaseManagerName={item.row.caseManagerName}
+                    currentProofReference={item.row.reviewProofReference}
+                    existingProofUrl={href || null}
+                    mode="case-manager"
+                  />
+                </article>
+              );
+            })
+          ) : (
+            <section className="panel workspace-empty">
+              <strong>No case-manager tasks need follow-up right now.</strong>
+              <p>When CWCA finds items that need attention, they will show here with proof-based clearing controls.</p>
+            </section>
+          )}
+        </section>
+      </section>
+      ) : null}
+
       {activeTab === "matters" ? (
       <section className="matter-list">
         {dashboardData.matters.length ? dashboardData.matters.map((m) => {
@@ -1861,7 +2328,7 @@ Items Still Needing Action
                     <p><b>Why?</b> {problemText(nextAction)}</p>
                     <div className="next-action-links">
                       <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
-                      {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof</a> : null}
+                      {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof in Clio</a> : null}
                     </div>
                   </div>
                 </details>
@@ -1873,14 +2340,11 @@ Items Still Needing Action
                   <span>The saved result is from an older incomplete API run, so it is not proof of undone work yet.</span>
                 </div>
               ) : (
-                <details className="matter-dropdown workflow-dropdown">
-                  <summary>
-                    <span>
-                      <span className="label">Workflow Checks</span>
-                      <strong>{attentionItems.length ? `${attentionItems.length} items need follow-up` : "View all workflow check results"}</strong>
-                    </span>
-                    <span className="dropdown-pill" aria-hidden="true" />
-                  </summary>
+                <section className="workflow-always-visible">
+                  <div className="workflow-always-head">
+                    <span className="label">Workflow Checks</span>
+                    <strong>{attentionItems.length ? `${attentionItems.length} item${attentionItems.length === 1 ? "" : "s"} need follow-up` : "All workflow checks visible"}</strong>
+                  </div>
                   <div className="step-grid">
                     {WORKFLOW_COLUMNS.map(([code, label]) => (
                       <div className="step-block" key={code}>
@@ -1889,7 +2353,7 @@ Items Still Needing Action
                       </div>
                     ))}
                   </div>
-                </details>
+                </section>
               )}
 
               <div className={`matter-compact-sections ${attentionItems.length ? "" : "evidence-only"}`}>
@@ -1932,7 +2396,7 @@ Items Still Needing Action
                     evidenceItems.map((i) => (
                       <p className="evidence-links" key={`${i.stepCode}-${i.evidenceRefId ?? i.evidenceUrl}`}>
                         <span>{i.stepCode.replaceAll("_", " ")}: {evidenceLabel(i)}</span>
-                        <a href={evidencePath(i, true)} target="_blank" rel="noreferrer">Proof Details</a>
+                        <a href={evidencePath(i, true)} target="_blank" rel="noreferrer">Open Proof in Clio</a>
                       </p>
                     ))
                   ) : (

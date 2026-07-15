@@ -8075,3 +8075,269 @@ th,
     width: 100% !important;
   }
 }
+
+/* USA semantic palette: patriotic primary colors with clear status meaning. */
+:root {
+  --usa-navy: #0B1F3A;
+  --usa-navy-2: #102A4C;
+  --usa-blue: #1D4ED8;
+  --usa-blue-soft: rgba(29, 78, 216, 0.18);
+  --usa-red: #B91C1C;
+  --usa-red-soft: rgba(185, 28, 28, 0.16);
+  --usa-white: #F8FAFC;
+  --usa-silver: #E5E7EB;
+  --usa-yellow: #D97706;
+  --usa-yellow-soft: rgba(217, 119, 6, 0.18);
+  --usa-green: #15803D;
+  --usa-green-soft: rgba(21, 128, 61, 0.16);
+  --bg: #0B1F3A;
+  --panel: rgba(16, 42, 76, 0.94);
+  --panel-strong: rgba(12, 33, 62, 0.98);
+  --panel-soft: rgba(24, 54, 92, 0.88);
+  --line: rgba(229, 231, 235, 0.22);
+  --line-soft: rgba(229, 231, 235, 0.14);
+  --text: #F8FAFC;
+  --muted: #C8D3E1;
+  --blue: #60A5FA;
+  --blue-soft: rgba(96, 165, 250, 0.18);
+  --green: #86EFAC;
+  --green-soft: rgba(21, 128, 61, 0.2);
+  --amber: #FBBF24;
+  --amber-soft: rgba(217, 119, 6, 0.2);
+  --red: #FCA5A5;
+  --red-soft: rgba(185, 28, 28, 0.22);
+  --purple: #93C5FD;
+  --purple-soft: rgba(29, 78, 216, 0.18);
+  --stone: #F8FAFC;
+  --charcoal: #102A4C;
+  --deep-teal: #0F3A66;
+  --shadow: 0 28px 70px rgba(4, 11, 25, 0.5);
+  --shadow-soft: 0 14px 34px rgba(4, 11, 25, 0.32);
+  --ring: 0 0 0 1px rgba(248, 250, 252, 0.08) inset;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(29, 78, 216, 0.22), transparent 30%),
+    radial-gradient(circle at 88% 10%, rgba(185, 28, 28, 0.14), transparent 26%),
+    linear-gradient(180deg, #0B1F3A 0%, #08172B 100%) !important;
+}
+
+.shell > .app-header.topbar,
+.cm-portal-header,
+.cm-queue-summary,
+.cm-task-filters,
+.cm-task-card,
+.cm-empty,
+.panel,
+.matter-card,
+.dashboard-tabs,
+.deployment-proof,
+.audit-summary-strip,
+.kpi-hero,
+.kpi-panel,
+.report-panel,
+.post-closure-panel {
+  background:
+    linear-gradient(145deg, rgba(248, 250, 252, 0.07), rgba(248, 250, 252, 0.025)),
+    rgba(16, 42, 76, 0.9) !important;
+  border-color: rgba(229, 231, 235, 0.2) !important;
+}
+
+.shell > .app-header.topbar {
+  background:
+    radial-gradient(circle at 10% 5%, rgba(96, 165, 250, 0.22), transparent 28%),
+    radial-gradient(circle at 92% 0%, rgba(185, 28, 28, 0.18), transparent 24%),
+    linear-gradient(145deg, rgba(16, 42, 76, 0.96), rgba(8, 23, 43, 0.98)) !important;
+}
+
+.shell > .app-header.topbar::before {
+  background: var(--usa-red) !important;
+  box-shadow: 0 0 18px rgba(185, 28, 28, 0.7) !important;
+}
+
+.shell > .app-header.topbar::after {
+  background: linear-gradient(90deg, var(--usa-red) 0 33%, var(--usa-white) 33% 66%, var(--usa-blue) 66% 100%) !important;
+}
+
+.primary,
+button.primary,
+.button.primary,
+.shell > .app-header.topbar .header-actions form:first-of-type .primary,
+.cm-window-tabs a.active,
+.nav-tab.active,
+.dashboard-tabs a.active {
+  background: linear-gradient(135deg, #2563EB, #1D4ED8) !important;
+  border-color: rgba(191, 219, 254, 0.5) !important;
+  box-shadow: 0 14px 34px rgba(29, 78, 216, 0.28) !important;
+  color: #FFFFFF !important;
+}
+
+.primary:hover,
+button.primary:hover,
+.button.primary:hover,
+.dashboard-tabs a:hover,
+.cm-window-tabs a:hover {
+  background: linear-gradient(135deg, #1D4ED8, #1E40AF) !important;
+  border-color: rgba(248, 250, 252, 0.48) !important;
+}
+
+button,
+.button,
+input,
+select,
+textarea {
+  border-color: rgba(229, 231, 235, 0.24) !important;
+}
+
+button:not(.primary),
+.button:not(.primary),
+.cm-window-tabs a {
+  background: rgba(8, 23, 43, 0.72) !important;
+  color: var(--usa-white) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible,
+.button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.34) !important;
+  outline: none !important;
+}
+
+button:disabled,
+.button[aria-disabled="true"],
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: rgba(148, 163, 184, 0.16) !important;
+  color: rgba(248, 250, 252, 0.48) !important;
+  cursor: not-allowed !important;
+}
+
+.Pass,
+.On-Time,
+.On-Track,
+.Strong,
+.Resolved {
+  background: var(--usa-green-soft) !important;
+  border-color: rgba(134, 239, 172, 0.34) !important;
+  color: #BBF7D0 !important;
+}
+
+.Late,
+.Watch,
+.Timing-Review,
+.Needs-Review,
+.Needs-Recheck,
+.Review {
+  background: var(--usa-yellow-soft) !important;
+  border-color: rgba(251, 191, 36, 0.42) !important;
+  color: #FDE68A !important;
+}
+
+.Flag,
+.Missing,
+.Needs-Follow-Up,
+.Overdue,
+.Needs-Focus,
+.danger,
+.error {
+  background: var(--usa-red-soft) !important;
+  border-color: rgba(252, 165, 165, 0.42) !important;
+  color: #FECACA !important;
+}
+
+.Pending,
+.Not-Due-Yet,
+.Unknown,
+.Approved-Exception,
+.info {
+  background: var(--usa-blue-soft) !important;
+  border-color: rgba(147, 197, 253, 0.34) !important;
+  color: #BFDBFE !important;
+}
+
+.problem-item.Missing,
+.problem-item.Needs-Follow-Up {
+  background: linear-gradient(145deg, rgba(185, 28, 28, 0.18), rgba(185, 28, 28, 0.08)) !important;
+  border-color: rgba(252, 165, 165, 0.46) !important;
+}
+
+.problem-item.Late,
+.problem-item.Needs-Review,
+.problem-item.Unknown {
+  background: linear-gradient(145deg, rgba(217, 119, 6, 0.18), rgba(217, 119, 6, 0.08)) !important;
+  border-color: rgba(251, 191, 36, 0.42) !important;
+}
+
+.priority-row.status-row-Missing,
+.workspace-row.status-row-Missing,
+.cm-task-card.status-row-Missing,
+.cm-task-card.status-row-Needs-Follow-Up {
+  box-shadow: inset 4px 0 0 var(--usa-red), var(--shadow-soft) !important;
+}
+
+.priority-row.status-row-Late,
+.workspace-row.status-row-Late,
+.cm-task-card.status-row-Late,
+.cm-task-card.status-row-Needs-Review {
+  box-shadow: inset 4px 0 0 var(--usa-yellow), var(--shadow-soft) !important;
+}
+
+.priority-row.status-row-On-Track,
+.workspace-row.status-row-On-Track,
+.cm-task-card.status-row-On-Track {
+  box-shadow: inset 4px 0 0 var(--usa-green), var(--shadow-soft) !important;
+}
+
+.priority-row.status-row-Pending,
+.workspace-row.status-row-Pending,
+.priority-row.status-row-Unknown,
+.workspace-row.status-row-Unknown {
+  box-shadow: inset 4px 0 0 var(--usa-blue), var(--shadow-soft) !important;
+}
+
+.queue-meter,
+.progress-track,
+.standard-track,
+.kpi-track,
+.bar-track {
+  background: rgba(248, 250, 252, 0.12) !important;
+}
+
+.queue-meter-bar,
+.standard-fill,
+.kpi-fill,
+.bar-fill {
+  background: linear-gradient(90deg, var(--usa-red), var(--usa-white), var(--usa-blue)) !important;
+}
+
+.standards-focus-card,
+.workflow-focus-card,
+.kpi-focus-card {
+  border-color: rgba(229, 231, 235, 0.2) !important;
+}
+
+.filter-summary,
+.notice,
+.cm-alert {
+  background: rgba(29, 78, 216, 0.12) !important;
+  border-color: rgba(147, 197, 253, 0.28) !important;
+  color: #DBEAFE !important;
+}
+
+.notice.danger,
+.cm-alert.warning {
+  background: rgba(185, 28, 28, 0.16) !important;
+  border-color: rgba(252, 165, 165, 0.38) !important;
+  color: #FECACA !important;
+}
+
+.cm-alert.success,
+.notice.success {
+  background: rgba(21, 128, 61, 0.16) !important;
+  border-color: rgba(134, 239, 172, 0.34) !important;
+  color: #BBF7D0 !important;
+}

@@ -70,6 +70,7 @@ export type WorkspaceAuditItem = {
   matter_number: string;
   client_first_name: string | null;
   client_last_name: string | null;
+  matter_created_at: string | Date | null;
   responsible_attorney_id: string | null;
   responsible_attorney_name: string | null;
   step_code: string;
@@ -400,6 +401,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       m.matter_number,
       m.client_first_name,
       m.client_last_name,
+      m.matter_created_at,
       m.responsible_attorney_id,
       m.responsible_attorney_name,
       i.step_code,
@@ -802,6 +804,245 @@ export async function auditLogicIssuesCsv(filters: DashboardFilters = {}, origin
   return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
+function isStandardComplete(status: string | null | undefined, evidenceRefId?: string | null): boolean {
+  return status === "On Track" || status === "Late" || Boolean(evidenceRefId);
+}
+
+function csvDateKey(value: unknown): string {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: APP_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function csvDisplayDate(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) return dateKey;
+  return `${month}/${day}/${String(year).slice(-2)}`;
+}
+
+function eachDateKey(from: string, to: string): string[] {
+  const result: string[] = [];
+  const start = new Date(`${from}T12:00:00`);
+  const end = new Date(`${to}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return result;
+  for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+    result.push(csvDateKey(cursor));
+  }
+  return result;
+}
+
+function normalizeOwnerName(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const STANDARD_CASE_MANAGERS = [
+  "Alessandra",
+  "Anahi",
+  "Camila",
+  "Claudia",
+  "Ivan",
+  "Jesus",
+  "Lori",
+  "Nathaly",
+  "Ronald",
+  "Svetlana",
+] as const;
+
+function canonicalCaseManagerName(value: string | null | undefined): string {
+  const normalized = normalizeOwnerName(value);
+  if (!normalized) return "";
+  if (normalized.includes("alessandra")) return "Alessandra";
+  if (normalized.includes("anahi")) return "Anahi";
+  if (normalized.includes("camila")) return "Camila";
+  if (normalized.includes("claudia")) return "Claudia";
+  if (normalized.includes("ivan")) return "Ivan";
+  if (normalized.includes("jesus")) return "Jesus";
+  if (normalized.includes("lori")) return "Lori";
+  if (normalized.includes("nathaly") || normalized.includes("nathalie") || normalized.includes("nataly")) return "Nathaly";
+  if (normalized.includes("ronald")) return "Ronald";
+  if (normalized.includes("svetlana")) return "Svetlana";
+  return "";
+}
+
+function isStandardsStep(stepCode: string): boolean {
+  return stepCode === "SETUP_WELCOME" || stepCode === "SETUP_ATTY_CALL" || stepCode === "SETUP_COURT_DATE";
+}
+
+function isParkCityMatter(item: WorkspaceAuditItem): boolean {
+  const text = normalizeOwnerName(`${item.matter_number} ${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`);
+  return text.includes("park city") || text.includes("parkcity");
+}
+
+export function standardsCaseManagerFor(item: WorkspaceAuditItem): string {
+  const attorney = normalizeOwnerName(item.responsible_attorney_name);
+  const manualCaseManager = canonicalCaseManagerName(item.case_manager_name);
+  if (attorney.includes("andrew hans")) return "Alessandra";
+  if (attorney.includes("robert kroeger")) return "Anahi";
+  if (attorney.includes("brandon phetsadasack") || attorney.includes("joseph weigel")) return "Camila";
+  if (attorney.includes("luiza quental") || attorney.includes("sara bozarth") || attorney.includes("thomas florek")) return "Claudia";
+  if (attorney.includes("melanie")) return "Ivan";
+  if (attorney.includes("caelyn deeb") || attorney.includes("christine fields") || attorney.includes("dan clifton") || attorney.includes("daniel clifton")) return "Jesus";
+  if (attorney.includes("alex") && attorney.includes("blum")) return "Lori";
+  if (attorney.includes("elanna myers")) return isParkCityMatter(item) ? "Ronald" : "Lori";
+  if (attorney.includes("andrea neumann")) return "Nathaly";
+  if (attorney.includes("james b") || attorney.includes("james brzezinski")) return isParkCityMatter(item) ? "Ronald" : "Ronald";
+  if ((attorney.includes("michelle") && (attorney.includes("mcclellan") || attorney.includes("mc clellan"))) || attorney.includes("thomas carrasco")) return "Ronald";
+  if (attorney.includes("arnold pula")) return "Svetlana";
+  return manualCaseManager || "Unassigned";
+}
+
+function standardsAssignmentNote(item: WorkspaceAuditItem): string {
+  const attorney = normalizeOwnerName(item.responsible_attorney_name);
+  if (attorney.includes("james b") || attorney.includes("james brzezinski")) {
+    return isParkCityMatter(item) ? "James B. Park City rule" : "James B. assigned to Ronald; Park City location not stored separately";
+  }
+  if (attorney.includes("elanna myers")) {
+    return isParkCityMatter(item) ? "Elanna Myers Park City best-effort match" : "Elanna Myers all other locations";
+  }
+  return "Attorney assignment map";
+}
+
+export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {
+  const { workspaceItems } = await getDashboardData(filters);
+  const today = csvDateKey(new Date());
+  const from = filters.from || today;
+  const to = filters.to || today;
+  const dates = eachDateKey(from, to);
+  const dateSet = new Set(dates);
+  const rowsByOwnerDate = new Map<string, {
+    owner: string;
+    date: string;
+    assignedAttorneys: Set<string>;
+    assignmentNotes: Set<string>;
+    newMatters: Set<string>;
+    expectedStandards: number;
+    completedStandards: number;
+    onTimeStandards: number;
+    lateStandards: number;
+    needsFollowUp: number;
+    attorneyCall: number;
+    attorneyCallLate: number;
+    welcome: number;
+    welcomeLate: number;
+    courtDate: number;
+    courtDateLate: number;
+  }>();
+  const getRow = (owner: string, date: string) => {
+    const key = `${owner}__${date}`;
+    const current = rowsByOwnerDate.get(key) ?? {
+      owner,
+      date,
+      assignedAttorneys: new Set<string>(),
+      assignmentNotes: new Set<string>(),
+      newMatters: new Set<string>(),
+      expectedStandards: 0,
+      completedStandards: 0,
+      onTimeStandards: 0,
+      lateStandards: 0,
+      needsFollowUp: 0,
+      attorneyCall: 0,
+      attorneyCallLate: 0,
+      welcome: 0,
+      welcomeLate: 0,
+      courtDate: 0,
+      courtDateLate: 0,
+    };
+    rowsByOwnerDate.set(key, current);
+    return current;
+  };
+
+  const standardsItems = workspaceItems.filter((item) => {
+    if (!isStandardsStep(item.step_code)) return false;
+    const createdKey = csvDateKey(item.matter_created_at);
+    return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
+  });
+  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor)))
+    .sort((a, b) => {
+      const aIndex = STANDARD_CASE_MANAGERS.indexOf(a as (typeof STANDARD_CASE_MANAGERS)[number]);
+      const bIndex = STANDARD_CASE_MANAGERS.indexOf(b as (typeof STANDARD_CASE_MANAGERS)[number]);
+      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    });
+  for (const owner of owners) {
+    for (const date of dates) getRow(owner, date);
+  }
+
+  for (const item of standardsItems) {
+    const owner = standardsCaseManagerFor(item);
+    const createdKey = csvDateKey(item.matter_created_at);
+    if (!createdKey) continue;
+    const row = getRow(owner, createdKey);
+    row.assignedAttorneys.add(item.responsible_attorney_name || "Unassigned");
+    row.assignmentNotes.add(standardsAssignmentNote(item));
+    row.newMatters.add(String(item.matter_id));
+    row.expectedStandards += 1;
+    const late = item.item_status === "Late";
+    const complete = isStandardComplete(item.item_status, item.evidence_ref_id);
+    if (!complete) {
+      row.needsFollowUp += 1;
+      continue;
+    }
+    row.completedStandards += 1;
+    if (late) row.lateStandards += 1;
+    else row.onTimeStandards += 1;
+    if (item.step_code === "SETUP_WELCOME") {
+      row.welcome += 1;
+      if (late) row.welcomeLate += 1;
+    }
+    if (item.step_code === "SETUP_ATTY_CALL") {
+      row.attorneyCall += 1;
+      if (late) row.attorneyCallLate += 1;
+    }
+    if (item.step_code === "SETUP_COURT_DATE") {
+      row.courtDate += 1;
+      if (late) row.courtDateLate += 1;
+    }
+  }
+
+  const headers = [
+    "Case Manager",
+    "Cases / new matters #",
+    "Initial Meeting set - Phone call",
+    "Welcome letters sent",
+    "Court date event made",
+    "Workflow completion %",
+    "Date",
+  ];
+  const rows = Array.from(rowsByOwnerDate.values())
+    .filter((row) => row.newMatters.size > 0)
+    .sort((a, b) => a.owner.localeCompare(b.owner) || a.date.localeCompare(b.date))
+    .map((row) => {
+      const expected = row.newMatters.size * 3;
+      const completed = row.attorneyCall + row.welcome + row.courtDate;
+      const score = expected ? `${Math.round((completed / expected) * 100)}%` : "0%";
+      return [
+        row.owner,
+        row.newMatters.size,
+        row.attorneyCall,
+        row.welcome,
+        row.courtDate,
+        score,
+        csvDisplayDate(row.date),
+      ];
+    });
+
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
 function textLine(label: string, value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   return text ? `${label}: ${text}` : "";
@@ -872,7 +1113,7 @@ function matterActionItem(stepCode: string): string {
 function alertDescription(row: ActionCsvRow): string {
   const status = String(row.item_status ?? "");
   const area = workflowLabel(row.step_code);
-  if (status === "Late") return `Alert: ${area} was completed after the expected timeframe.`;
+  if (status === "Late") return `Timing Review: ${area} was completed after the expected timeframe.`;
   if (status === "Unknown") return `Flagged Matter: ${area} could not be confirmed from the available Clio proof.`;
   return `Alert: ${area} was not completed within the required timeframe.`;
 }
@@ -881,7 +1122,7 @@ function whatHappened(row: ActionCsvRow): string {
   const status = String(row.item_status ?? "");
   const area = workflowLabel(row.step_code);
   if (status === "Late") {
-    return `${area} was found, but it appears to have happened after the target time.`;
+    return `${area} proof was found in Clio, but it appears to have happened after the target time.`;
   }
   if (status === "Unknown") {
     return `${area} needs review because CWCA could not clearly confirm the proof from Clio.`;

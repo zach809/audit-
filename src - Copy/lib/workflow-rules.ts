@@ -19,9 +19,9 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   SETUP_ATTY_CALL: {
     label: "Attorney Call",
     goal: "Schedule within 1 business hour of a new matter being created.",
-    missing: "Attorney/client phone call still needs a matching calendar event.",
-    action: "Add or verify a Phone Call / Client Call calendar event on the matter.",
-    late: "Attorney/client call was scheduled, but it was completed after the 1-hour setup goal.",
+    missing: "Attorney/client phone call still needs matching proof in Clio.",
+    action: "Add or verify a Phone Call / Client Call calendar event, or confirm the phone-call communication is logged on the matter.",
+    late: "Attorney/client call proof was found, but it was completed after the 1-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the attorney call from Clio.",
   },
   SETUP_COURT_DATE: {
@@ -74,10 +74,10 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   WEEKLY_CLIENT_CHECKIN: {
     label: "Weekly Client Check-In",
-    goal: "Verify a weekly client check-in/courtesy call calendar event and a same-day client call communication.",
+    goal: "Verify a weekly client check-in/courtesy call calendar event and a same-day client call communication. A nearby call can count as completed with timing review.",
     missing: "Weekly client check-in still needs same-day call proof in Clio.",
-    action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists on that same day.",
-    late: "Weekly client check-in call proof was found after the expected same-day window.",
+    action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists on the same day or nearby date.",
+    late: "Weekly client check-in call proof was found, but not on the expected same-day window.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the weekly check-in call from Clio.",
   },
 };

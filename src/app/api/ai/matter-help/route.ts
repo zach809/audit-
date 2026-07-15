@@ -139,11 +139,11 @@ function guidanceForStep(stepCode: string) {
     },
     WEEKLY_CLIENT_CHECKIN: {
       clioArea: "Calendar and Communications tabs",
-      expectedProof: "A weekly check-in/courtesy/follow-up call calendar event and a same-day real phone call communication for the client.",
-      searchTips: "Open Calendar for the weekly check-in event, then open Communications and confirm a real phone call occurred on that same Illinois-local date.",
-      ifProofExists: "If both the event and same-day call exist, mark Resolved and note both proof points.",
-      ifProofMissing: "If either the calendar event or same-day call proof is missing, keep Still Needs Follow-Up.",
-      possibleFalsePositive: "If the event exists but the call is on a nearby date, the same-day rule may need review.",
+      expectedProof: "A weekly check-in/courtesy/follow-up call calendar event and a real phone call communication for the client. Same-day is on time; a nearby-date call counts as completed late/timing review.",
+      searchTips: "Open Calendar for the weekly check-in event, then open Communications and confirm a real phone call occurred on that same Illinois-local date or within a nearby date window.",
+      ifProofExists: "If the event and same-day call exist, mark Resolved. If the event exists and the call is nearby, treat it as timing review rather than missing work.",
+      ifProofMissing: "If either the calendar event or any nearby phone-call proof is missing, keep Still Needs Follow-Up.",
+      possibleFalsePositive: "If the event exists and a nearby call exists, recheck the matter so CWCA can mark it completed late instead of missing.",
     },
   };
 
@@ -158,7 +158,7 @@ function whereCwcaLooked(stepCode: string): string {
     return "CWCA looked at matter-linked Clio Calendar entries returned by the read-only API, including title, description, event type, date/time, calendar owner, and stored evidence references.";
   }
   if (stepCode === "WEEKLY_CLIENT_CHECKIN") {
-    return "CWCA looked for both a matter-linked weekly check-in Calendar entry and a same-day real phone-call Communication returned by the read-only API.";
+    return "CWCA looked for both a matter-linked weekly check-in Calendar entry and a real phone-call Communication returned by the read-only API. Same-day calls are on time; nearby-date calls are treated as completed late/timing review.";
   }
   return "CWCA looked at matter-linked Clio evidence returned by the read-only API and the saved CWCA audit metadata for this item.";
 }

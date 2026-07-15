@@ -131,6 +131,14 @@ function localDateKey(date: Date): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
+function localDateDistanceDays(a: Date, b: Date): number {
+  const [ay, am, ad] = localDateKey(a).split("-").map(Number);
+  const [by, bm, bd] = localDateKey(b).split("-").map(Number);
+  const aUtc = Date.UTC(ay, am - 1, ad);
+  const bUtc = Date.UTC(by, bm - 1, bd);
+  return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
+}
+
 function endOfLocalDay(date: Date): Date {
   const parts = localParts(date);
   return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 23, 59, 59);
@@ -453,6 +461,18 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .filter(Boolean) as Evidence<ClioCommunication>[],
       )
     : null;
+  const nearbyWeeklyCheckInCall = weeklyCheckInEvent
+    ? (evidence.communications
+        .map((comm): (Evidence<ClioCommunication> & { distance: number }) | null => {
+          const at = commDate(comm);
+          if (!at || !isPhoneCallCommunication(communicationSearchText(comm))) return null;
+          const distance = Math.abs(localDateDistanceDays(at, weeklyCheckInEvent.at));
+          if (distance === 0 || distance > 3) return null;
+          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id), distance };
+        })
+        .filter(Boolean) as Array<Evidence<ClioCommunication> & { distance: number }>)
+        .sort((a, b) => a.distance - b.distance || a.at.getTime() - b.at.getTime())[0] ?? null
+    : null;
   const weeklyCheckInItem = (() => {
     if (calendarError) {
       return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
@@ -465,6 +485,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     }
     if (weeklyCheckInCall) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null), weeklyCheckInCall);
+    }
+    if (nearbyWeeklyCheckInCall && now > weeklyCheckInDeadline) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
     }
     if (now <= weeklyCheckInDeadline) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Waiting for same-day call proof", weeklyCheckInDeadline, null), weeklyCheckInEvent);

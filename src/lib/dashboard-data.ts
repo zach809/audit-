@@ -847,6 +847,39 @@ function normalizeOwnerName(value: string | null | undefined): string {
     .trim();
 }
 
+const STANDARD_CASE_MANAGERS = [
+  "Alessandra",
+  "Anahi",
+  "Camila",
+  "Claudia",
+  "Ivan",
+  "Jesus",
+  "Lori",
+  "Nathaly",
+  "Ronald",
+  "Svetlana",
+] as const;
+
+function canonicalCaseManagerName(value: string | null | undefined): string {
+  const normalized = normalizeOwnerName(value);
+  if (!normalized) return "";
+  if (normalized.includes("alessandra")) return "Alessandra";
+  if (normalized.includes("anahi")) return "Anahi";
+  if (normalized.includes("camila")) return "Camila";
+  if (normalized.includes("claudia")) return "Claudia";
+  if (normalized.includes("ivan")) return "Ivan";
+  if (normalized.includes("jesus")) return "Jesus";
+  if (normalized.includes("lori")) return "Lori";
+  if (normalized.includes("nathaly") || normalized.includes("nathalie") || normalized.includes("nataly")) return "Nathaly";
+  if (normalized.includes("ronald")) return "Ronald";
+  if (normalized.includes("svetlana")) return "Svetlana";
+  return "";
+}
+
+function isStandardsStep(stepCode: string): boolean {
+  return stepCode === "SETUP_WELCOME" || stepCode === "SETUP_ATTY_CALL" || stepCode === "SETUP_COURT_DATE";
+}
+
 function isParkCityMatter(item: WorkspaceAuditItem): boolean {
   const text = normalizeOwnerName(`${item.matter_number} ${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`);
   return text.includes("park city") || text.includes("parkcity");
@@ -854,7 +887,7 @@ function isParkCityMatter(item: WorkspaceAuditItem): boolean {
 
 export function standardsCaseManagerFor(item: WorkspaceAuditItem): string {
   const attorney = normalizeOwnerName(item.responsible_attorney_name);
-  if (!attorney) return item.case_manager_name?.trim() || "Unassigned";
+  const manualCaseManager = canonicalCaseManagerName(item.case_manager_name);
   if (attorney.includes("andrew hans")) return "Alessandra";
   if (attorney.includes("robert kroeger")) return "Anahi";
   if (attorney.includes("brandon phetsadasack") || attorney.includes("joseph weigel")) return "Camila";
@@ -865,9 +898,9 @@ export function standardsCaseManagerFor(item: WorkspaceAuditItem): string {
   if (attorney.includes("elanna myers")) return isParkCityMatter(item) ? "Ronald" : "Lori";
   if (attorney.includes("andrea neumann")) return "Nathaly";
   if (attorney.includes("james b") || attorney.includes("james brzezinski")) return isParkCityMatter(item) ? "Ronald" : "Ronald";
-  if (attorney.includes("michelle mcclellan") || attorney.includes("thomas carrasco")) return "Ronald";
+  if ((attorney.includes("michelle") && (attorney.includes("mcclellan") || attorney.includes("mc clellan"))) || attorney.includes("thomas carrasco")) return "Ronald";
   if (attorney.includes("arnold pula")) return "Svetlana";
-  return item.case_manager_name?.trim() || item.responsible_attorney_name || "Unassigned";
+  return manualCaseManager || "Unassigned";
 }
 
 function standardsAssignmentNote(item: WorkspaceAuditItem): string {
@@ -930,17 +963,28 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     return current;
   };
 
-  const owners = Array.from(new Set(workspaceItems.map(standardsCaseManagerFor))).sort();
+  const standardsItems = workspaceItems.filter((item) => {
+    if (!isStandardsStep(item.step_code)) return false;
+    const createdKey = csvDateKey(item.matter_created_at);
+    return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
+  });
+  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor)))
+    .sort((a, b) => {
+      const aIndex = STANDARD_CASE_MANAGERS.indexOf(a as (typeof STANDARD_CASE_MANAGERS)[number]);
+      const bIndex = STANDARD_CASE_MANAGERS.indexOf(b as (typeof STANDARD_CASE_MANAGERS)[number]);
+      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    });
   for (const owner of owners) {
     for (const date of dates) getRow(owner, date);
   }
 
-  for (const item of workspaceItems) {
-    if (!["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].includes(item.step_code)) continue;
+  for (const item of standardsItems) {
     const owner = standardsCaseManagerFor(item);
     const createdKey = csvDateKey(item.matter_created_at);
     if (!createdKey) continue;
-    if (dateSet.size && !dateSet.has(createdKey)) continue;
     const row = getRow(owner, createdKey);
     row.assignedAttorneys.add(item.responsible_attorney_name || "Unassigned");
     row.assignmentNotes.add(standardsAssignmentNote(item));
@@ -971,46 +1015,28 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
 
   const headers = [
     "Case Manager",
+    "Cases / new matters #",
+    "Initial Meeting set - Phone call",
+    "Welcome letters sent",
+    "Court date event made",
+    "Workflow completion %",
     "Date",
-    "Assigned Attorney(s)",
-    "Assignment Note",
-    "Standards Completion %",
-    "Standards Due",
-    "Standards Completed",
-    "Completed On Time",
-    "Completed Late",
-    "Needs Follow-Up",
-    "New Matters",
-    "Initial Meeting Calendar Event Set",
-    "Initial Meeting Late",
-    "Welcome Letter Sent",
-    "Welcome Letter Late",
-    "Court Date Calendar Event Created",
-    "Court Date Late",
   ];
   const rows = Array.from(rowsByOwnerDate.values())
+    .filter((row) => row.newMatters.size > 0)
     .sort((a, b) => a.owner.localeCompare(b.owner) || a.date.localeCompare(b.date))
     .map((row) => {
-      const scorePoints = row.onTimeStandards + row.lateStandards * 0.5;
-      const score = row.expectedStandards ? `${Math.round((scorePoints / row.expectedStandards) * 100)}%` : "0%";
+      const expected = row.newMatters.size * 3;
+      const completed = row.attorneyCall + row.welcome + row.courtDate;
+      const score = expected ? `${Math.round((completed / expected) * 100)}%` : "0%";
       return [
         row.owner,
-        csvDisplayDate(row.date),
-        Array.from(row.assignedAttorneys).sort().join("; "),
-        Array.from(row.assignmentNotes).sort().join("; "),
-        score,
-        row.expectedStandards,
-        row.completedStandards,
-        row.onTimeStandards,
-        row.lateStandards,
-        row.needsFollowUp,
         row.newMatters.size,
         row.attorneyCall,
-        row.attorneyCallLate,
         row.welcome,
-        row.welcomeLate,
         row.courtDate,
-        row.courtDateLate,
+        score,
+        csvDisplayDate(row.date),
       ];
     });
 
