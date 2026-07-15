@@ -1,9 +1,13 @@
 CWCA update proof
 
 Version marker:
-cwca-upload-this-standards-focus-button-fix-2026-07-14
+cwca-late-proof-scores-lower-2026-07-15
 
 What changed:
+- Late proof now counts as proof found/completed, but Standards score gives it lower credit.
+- Attorney Standards rows now show "standards score" instead of plain completion when late proof exists.
+- Standards bars still show found proof like 1/1, but the label notes when one was late.
+- Standards CSV now includes late columns for Initial Meeting, Welcome Letter, and Court Date.
 - KPI Score is now labeled Standards in the app.
 - Standards now includes a by-attorney completion graphic for Welcome Letter, Initial Meeting, and Court Date Added.
 - The by-attorney Standards bars now show completion against each attorney's own cases, so 1 out of 1 complete shows as 100%.
@@ -77,6 +81,12 @@ What changed:
 - The helper explains the selected issue in plain English, suggests what to check in Clio, flags possible CWCA matching/rule issues, and gives a copyable team note.
 - AI does not write to Clio, does not mark anything resolved, and does not change audit results.
 - The app remains read-only against Clio.
+- Version cwca-cm-assignment-standards-csv-2026-07-15 adds the case-manager assignment map to the case-manager-only portal.
+- Case managers now see tasks assigned to them by the same attorney-to-CM ownership rules used in the Standards CSV.
+- Admin Zach can see all case-manager assignments from the case-manager portal.
+- Case-manager task cards now show the assigned case manager so staff know whose task it is.
+- Standards CSV now uses clearer columns and removes the extra "# add to calendars" column.
+- Standards CSV now keeps New Matters plus the three tracked standards: Initial Meeting Calendar Event Set, Welcome Letter Sent, and Court Date Calendar Event Created.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.

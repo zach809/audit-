@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getDashboardData, type WorkspaceAuditItem } from "@/lib/dashboard-data";
+import { getDashboardData, standardsCaseManagerFor, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { actionFor, displayAuditStatus, isFollowUpStatus, statusClass, workspaceStatus } from "@/lib/audit-display";
 import { formatLocal } from "@/lib/business-time";
 import { appConfig } from "@/lib/config";
@@ -43,16 +43,56 @@ function isOpenTask(row: WorkspaceAuditItem): boolean {
   return isFollowUpStatus(status) && !CLEARING_DECISIONS.has(row.review_decision ?? "");
 }
 
+function normalizeName(value: string | null | undefined): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function portalOwnerName(loginName: string): string {
+  const local = loginName.includes("@") ? loginName.split("@")[0] : loginName;
+  const normalized = normalizeName(local);
+  const knownOwners: Record<string, string> = {
+    alessandra: "Alessandra",
+    anahi: "Anahi",
+    camila: "Camila",
+    claudia: "Claudia",
+    ivan: "Ivan",
+    jesus: "Jesus",
+    lori: "Lori",
+    nathaly: "Nathaly",
+    ronald: "Ronald",
+    svetlana: "Svetlana",
+    zach: "Admin",
+  };
+  return knownOwners[normalized] ?? loginName.trim();
+}
+
+function canSeeAllAssignments(loginName: string): boolean {
+  const normalized = normalizeName(loginName.includes("@") ? loginName.split("@")[0] : loginName);
+  return normalized === "zach" || normalized === "admin";
+}
+
+function ownerMatches(row: WorkspaceAuditItem, ownerName: string): boolean {
+  const assignedOwner = standardsCaseManagerFor(row);
+  return normalizeName(assignedOwner) === normalizeName(ownerName);
+}
+
 function taskMatches(row: WorkspaceAuditItem, query: string, caseManager: string): boolean {
+  const assignedOwner = standardsCaseManagerFor(row);
   const haystack = [
     clientName(row),
     row.matter_number,
     row.responsible_attorney_name,
     row.case_manager_name,
+    assignedOwner,
     workflowLabel(row.step_code),
   ].join(" ").toLowerCase();
   const queryMatch = !query || haystack.includes(query.toLowerCase());
-  const cmMatch = !caseManager || String(row.case_manager_name ?? "").toLowerCase().includes(caseManager.toLowerCase());
+  const cmHaystack = [assignedOwner, row.case_manager_name].join(" ").toLowerCase();
+  const cmMatch = !caseManager || cmHaystack.includes(caseManager.toLowerCase());
   return queryMatch && cmMatch;
 }
 
@@ -67,8 +107,11 @@ export default async function CaseManagerPortalPage({
   const dashboardData = await getDashboardData({});
   const query = String(searchParams.q ?? "");
   const cmNameFilter = String(searchParams.cmname ?? "");
+  const portalOwner = portalOwnerName(caseManagerName);
+  const showAllAssignments = canSeeAllAssignments(caseManagerName);
   const tasks = dashboardData.workspaceItems
     .filter(isOpenTask)
+    .filter((row) => showAllAssignments || ownerMatches(row, portalOwner))
     .filter((row) => taskMatches(row, query, cmNameFilter))
     .sort((a, b) => {
       const dueA = a.deadline_at ? new Date(String(a.deadline_at)).getTime() : Number.MAX_SAFE_INTEGER;
@@ -86,6 +129,11 @@ export default async function CaseManagerPortalPage({
           <span className="label">Case Manager Portal</span>
           <h1>My Clio Follow-Up Tasks</h1>
           <p>Fix the item in Clio first. Then ask CWCA to verify it. Tasks only clear when proof is found in Clio.</p>
+          <p className="cm-assignment-note">
+            {showAllAssignments
+              ? "Admin view: showing all assigned case-manager tasks."
+              : `Showing tasks assigned to ${portalOwner} by attorney assignment.`}
+          </p>
         </div>
         <div className="cm-portal-actions">
           <span className="badge On-Track">{caseManagerName}</span>
@@ -115,8 +163,8 @@ export default async function CaseManagerPortalPage({
           <input name="q" defaultValue={query} placeholder="Client, matter, attorney..." />
         </label>
         <label>
-          Case manager name
-          <input name="cmname" defaultValue={cmNameFilter} placeholder="Type a name if assigned" />
+          Case manager
+          <input name="cmname" defaultValue={cmNameFilter} placeholder="Type a CM name" />
         </label>
         <button className="primary" type="submit">Filter</button>
         <a className="button" href="/case-manager">Clear</a>
@@ -125,6 +173,7 @@ export default async function CaseManagerPortalPage({
       <section className="cm-task-list">
         {tasks.length ? tasks.map((row) => {
           const status = workspaceStatus(row.item_status, row.reason_code);
+          const assignedOwner = standardsCaseManagerFor(row);
           return (
             <article className={`cm-task-card status-row-${statusClass(status)}`} key={`${row.matter_id}-${row.step_code}`}>
               <div className="cm-task-main">
@@ -142,6 +191,7 @@ export default async function CaseManagerPortalPage({
               </div>
 
               <div className="cm-task-meta">
+                <span><b>Case Manager</b>{assignedOwner}</span>
                 <span><b>Attorney</b>{row.responsible_attorney_name || "Unassigned"}</span>
                 <span><b>Due</b>{row.deadline_at ? formatLocal(row.deadline_at) : "No deadline"}</span>
                 <span><b>Proof Status</b>{row.evidence_ref_id ? "Proof already saved" : "Needs proof in Clio"}</span>

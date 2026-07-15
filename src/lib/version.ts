@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-upload-this-standards-focus-button-fix-2026-07-14";
+export const APP_VERSION = "cwca-cm-assignment-standards-csv-2026-07-15";

@@ -840,6 +840,47 @@ function eachDateKey(from: string, to: string): string[] {
   return result;
 }
 
+function normalizeOwnerName(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isParkCityMatter(item: WorkspaceAuditItem): boolean {
+  const text = normalizeOwnerName(`${item.matter_number} ${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`);
+  return text.includes("park city") || text.includes("parkcity");
+}
+
+export function standardsCaseManagerFor(item: WorkspaceAuditItem): string {
+  const attorney = normalizeOwnerName(item.responsible_attorney_name);
+  if (!attorney) return item.case_manager_name?.trim() || "Unassigned";
+  if (attorney.includes("andrew hans")) return "Alessandra";
+  if (attorney.includes("robert kroeger")) return "Anahi";
+  if (attorney.includes("brandon phetsadasack") || attorney.includes("joseph weigel")) return "Camila";
+  if (attorney.includes("luiza quental") || attorney.includes("sara bozarth") || attorney.includes("thomas florek")) return "Claudia";
+  if (attorney.includes("melanie")) return "Ivan";
+  if (attorney.includes("caelyn deeb") || attorney.includes("christine fields") || attorney.includes("dan clifton") || attorney.includes("daniel clifton")) return "Jesus";
+  if (attorney.includes("alex") && attorney.includes("blum")) return "Lori";
+  if (attorney.includes("elanna myers")) return isParkCityMatter(item) ? "Ronald" : "Lori";
+  if (attorney.includes("andrea neumann")) return "Nathaly";
+  if (attorney.includes("james b") || attorney.includes("james brzezinski")) return isParkCityMatter(item) ? "Ronald" : "Ronald";
+  if (attorney.includes("michelle mcclellan") || attorney.includes("thomas carrasco")) return "Ronald";
+  if (attorney.includes("arnold pula")) return "Svetlana";
+  return item.case_manager_name?.trim() || item.responsible_attorney_name || "Unassigned";
+}
+
+function standardsAssignmentNote(item: WorkspaceAuditItem): string {
+  const attorney = normalizeOwnerName(item.responsible_attorney_name);
+  if (attorney.includes("james b") || attorney.includes("james brzezinski")) {
+    return isParkCityMatter(item) ? "James B. Park City rule" : "James B. assigned to Ronald; Park City location not stored separately";
+  }
+  if (attorney.includes("elanna myers")) {
+    return isParkCityMatter(item) ? "Elanna Myers Park City best-effort match" : "Elanna Myers all other locations";
+  }
+  return "Attorney assignment map";
+}
+
 export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {
   const { workspaceItems } = await getDashboardData(filters);
   const today = csvDateKey(new Date());
@@ -847,75 +888,131 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
   const to = filters.to || today;
   const dates = eachDateKey(from, to);
   const dateSet = new Set(dates);
-  const owners = Array.from(new Set(workspaceItems.map((item) => item.case_manager_name || item.responsible_attorney_name || "Unassigned"))).sort();
   const rowsByOwnerDate = new Map<string, {
     owner: string;
     date: string;
+    assignedAttorneys: Set<string>;
+    assignmentNotes: Set<string>;
     newMatters: Set<string>;
-    calendarAdds: number;
+    expectedStandards: number;
+    completedStandards: number;
+    onTimeStandards: number;
+    lateStandards: number;
+    needsFollowUp: number;
     attorneyCall: number;
+    attorneyCallLate: number;
     welcome: number;
+    welcomeLate: number;
     courtDate: number;
+    courtDateLate: number;
   }>();
   const getRow = (owner: string, date: string) => {
     const key = `${owner}__${date}`;
     const current = rowsByOwnerDate.get(key) ?? {
       owner,
       date,
+      assignedAttorneys: new Set<string>(),
+      assignmentNotes: new Set<string>(),
       newMatters: new Set<string>(),
-      calendarAdds: 0,
+      expectedStandards: 0,
+      completedStandards: 0,
+      onTimeStandards: 0,
+      lateStandards: 0,
+      needsFollowUp: 0,
       attorneyCall: 0,
+      attorneyCallLate: 0,
       welcome: 0,
+      welcomeLate: 0,
       courtDate: 0,
+      courtDateLate: 0,
     };
     rowsByOwnerDate.set(key, current);
     return current;
   };
 
+  const owners = Array.from(new Set(workspaceItems.map(standardsCaseManagerFor))).sort();
   for (const owner of owners) {
     for (const date of dates) getRow(owner, date);
   }
 
   for (const item of workspaceItems) {
-    const owner = item.case_manager_name || item.responsible_attorney_name || "Unassigned";
+    if (!["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].includes(item.step_code)) continue;
+    const owner = standardsCaseManagerFor(item);
     const createdKey = csvDateKey(item.matter_created_at);
-    if (createdKey && (!dateSet.size || dateSet.has(createdKey))) getRow(owner, createdKey).newMatters.add(String(item.matter_id));
-    if (!isStandardComplete(item.item_status, item.evidence_ref_id)) continue;
-    const proofKey = csvDateKey(item.evidence_at ?? item.matter_created_at);
-    if (!proofKey) continue;
-    if (dateSet.size && !dateSet.has(proofKey)) continue;
-    const row = getRow(owner, proofKey);
-    if (item.step_code === "SETUP_WELCOME") row.welcome += 1;
+    if (!createdKey) continue;
+    if (dateSet.size && !dateSet.has(createdKey)) continue;
+    const row = getRow(owner, createdKey);
+    row.assignedAttorneys.add(item.responsible_attorney_name || "Unassigned");
+    row.assignmentNotes.add(standardsAssignmentNote(item));
+    row.newMatters.add(String(item.matter_id));
+    row.expectedStandards += 1;
+    const late = item.item_status === "Late";
+    const complete = isStandardComplete(item.item_status, item.evidence_ref_id);
+    if (!complete) {
+      row.needsFollowUp += 1;
+      continue;
+    }
+    row.completedStandards += 1;
+    if (late) row.lateStandards += 1;
+    else row.onTimeStandards += 1;
+    if (item.step_code === "SETUP_WELCOME") {
+      row.welcome += 1;
+      if (late) row.welcomeLate += 1;
+    }
     if (item.step_code === "SETUP_ATTY_CALL") {
       row.attorneyCall += 1;
-      row.calendarAdds += 1;
+      if (late) row.attorneyCallLate += 1;
     }
     if (item.step_code === "SETUP_COURT_DATE") {
       row.courtDate += 1;
-      row.calendarAdds += 1;
+      if (late) row.courtDateLate += 1;
     }
   }
 
   const headers = [
     "Case Manager",
     "Date",
-    "# of new add to calendars",
-    "Initial Meeting Set",
-    "Welcome Letter Sent",
+    "Assigned Attorney(s)",
+    "Assignment Note",
+    "Standards Completion %",
+    "Standards Due",
+    "Standards Completed",
+    "Completed On Time",
+    "Completed Late",
+    "Needs Follow-Up",
     "New Matters",
-    "Court Date Added To Clio",
+    "Initial Meeting Calendar Event Set",
+    "Initial Meeting Late",
+    "Welcome Letter Sent",
+    "Welcome Letter Late",
+    "Court Date Calendar Event Created",
+    "Court Date Late",
   ];
   const rows = Array.from(rowsByOwnerDate.values())
     .sort((a, b) => a.owner.localeCompare(b.owner) || a.date.localeCompare(b.date))
-    .map((row) => [
-      row.owner,
-      csvDisplayDate(row.date),
-      row.calendarAdds,
-      row.attorneyCall,
-      row.welcome,
-      row.newMatters.size,
-      row.courtDate,
-    ]);
+    .map((row) => {
+      const scorePoints = row.onTimeStandards + row.lateStandards * 0.5;
+      const score = row.expectedStandards ? `${Math.round((scorePoints / row.expectedStandards) * 100)}%` : "0%";
+      return [
+        row.owner,
+        csvDisplayDate(row.date),
+        Array.from(row.assignedAttorneys).sort().join("; "),
+        Array.from(row.assignmentNotes).sort().join("; "),
+        score,
+        row.expectedStandards,
+        row.completedStandards,
+        row.onTimeStandards,
+        row.lateStandards,
+        row.needsFollowUp,
+        row.newMatters.size,
+        row.attorneyCall,
+        row.attorneyCallLate,
+        row.welcome,
+        row.welcomeLate,
+        row.courtDate,
+        row.courtDateLate,
+      ];
+    });
 
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
 }

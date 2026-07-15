@@ -947,21 +947,31 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           welcome: 0,
           attorneyCall: 0,
           courtDate: 0,
+          welcomeLate: 0,
+          attorneyCallLate: 0,
+          courtDateLate: 0,
         };
         current.matters.add(item.row.matterId);
         const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        const late = item.row.status === "Late";
         if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
         if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
         if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
+        if (late && item.row.stepCode === "SETUP_WELCOME") current.welcomeLate += 1;
+        if (late && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCallLate += 1;
+        if (late && item.row.stepCode === "SETUP_COURT_DATE") current.courtDateLate += 1;
         map.set(item.attorney, current);
         return map;
-      }, new Map<string, { attorney: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number }>())
+      }, new Map<string, { attorney: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; welcomeLate: number; attorneyCallLate: number; courtDateLate: number }>())
       .values(),
   )
     .map((item) => {
       const cases = item.matters.size;
       const completedStandards = item.welcome + item.attorneyCall + item.courtDate;
+      const lateStandards = item.welcomeLate + item.attorneyCallLate + item.courtDateLate;
+      const onTimeStandards = Math.max(0, completedStandards - lateStandards);
       const totalStandards = cases * 3;
+      const scorePoints = onTimeStandards + lateStandards * 0.5;
       return {
         attorney: item.attorney,
         cases,
@@ -969,8 +979,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         attorneyCall: item.attorneyCall,
         newMatters: cases,
         courtDate: item.courtDate,
+        welcomeLate: item.welcomeLate,
+        attorneyCallLate: item.attorneyCallLate,
+        courtDateLate: item.courtDateLate,
+        lateStandards,
         completedStandards,
-        completionRate: totalStandards ? Math.round((completedStandards / totalStandards) * 100) : 0,
+        completionRate: totalStandards ? Math.round((scorePoints / totalStandards) * 100) : 0,
       };
     })
     .sort((a, b) => a.attorney.localeCompare(b.attorney));
@@ -1567,21 +1581,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <div className="standards-attorney-name">
                     <strong>{item.attorney}</strong>
                     <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
-                    <em>{item.completionRate}% complete</em>
+                    <em>{item.completionRate}% standards score</em>
                   </div>
                   <div className="standards-attorney-bars">
                     <div className="attorney-standard-line welcome">
-                      <span>Welcome Letter</span>
+                      <span>Welcome Letter{item.welcomeLate ? ` - ${item.welcomeLate} late` : ""}</span>
                       <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.welcome / item.cases) * 100))) : 0}%` }} /></div>
                       <strong>{item.welcome}/{item.cases}</strong>
                     </div>
                     <div className="attorney-standard-line meeting">
-                      <span>Initial Meeting</span>
+                      <span>Initial Meeting{item.attorneyCallLate ? ` - ${item.attorneyCallLate} late` : ""}</span>
                       <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.attorneyCall / item.cases) * 100))) : 0}%` }} /></div>
                       <strong>{item.attorneyCall}/{item.cases}</strong>
                     </div>
                     <div className="attorney-standard-line court-date">
-                      <span>Court Date</span>
+                      <span>Court Date{item.courtDateLate ? ` - ${item.courtDateLate} late` : ""}</span>
                       <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.courtDate / item.cases) * 100))) : 0}%` }} /></div>
                       <strong>{item.courtDate}/{item.cases}</strong>
                     </div>

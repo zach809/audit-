@@ -7273,10 +7273,15 @@ th,
 
 .cm-login-card p,
 .cm-portal-header p,
+.cm-assignment-note,
 .cm-task-action,
 .cm-task-card p,
 .cm-footer {
   color: var(--muted);
+}
+
+.cm-assignment-note {
+  margin-top: 8px;
 }
 
 .cm-portal-shell {
@@ -7409,7 +7414,7 @@ th,
 .cm-task-meta {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .cm-task-meta span,
