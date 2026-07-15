@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-polished-header-cm-week-filter-2026-07-15";
+export const APP_VERSION = "cwca-compact-polished-header-2026-07-15";

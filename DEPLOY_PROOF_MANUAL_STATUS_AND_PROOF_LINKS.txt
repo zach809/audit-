@@ -91,6 +91,8 @@ What changed:
 - The case-manager portal now defaults to this week's tasks only.
 - Case managers can switch to Past Week if they need to review last week's tasks.
 - Older backlog items are no longer shown by default on the case-manager page.
+- Version cwca-compact-polished-header-2026-07-15 shrinks the polished header so it no longer takes over the first screen.
+- The Run Audit Batch button now has enough width so the label fits cleanly.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.

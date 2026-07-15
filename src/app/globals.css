@@ -7922,3 +7922,156 @@ th,
     min-height: 64px !important;
   }
 }
+
+/* Compact polished header: keep the premium look without taking over the first screen. */
+.shell > .app-header.topbar {
+  border-radius: 26px !important;
+  gap: 18px 28px !important;
+  grid-template-columns: minmax(0, 1fr) max-content !important;
+  min-height: 230px !important;
+  padding: 28px 34px !important;
+}
+
+.shell > .app-header.topbar::before {
+  left: 34px !important;
+  top: 30px !important;
+}
+
+.shell > .app-header.topbar::after {
+  bottom: 24px !important;
+  height: 5px !important;
+  left: 34px !important;
+  width: min(360px, calc(100% - 68px)) !important;
+}
+
+.shell > .app-header.topbar .eyebrow-row {
+  display: flex !important;
+  gap: 10px !important;
+  margin-bottom: 20px !important;
+}
+
+.shell > .app-header.topbar .eyebrow,
+.shell > .app-header.topbar .badge.Pass {
+  border-radius: 999px !important;
+  min-height: 30px !important;
+  padding: 6px 13px !important;
+}
+
+.shell > .app-header.topbar .title h1 {
+  font-size: clamp(42px, 4.2vw, 58px) !important;
+  line-height: 0.98 !important;
+  margin-bottom: 12px !important;
+  max-width: 460px !important;
+}
+
+.shell > .app-header.topbar .title p {
+  font-size: clamp(15px, 1.25vw, 18px) !important;
+  line-height: 1.45 !important;
+  max-width: 430px !important;
+}
+
+.shell > .app-header.topbar .header-meta {
+  border-top: 1px solid rgba(214, 229, 248, 0.12) !important;
+  gap: 10px !important;
+  margin-top: 24px !important;
+  max-width: 520px !important;
+  padding-top: 14px !important;
+}
+
+.shell > .app-header.topbar .header-meta span {
+  border-radius: 16px !important;
+  font-size: 12px !important;
+  min-height: 44px !important;
+  padding: 10px 13px !important;
+}
+
+.shell > .app-header.topbar .header-actions {
+  align-self: center !important;
+  align-items: center !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 12px !important;
+  justify-content: flex-end !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+.shell > .app-header.topbar .header-actions > *,
+.shell > .app-header.topbar .header-actions form,
+.shell > .app-header.topbar .header-actions button,
+.shell > .app-header.topbar .header-actions .button,
+.shell > .app-header.topbar .header-actions a {
+  flex: 0 0 auto !important;
+  max-width: max-content !important;
+  width: auto !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type {
+  grid-column: auto !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type .primary {
+  border-radius: 16px !important;
+  font-size: 15px !important;
+  gap: 10px !important;
+  min-height: 52px !important;
+  min-width: 208px !important;
+  padding: 12px 18px !important;
+  white-space: nowrap !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type .primary::before {
+  border-bottom-width: 8px !important;
+  border-left-width: 12px !important;
+  border-top-width: 8px !important;
+}
+
+.shell > .app-header.topbar .header-actions .badge,
+.shell > .app-header.topbar .header-actions form:last-of-type button,
+.shell > .app-header.topbar .header-actions > a.button {
+  border-radius: 16px !important;
+  font-size: 14px !important;
+  min-height: 52px !important;
+  padding: 10px 16px !important;
+}
+
+@media (max-width: 980px) {
+  .shell > .app-header.topbar {
+    grid-template-columns: 1fr !important;
+  }
+
+  .shell > .app-header.topbar .header-actions {
+    justify-content: flex-start !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell > .app-header.topbar {
+    border-radius: 20px !important;
+    padding: 20px !important;
+  }
+
+  .shell > .app-header.topbar .title h1 {
+    font-size: clamp(34px, 12vw, 44px) !important;
+  }
+
+  .shell > .app-header.topbar .header-meta {
+    grid-template-columns: 1fr !important;
+  }
+
+  .shell > .app-header.topbar .header-actions {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .shell > .app-header.topbar .header-actions > *,
+  .shell > .app-header.topbar .header-actions form,
+  .shell > .app-header.topbar .header-actions button,
+  .shell > .app-header.topbar .header-actions .button,
+  .shell > .app-header.topbar .header-actions a {
+    max-width: none !important;
+    width: 100% !important;
+  }
+}
