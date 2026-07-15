@@ -985,17 +985,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     { newMatters: 0, initialMeeting: 0, welcome: 0, courtDate: 0 },
   );
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
-  const kpiWorkflowFocus = WORKFLOW_COLUMNS
-    .filter(([code]) => KPI_WORKFLOW_CODES.has(code))
+  const kpiWorkflowFocus = [
+    ["SETUP_WELCOME", "Welcome Letter"],
+    ["SETUP_ATTY_CALL", "Attorney Call"],
+    ["SETUP_COURT_DATE", "Court Date Added"],
+  ] as const;
+  const kpiWorkflowFocusRows = kpiWorkflowFocus
     .map(([code, label]) => ({
       code,
       label,
       followUp: kpiRows.filter((item) => item.row.stepCode === code && isFollowUpStatus(item.row.status)).length,
       checked: kpiRows.filter((item) => item.row.stepCode === code).length,
-    }))
-    .filter((item) => item.followUp > 0)
-    .sort((a, b) => b.followUp - a.followUp || a.label.localeCompare(b.label));
-  const maxKpiWorkflowCount = Math.max(1, ...kpiWorkflowFocus.map((item) => item.followUp));
+    }));
+  const maxKpiWorkflowCount = Math.max(1, ...kpiWorkflowFocusRows.map((item) => item.followUp));
   const kpiReportLines = [
     `Weekly CWCA Standards Report`,
     `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
@@ -1638,27 +1640,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="panel kpi-panel">
             <div className="panel-heading">
               <div>
-                <h2>Workflow Focus</h2>
-                <p className="muted small">Areas creating the most follow-up this week.</p>
+                <h2>Standards Focus</h2>
+                <p className="muted small">Welcome Letter, Attorney Call, and Court Date Added follow-up.</p>
               </div>
             </div>
             <div className="workflow-area-bars">
-              {kpiWorkflowFocus.length ? kpiWorkflowFocus.map((item) => (
+              {kpiWorkflowFocusRows.map((item) => (
                 <div className="workflow-area-row" key={item.code}>
                   <div>
                     <strong>{item.label}</strong>
                     <small>{item.followUp} follow-up / {item.checked} checked</small>
                   </div>
                   <div className="workflow-track">
-                    <span style={{ width: `${Math.max(3, Math.round((item.followUp / maxKpiWorkflowCount) * 100))}%` }} />
+                    <span style={{ width: `${item.followUp ? Math.max(3, Math.round((item.followUp / maxKpiWorkflowCount) * 100)) : 0}%` }} />
                   </div>
                 </div>
-              )) : (
-                <div className="workspace-empty">
-                  <strong>No KPI follow-up areas this week.</strong>
-                  <p>Welcome Letter, Attorney Call, and Court Date Added are clear for this date range.</p>
-                </div>
-              )}
+              ))}
             </div>
           </div>
         </section>

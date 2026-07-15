@@ -7576,3 +7576,48 @@ th,
     width: 100% !important;
   }
 }
+
+/* Final header override: prevent Run Audit Batch from stretching across the header. */
+.app-header .header-actions {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-wrap: wrap !important;
+  justify-content: flex-end !important;
+  width: auto !important;
+}
+
+.app-header .header-actions > *,
+.app-header .header-actions form,
+.app-header .header-actions button,
+.app-header .header-actions .button,
+.app-header .header-actions a {
+  flex: 0 0 auto !important;
+  max-width: max-content !important;
+  width: auto !important;
+}
+
+.app-header .header-actions button,
+.app-header .header-actions .button {
+  min-height: 38px !important;
+  padding: 8px 14px !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 640px) {
+  .app-header .header-actions {
+    align-items: stretch !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    justify-content: stretch !important;
+    width: 100% !important;
+  }
+
+  .app-header .header-actions > *,
+  .app-header .header-actions form,
+  .app-header .header-actions button,
+  .app-header .header-actions .button,
+  .app-header .header-actions a {
+    max-width: none !important;
+    width: 100% !important;
+  }
+}
