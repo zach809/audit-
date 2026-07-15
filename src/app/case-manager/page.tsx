@@ -15,6 +15,17 @@ function clioMatterPath(matterId: string): string {
   return `${appConfig().clioBaseUrl}/nc/#/matters/${encodeURIComponent(matterId)}`;
 }
 
+function clioTaskPath(row: WorkspaceAuditItem): string {
+  const matterUrl = clioMatterPath(row.matter_id);
+  if (["SETUP_ATTY_CALL", "SETUP_COURT_DATE", "POST_COURT_CALL", "WEEKLY_CLIENT_CHECKIN"].includes(row.step_code)) {
+    return `${matterUrl}/calendar`;
+  }
+  if (["SETUP_WELCOME", "APPEARANCE_FILING", "COURT_RESULTS", "CLIENT_CONTACT", "CLIENT_FOLLOWUP"].includes(row.step_code)) {
+    return `${matterUrl}/communications`;
+  }
+  return matterUrl;
+}
+
 function clioProofPath(row: WorkspaceAuditItem): string {
   if (row.evidence_url) return row.evidence_url;
   const matterUrl = clioMatterPath(row.matter_id);
@@ -73,8 +84,8 @@ export default async function CaseManagerPortalPage({
       <header className="cm-portal-header">
         <div>
           <span className="label">Case Manager Portal</span>
-          <h1>Tasks To Verify In Clio</h1>
-          <p>Complete the item in Clio first. CWCA will recheck Clio before it clears.</p>
+          <h1>My Clio Follow-Up Tasks</h1>
+          <p>Fix the item in Clio first. Then ask CWCA to verify it. Tasks only clear when proof is found in Clio.</p>
         </div>
         <div className="cm-portal-actions">
           <span className="badge On-Track">{caseManagerName}</span>
@@ -88,15 +99,19 @@ export default async function CaseManagerPortalPage({
 
       <section className="cm-queue-summary">
         <div>
-          <span>Open Tasks</span>
+          <span>Needs Your Review</span>
           <strong>{tasks.length}</strong>
         </div>
-        <p>Only tasks that still need follow-up or review are shown here.</p>
+        <ol className="cm-simple-steps" aria-label="How to clear tasks">
+          <li><b>1</b><span>Open the right Clio tab.</span></li>
+          <li><b>2</b><span>Complete or confirm the work.</span></li>
+          <li><b>3</b><span>Click verify so CWCA can recheck proof.</span></li>
+        </ol>
       </section>
 
       <form className="cm-task-filters" action="/case-manager" method="get">
         <label>
-          Search
+          Find a task
           <input name="q" defaultValue={query} placeholder="Client, matter, attorney..." />
         </label>
         <label>
@@ -121,35 +136,45 @@ export default async function CaseManagerPortalPage({
                 <span className={`badge ${statusClass(status)}`}>{displayAuditStatus(status, row.reason_code)}</span>
               </div>
 
+              <div className="cm-next-step">
+                <span>What to do</span>
+                <strong>{actionFor(row.step_code, status, row.reason_code)}</strong>
+              </div>
+
               <div className="cm-task-meta">
                 <span><b>Attorney</b>{row.responsible_attorney_name || "Unassigned"}</span>
                 <span><b>Due</b>{row.deadline_at ? formatLocal(row.deadline_at) : "No deadline"}</span>
-                <span><b>Proof</b>{row.evidence_ref_id ? "Saved in CWCA" : "Needs Clio proof"}</span>
+                <span><b>Proof Status</b>{row.evidence_ref_id ? "Proof already saved" : "Needs proof in Clio"}</span>
               </div>
 
-              <p className="cm-task-action">{actionFor(row.step_code, status, row.reason_code)}</p>
-
               <div className="cm-task-buttons">
-                <a className="button compact primary" href={clioMatterPath(row.matter_id)} target="_blank" rel="noreferrer">Open Matter In Clio</a>
+                <a className="button compact primary" href={clioTaskPath(row)} target="_blank" rel="noreferrer">Open Correct Clio Tab</a>
+                <a className="button compact" href={clioMatterPath(row.matter_id)} target="_blank" rel="noreferrer">Open Matter</a>
                 {row.evidence_ref_id || row.evidence_url ? (
                   <a className="button compact" href={clioProofPath(row)} target="_blank" rel="noreferrer">Open Saved Proof</a>
                 ) : null}
               </div>
 
-              <form className="cm-complete-form" action="/api/case-manager/complete" method="post">
-                <input type="hidden" name="matter_id" value={row.matter_id} />
-                <input type="hidden" name="step_code" value={row.step_code} />
-                <label>
-                  What did you do in Clio?
-                  <textarea name="note" rows={3} placeholder={`Example: ${workflowLabel(row.step_code)} was completed in Clio.`} />
-                </label>
-                <label>
-                  Optional Clio link
-                  <input name="proof_reference" placeholder="Paste the Clio proof link if you have it" />
-                </label>
-                <button className="primary" type="submit">I Completed This In Clio - Verify & Clear</button>
-                <small>CWCA will recheck Clio now. If proof is not found, this task stays open.</small>
-              </form>
+              <details className="cm-complete-details">
+                <summary>
+                  <span>I fixed this in Clio</span>
+                  <b>Verify Task</b>
+                </summary>
+                <form className="cm-complete-form" action="/api/case-manager/complete" method="post">
+                  <input type="hidden" name="matter_id" value={row.matter_id} />
+                  <input type="hidden" name="step_code" value={row.step_code} />
+                  <label>
+                    Quick note
+                    <textarea name="note" rows={3} placeholder={`Example: ${workflowLabel(row.step_code)} was completed in Clio.`} />
+                  </label>
+                  <label>
+                    Optional Clio link
+                    <input name="proof_reference" placeholder="Paste the Clio proof link if you have it" />
+                  </label>
+                  <button className="primary" type="submit">Verify With CWCA</button>
+                  <small>CWCA will recheck Clio. If proof is not found, this task stays open.</small>
+                </form>
+              </details>
             </article>
           );
         }) : (

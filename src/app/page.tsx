@@ -977,13 +977,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     }),
     { newMatters: 0, initialMeeting: 0, welcome: 0, courtDate: 0 },
   );
-  const standardsChart = [
-    { label: "# New Matters", value: standardsTotals.newMatters },
-    { label: "Initial Meeting Set", value: standardsTotals.initialMeeting },
-    { label: "Welcome Packet Sent", value: standardsTotals.welcome },
-    { label: "Court Date Added", value: standardsTotals.courtDate },
-  ];
-  const maxStandardsChart = Math.max(1, ...standardsChart.map((item) => item.value));
+  const maxAttorneyStandard = Math.max(
+    1,
+    ...standardRows.flatMap((item) => [item.welcome, item.attorneyCall, item.courtDate]),
+  );
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
   const kpiWorkflowFocus = WORKFLOW_COLUMNS
     .filter(([code]) => KPI_WORKFLOW_CODES.has(code))
@@ -999,7 +996,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const kpiReportLines = [
     `Weekly CWCA Standards Report`,
     `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
-    `Standards: Welcome Packet Sent, Initial Meeting Set, Court Date Added To Clio`,
+    `Standards: Welcome Letter Sent, Initial Meeting Set, Court Date Added To Clio`,
     ``,
     `Overall standards score: ${kpiScore}% (${kpiGrade})`,
     `Checked workflow items: ${kpiTotal}`,
@@ -1547,28 +1544,51 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <section className="kpi-cards">
           <div className="kpi-card"><span># New Matters</span><strong>{standardsTotals.newMatters}</strong><p>New matters in this date range.</p></div>
           <div className="kpi-card"><span>Initial Meeting Set</span><strong>{standardsTotals.initialMeeting}</strong><p>Attorney call proof found.</p></div>
-          <div className="kpi-card"><span>Welcome Packet Sent</span><strong>{standardsTotals.welcome}</strong><p>Welcome letter proof found.</p></div>
+          <div className="kpi-card"><span>Welcome Letter Sent</span><strong>{standardsTotals.welcome}</strong><p>Welcome letter proof found.</p></div>
           <div className="kpi-card"><span>Court Date Added To Clio</span><strong>{standardsTotals.courtDate}</strong><p>Court date proof found.</p></div>
         </section>
 
         <section className="panel kpi-panel standards-graphic">
           <div className="panel-heading">
             <div>
-              <h2>Standards Graphic</h2>
-              <p className="muted small">Quick visual for the CSV columns.</p>
+              <h2>Standards By Attorney</h2>
+              <p className="muted small">Quick visual for Welcome Letter, Initial Meeting, and Court Date Added.</p>
             </div>
           </div>
-          <div className="standards-bars">
-            {standardsChart.map((item) => (
-              <div className="standards-bar-row" key={item.label}>
-                <span>{item.label}</span>
-                <div className="standards-track">
-                  <b style={{ width: `${Math.max(4, Math.round((item.value / maxStandardsChart) * 100))}%` }} />
-                </div>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
+          {standardRows.length ? (
+            <div className="standards-attorney-chart">
+              {standardRows.map((item) => (
+                <article className="standards-attorney-row" key={item.attorney}>
+                  <div className="standards-attorney-name">
+                    <strong>{item.attorney}</strong>
+                    <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="standards-attorney-bars">
+                    <div className="attorney-standard-line welcome">
+                      <span>Welcome Letter</span>
+                      <div><b style={{ width: `${Math.max(4, Math.round((item.welcome / maxAttorneyStandard) * 100))}%` }} /></div>
+                      <strong>{item.welcome}</strong>
+                    </div>
+                    <div className="attorney-standard-line meeting">
+                      <span>Initial Meeting</span>
+                      <div><b style={{ width: `${Math.max(4, Math.round((item.attorneyCall / maxAttorneyStandard) * 100))}%` }} /></div>
+                      <strong>{item.attorneyCall}</strong>
+                    </div>
+                    <div className="attorney-standard-line court-date">
+                      <span>Court Date</span>
+                      <div><b style={{ width: `${Math.max(4, Math.round((item.courtDate / maxAttorneyStandard) * 100))}%` }} /></div>
+                      <strong>{item.courtDate}</strong>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="workspace-empty compact">
+              <strong>No Standards data in this range yet.</strong>
+              <p>Run an audit batch or choose a date range with audited matters.</p>
+            </div>
+          )}
         </section>
 
         <section className="kpi-grid">
@@ -1594,11 +1614,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                       </div>
                     </div>
                     <div className="standards-metrics">
-                      <div><span>Cases</span><strong>{item.cases}</strong></div>
-                      <div><span>Welcome Packet Sent</span><strong>{item.welcome}</strong></div>
-                      <div><span>Initial Meeting Set</span><strong>{item.attorneyCall}</strong></div>
-                      <div><span># New Matters</span><strong>{item.newMatters}</strong></div>
-                      <div><span>Court Date Added To Clio</span><strong>{item.courtDate}</strong></div>
+                      <div className="standard-metric cases"><span>Cases</span><strong>{item.cases}</strong><em>opened</em></div>
+                      <div className="standard-metric welcome"><span>Welcome Letter</span><strong>{item.welcome}</strong><em>sent</em></div>
+                      <div className="standard-metric meeting"><span>Initial Meeting</span><strong>{item.attorneyCall}</strong><em>set</em></div>
+                      <div className="standard-metric new-matters"><span>New Matters</span><strong>{item.newMatters}</strong><em>added</em></div>
+                      <div className="standard-metric court-date"><span>Court Date</span><strong>{item.courtDate}</strong><em>added to Clio</em></div>
                     </div>
                   </article>
                 ))}
