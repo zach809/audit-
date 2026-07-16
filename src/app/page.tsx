@@ -65,6 +65,10 @@ type DashboardItem = {
   reviewCompletedAt?: string | null;
   reviewUpdatedAt?: string | null;
   reviewHistory?: unknown;
+  metricExcluded?: boolean | null;
+  metricExclusionRequestedBy?: string | null;
+  metricExclusionReason?: string | null;
+  metricExclusionUpdatedAt?: string | null;
 };
 
 type WorkspaceRow = {
@@ -94,6 +98,10 @@ type WorkspaceRow = {
   reviewCompletedAt?: string | null;
   reviewUpdatedAt?: string | null;
   reviewHistory?: unknown;
+  metricExcluded?: boolean | null;
+  metricExclusionRequestedBy?: string | null;
+  metricExclusionReason?: string | null;
+  metricExclusionUpdatedAt?: string | null;
 };
 
 type CaseManagerTask = {
@@ -771,6 +779,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       reviewCompletedAt: item.review_completed_at ? String(item.review_completed_at) : null,
       reviewUpdatedAt: item.review_updated_at ? String(item.review_updated_at) : null,
       reviewHistory: item.review_history,
+      metricExcluded: item.metric_excluded,
+      metricExclusionRequestedBy: item.metric_exclusion_requested_by,
+      metricExclusionReason: item.metric_exclusion_reason,
+      metricExclusionUpdatedAt: item.metric_exclusion_updated_at ? String(item.metric_exclusion_updated_at) : null,
     } satisfies WorkspaceRow,
   }));
   const focusedWorkspaceRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter));
@@ -908,6 +920,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const kpiRows = allWorkspaceRows.filter(
     (item) =>
       KPI_WORKFLOW_CODES.has(item.row.stepCode) &&
+      !item.row.metricExcluded &&
       !["Not Due Yet", "Pending", "N/A", "Not Checked"].includes(item.row.status),
   );
   const kpiTotal = kpiRows.length;
@@ -946,7 +959,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .sort((a, b) => b.followUp - a.followUp || a.score - b.score || a.attorney.localeCompare(b.attorney));
   const standardRows = Array.from(
     allWorkspaceRows
-      .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode))
+      .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
       .reduce((map, item) => {
         const current = map.get(item.caseManager) ?? {
           caseManager: item.caseManager,
@@ -1060,22 +1073,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     num(postClosureData.summary.issue_found);
   const teamsNote = postClosureTeamsNote(postClosureData.rows, closureAttorneyFilter, closureStageFilter, closureWindowFilter);
   const touchpointCounts = new Map(postClosureData.touchpoints.map((touchpoint) => [String(touchpoint.touchpoint_months), touchpoint]));
-  const notice =
-    searchParams.audit === "ran"
-      ? searchParams.message || "Audit run completed."
-      : searchParams.audit === "failed"
-        ? searchParams.message || "Audit run failed."
-        : searchParams.postClosure === "synced"
-          ? searchParams.message || "Post-closure follow-ups refreshed."
-          : searchParams.postClosure === "saved"
-            ? searchParams.message || "Post-closure follow-up saved."
-            : searchParams.postClosure === "failed"
-              ? searchParams.message || "Post-closure follow-up update failed."
-        : searchParams.clio === "connected"
-          ? "Clio connected successfully."
-          : searchParams.clio === "failed"
-            ? `Clio connection failed${searchParams.reason ? `: ${searchParams.reason}` : "."}`
-            : "";
+  const notice = (() => {
+    if (searchParams.audit === "ran") return searchParams.message || "Audit run completed.";
+    if (searchParams.audit === "failed") return searchParams.message || "Audit run failed.";
+    if (searchParams.postClosure === "synced") return searchParams.message || "Post-closure follow-ups refreshed.";
+    if (searchParams.postClosure === "saved") return searchParams.message || "Post-closure follow-up saved.";
+    if (searchParams.postClosure === "failed") return searchParams.message || "Post-closure follow-up update failed.";
+    if (searchParams.metrics === "excluded") return searchParams.notice || "Matter excluded from Standards metrics.";
+    if (searchParams.metrics === "restored") return searchParams.notice || "Matter restored to Standards metrics.";
+    if (searchParams.metrics === "failed") return searchParams.notice || "Metric update failed.";
+    if (searchParams.clio === "connected") return "Clio connected successfully.";
+    if (searchParams.clio === "failed") return `Clio connection failed${searchParams.reason ? `: ${searchParams.reason}` : "."}`;
+    return "";
+  })();
 
   return (
     <main className="shell">
@@ -1124,7 +1134,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       {notice ? (
-        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" ? "notice danger" : "notice"}>
+        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" || searchParams.metrics === "failed" ? "notice danger" : "notice"}>
           {notice}
         </section>
       ) : null}
@@ -2322,6 +2332,8 @@ Items Still Needing Action
                 </div>
                 <div className="matter-actions">
                   {badge(matterStatus)}
+                  {m.metric_excluded ? <span className="badge Pending">Excluded from Standards</span> : null}
+                  {!m.metric_excluded && m.metric_exclusion_requested_by ? <span className="badge Late">CM requested exclusion</span> : null}
                   <a className="button compact" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
                   <form action="/api/audit/run" method="post">
                     <input type="hidden" name="matter_id" value={m.matter_id} />
@@ -2334,8 +2346,31 @@ Items Still Needing Action
                     <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
                     <button type="submit">Recheck Matter</button>
                   </form>
+                  <form action="/api/metrics/exclusion" method="post">
+                    <input type="hidden" name="action" value={m.metric_excluded ? "restore" : "exclude"} />
+                    <input type="hidden" name="matter_id" value={m.matter_id} />
+                    <input type="hidden" name="reason" value={m.metric_exclusion_reason || "Admin removed this matter from Standards scoring."} />
+                    <input type="hidden" name="requested_by" value={m.metric_exclusion_requested_by || ""} />
+                    <input type="hidden" name="attorney" value={filters.attorney} />
+                    <input type="hidden" name="overall" value={filters.overall} />
+                    <input type="hidden" name="from" value={filters.from} />
+                    <input type="hidden" name="to" value={filters.to} />
+                    <input type="hidden" name="tab" value={activeTab} />
+                    <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
+                    <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+                    <button className="metric-exclusion-button" type="submit">
+                      {m.metric_excluded ? "Restore to Standards" : "Remove from Standards"}
+                    </button>
+                  </form>
                 </div>
               </div>
+
+              {!m.metric_excluded && m.metric_exclusion_requested_by ? (
+                <p className="metric-exclusion-note">
+                  {m.metric_exclusion_requested_by} asked admin to review this matter for Standards removal
+                  {m.metric_exclusion_reason ? `: ${m.metric_exclusion_reason}` : "."}
+                </p>
+              ) : null}
 
               {!refreshNeeded && nextAction ? (
                 <details className={`matter-dropdown next-action-card status-row-${statusClass(currentItemStatus(nextAction))}`}>

@@ -10,6 +10,7 @@ import { workflowLabel } from "@/lib/workflow-rules";
 export const dynamic = "force-dynamic";
 
 const CLEARING_DECISIONS = new Set(["Resolved", "No Action Needed", "Approved Exception"]);
+const CLIENT_COMMUNICATION_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN"]);
 const DATE_PART_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Chicago",
   year: "numeric",
@@ -49,6 +50,10 @@ function clientName(row: WorkspaceAuditItem): string {
 function isOpenTask(row: WorkspaceAuditItem): boolean {
   const status = workspaceStatus(row.item_status, row.reason_code);
   return isFollowUpStatus(status) && !CLEARING_DECISIONS.has(row.review_decision ?? "");
+}
+
+function isClientCommunicationTask(row: WorkspaceAuditItem): boolean {
+  return CLIENT_COMMUNICATION_STEPS.has(row.step_code);
 }
 
 function normalizeName(value: string | null | undefined): string {
@@ -195,6 +200,8 @@ export default async function CaseManagerPortalPage({
       const dueB = b.deadline_at ? new Date(String(b.deadline_at)).getTime() : Number.MAX_SAFE_INTEGER;
       return dueA - dueB || clientName(a).localeCompare(clientName(b));
     });
+  const communicationTasks = tasks.filter(isClientCommunicationTask);
+  const overdueTasks = tasks.filter((row) => row.deadline_at && new Date(String(row.deadline_at)).getTime() < Date.now());
 
   const message = searchParams.message ? decodeURIComponent(String(searchParams.message)) : "";
   const messageClass = searchParams.cm === "cleared" ? "cm-alert success" : searchParams.cm ? "cm-alert warning" : "cm-alert";
@@ -243,6 +250,24 @@ export default async function CaseManagerPortalPage({
         </ol>
       </section>
 
+      <section className="cm-notification-strip" aria-label="Case manager reminders">
+        <div>
+          <span>Follow-ups this week</span>
+          <strong>{tasks.length}</strong>
+          <small>Open items assigned to you in this view.</small>
+        </div>
+        <div className={communicationTasks.length ? "attention" : ""}>
+          <span>Client communication reminders</span>
+          <strong>{communicationTasks.length}</strong>
+          <small>{communicationTasks.length ? "Open Clio and confirm the client was contacted." : "No client communication reminders in this view."}</small>
+        </div>
+        <div className={overdueTasks.length ? "attention" : ""}>
+          <span>Past due</span>
+          <strong>{overdueTasks.length}</strong>
+          <small>{overdueTasks.length ? "Handle these first or request admin review if they should not count." : "Nothing past due in this view."}</small>
+        </div>
+      </section>
+
       <form className="cm-task-filters" action="/case-manager" method="get">
         <input type="hidden" name="window" value={activeWindow} />
         <label>
@@ -277,6 +302,13 @@ export default async function CaseManagerPortalPage({
                 <strong>{actionFor(row.step_code, status, row.reason_code)}</strong>
               </div>
 
+              {isClientCommunicationTask(row) ? (
+                <div className="cm-client-reminder">
+                  <strong>Client communication reminder</strong>
+                  <span>Before this clears, Clio needs proof that the client was contacted or followed up with.</span>
+                </div>
+              ) : null}
+
               <div className="cm-task-meta">
                 <span><b>Case Manager</b>{assignedOwner}</span>
                 <span><b>Attorney</b>{row.responsible_attorney_name || "Unassigned"}</span>
@@ -310,6 +342,23 @@ export default async function CaseManagerPortalPage({
                   </label>
                   <button className="primary" type="submit">Verify With CWCA</button>
                   <small>CWCA will recheck Clio. If proof is not found, this task stays open.</small>
+                </form>
+              </details>
+
+              <details className="cm-complete-details cm-admin-request">
+                <summary>
+                  <span>This should not count in Standards</span>
+                  <b>Ask Admin</b>
+                </summary>
+                <form className="cm-complete-form" action="/api/metrics/exclusion" method="post">
+                  <input type="hidden" name="action" value="request" />
+                  <input type="hidden" name="matter_id" value={row.matter_id} />
+                  <label>
+                    Why should admin review this?
+                    <textarea name="reason" rows={3} placeholder="Example: Duplicate matter, wrong assignment, not a Standards case, or special exception." />
+                  </label>
+                  <button className="button" type="submit">Send Admin Request</button>
+                  <small>This only asks admin to review it. It does not remove the task or change the score by itself.</small>
                 </form>
               </details>
             </article>

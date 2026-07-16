@@ -131,6 +131,17 @@ create table if not exists audit_review_history (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists audit_metric_exclusion (
+  matter_id text primary key references audit_matter(matter_id) on delete cascade,
+  active boolean not null default false,
+  requested_by text not null default '',
+  request_reason text not null default '',
+  approved_by text not null default '',
+  approved_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists post_closure_followup (
   matter_id text not null,
   touchpoint_months integer not null,
@@ -236,6 +247,32 @@ alter table if exists audit_review_history add column if not exists case_manager
 update audit_review_history set case_manager_name = coalesce(case_manager_name, '');
 alter table if exists audit_review_history alter column case_manager_name set default '';
 alter table if exists audit_review_history alter column case_manager_name set not null;
+alter table if exists audit_metric_exclusion add column if not exists active boolean;
+alter table if exists audit_metric_exclusion add column if not exists requested_by text;
+alter table if exists audit_metric_exclusion add column if not exists request_reason text;
+alter table if exists audit_metric_exclusion add column if not exists approved_by text;
+alter table if exists audit_metric_exclusion add column if not exists approved_at timestamptz;
+alter table if exists audit_metric_exclusion add column if not exists created_at timestamptz;
+alter table if exists audit_metric_exclusion add column if not exists updated_at timestamptz;
+update audit_metric_exclusion
+set active = coalesce(active, false),
+    requested_by = coalesce(requested_by, ''),
+    request_reason = coalesce(request_reason, ''),
+    approved_by = coalesce(approved_by, ''),
+    created_at = coalesce(created_at, now()),
+    updated_at = coalesce(updated_at, now());
+alter table if exists audit_metric_exclusion alter column active set default false;
+alter table if exists audit_metric_exclusion alter column requested_by set default '';
+alter table if exists audit_metric_exclusion alter column request_reason set default '';
+alter table if exists audit_metric_exclusion alter column approved_by set default '';
+alter table if exists audit_metric_exclusion alter column created_at set default now();
+alter table if exists audit_metric_exclusion alter column updated_at set default now();
+alter table if exists audit_metric_exclusion alter column active set not null;
+alter table if exists audit_metric_exclusion alter column requested_by set not null;
+alter table if exists audit_metric_exclusion alter column request_reason set not null;
+alter table if exists audit_metric_exclusion alter column approved_by set not null;
+alter table if exists audit_metric_exclusion alter column created_at set not null;
+alter table if exists audit_metric_exclusion alter column updated_at set not null;
 alter table if exists audit_metric_snapshot add column if not exists logged_call_count integer;
 update audit_metric_snapshot set logged_call_count = 0 where logged_call_count is null;
 alter table if exists audit_metric_snapshot alter column logged_call_count set default 0;
@@ -278,6 +315,7 @@ create index if not exists audit_item_status_idx on audit_item(status);
 create index if not exists audit_item_audit_version_idx on audit_item(audit_version);
 create index if not exists audit_review_decision_idx on audit_review(review_decision);
 create index if not exists audit_review_history_matter_idx on audit_review_history(matter_id, step_code, updated_at desc);
+create index if not exists audit_metric_exclusion_active_idx on audit_metric_exclusion(active);
 create index if not exists post_closure_followup_due_idx on post_closure_followup(due_at);
 create index if not exists post_closure_followup_status_idx on post_closure_followup(review_status);
 create index if not exists post_closure_followup_touchpoint_idx on post_closure_followup(touchpoint_months);

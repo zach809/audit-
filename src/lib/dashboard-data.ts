@@ -95,6 +95,10 @@ export type WorkspaceAuditItem = {
   review_completed_at: string | Date | null;
   review_updated_at: string | Date | null;
   review_history: unknown;
+  metric_excluded: boolean | null;
+  metric_exclusion_requested_by: string | null;
+  metric_exclusion_reason: string | null;
+  metric_exclusion_updated_at: string | Date | null;
 };
 
 function csvCell(value: unknown): string {
@@ -262,6 +266,10 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const matters = await sql`
     select
       m.*,
+      coalesce(mex.active, false) as metric_excluded,
+      mex.requested_by as metric_exclusion_requested_by,
+      mex.request_reason as metric_exclusion_reason,
+      mex.updated_at as metric_exclusion_updated_at,
       case
         when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 'Unchecked'
         when count(*) filter (where (${normalizedItemStatus}) = 'Unknown') > 0 then 'Review'
@@ -321,13 +329,14 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
+    left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
     where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       and exists (
         select 1
         from audit_item visible_item
         where visible_item.matter_id = m.matter_id
       )
-    group by m.matter_id
+    group by m.matter_id, mex.active, mex.requested_by, mex.request_reason, mex.updated_at
     order by
       case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
       m.matter_created_at desc
@@ -424,6 +433,10 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       r.reviewed_by,
       r.review_completed_at,
       r.updated_at as review_updated_at,
+      coalesce(mex.active, false) as metric_excluded,
+      mex.requested_by as metric_exclusion_requested_by,
+      mex.request_reason as metric_exclusion_reason,
+      mex.updated_at as metric_exclusion_updated_at,
       coalesce((
         select json_agg(
           json_build_object(
@@ -448,6 +461,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     from audit_matter m
     join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
+    left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
     where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
     order by
       m.responsible_attorney_name,
@@ -994,6 +1008,7 @@ async function standardsReportRows(filters: DashboardFilters = {}): Promise<Stan
   };
 
   const standardsItems = workspaceItems.filter((item) => {
+    if (item.metric_excluded) return false;
     if (!isStandardsStep(item.step_code)) return false;
     const createdKey = csvDateKey(item.matter_created_at);
     return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));

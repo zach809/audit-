@@ -8488,3 +8488,76 @@ body {
 .workflow-area-row:nth-child(2) .workflow-track span {
   background: #8ea2ff !important;
 }
+
+.metric-exclusion-button {
+  background: rgba(10, 22, 38, 0.58) !important;
+  border: 1px solid rgba(240, 180, 107, 0.38) !important;
+  color: #ffe2b8 !important;
+}
+
+.metric-exclusion-note {
+  background: rgba(240, 180, 107, 0.13);
+  border: 1px solid rgba(240, 180, 107, 0.32);
+  border-radius: 14px;
+  color: #ffe2b8;
+  font-size: 13px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+}
+
+.cm-notification-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cm-notification-strip div,
+.cm-client-reminder {
+  background: rgba(12, 24, 40, 0.5);
+  border: 1px solid rgba(203, 219, 239, 0.2);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.cm-notification-strip div.attention,
+.cm-client-reminder {
+  background: rgba(240, 180, 107, 0.13);
+  border-color: rgba(240, 180, 107, 0.38);
+}
+
+.cm-notification-strip span,
+.cm-client-reminder strong {
+  color: var(--text);
+  display: block;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.cm-notification-strip strong {
+  color: var(--text);
+  display: block;
+  font-size: 26px;
+  line-height: 1;
+  margin: 8px 0 6px;
+}
+
+.cm-notification-strip small,
+.cm-client-reminder span {
+  color: var(--muted);
+  display: block;
+  line-height: 1.4;
+}
+
+.cm-admin-request summary b {
+  background: rgba(240, 180, 107, 0.18);
+  border-color: rgba(240, 180, 107, 0.42);
+  color: #ffe2b8;
+}
+
+@media (max-width: 760px) {
+  .cm-notification-strip {
+    grid-template-columns: 1fr;
+  }
+}

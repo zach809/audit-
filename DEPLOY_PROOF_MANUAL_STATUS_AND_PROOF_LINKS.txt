@@ -15,6 +15,9 @@ What changed:
 - Version cwca-standards-cm-workbook-ui-2026-07-16 changes Standards to a CM-focused view.
 - Standards export now downloads an Excel-compatible workbook with one worksheet tab per case manager.
 - Standards page now includes quick links for recent weekly reports and solid bar charts.
+- Version cwca-metric-exclusions-cm-reminders-2026-07-16 adds admin-approved Standards metric exclusions.
+- Case managers can request a matter be reviewed for Standards removal, but only admin exclusion removes it from scoring/export.
+- Case manager portal now shows follow-up, client-communication, and past-due reminder cards.
 - Header buttons are forced compact so Run Audit Batch does not stretch across the header.
 - Standards Focus now always shows Welcome Letter, Attorney Call, and Court Date Added even when one area has 0 follow-up.
 - Standards wording now says Welcome Letter, not Welcome Packet.
