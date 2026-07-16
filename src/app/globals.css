@@ -8341,3 +8341,150 @@ textarea:disabled {
   border-color: rgba(134, 239, 172, 0.34) !important;
   color: #BBF7D0 !important;
 }
+
+/* Final lighter operator theme: clearer background and brighter success states. */
+:root {
+  --bg: #31445d;
+  --panel: rgba(38, 53, 73, 0.82);
+  --panel-strong: rgba(48, 65, 88, 0.88);
+  --panel-soft: rgba(60, 78, 103, 0.64);
+  --line: rgba(189, 207, 229, 0.28);
+  --line-soft: rgba(189, 207, 229, 0.18);
+  --text: #f8fbff;
+  --muted: #c5d1df;
+  --blue: #9aa7ff;
+  --blue-soft: rgba(154, 167, 255, 0.18);
+  --green: #4ade80;
+  --green-soft: rgba(74, 222, 128, 0.18);
+  --amber: #f0b46b;
+  --amber-soft: rgba(240, 180, 107, 0.2);
+  --red: #ff8b8b;
+  --red-soft: rgba(255, 139, 139, 0.16);
+  --purple: #d8b4fe;
+  --purple-soft: rgba(216, 180, 254, 0.18);
+  --usa-green: #22c55e;
+  --usa-green-soft: rgba(34, 197, 94, 0.18);
+}
+
+body {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(174, 211, 255, 0.18), transparent 30%),
+    linear-gradient(180deg, #3d506a 0, #344760 420px, #2d4058 100%) !important;
+}
+
+.panel,
+.matter-card,
+.kpi-card,
+.kpi-panel,
+.kpi-hero,
+.kpi-report-copy,
+.dashboard-tabs,
+.post-closure-card,
+.cm-task-card,
+.cm-portal-header,
+.cm-queue-summary,
+.cm-task-filters {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
+    rgba(38, 53, 73, 0.82) !important;
+  border-color: rgba(203, 219, 239, 0.24) !important;
+  box-shadow: 0 18px 44px rgba(9, 20, 35, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.Pass,
+.On-Time,
+.On-Track,
+.Strong,
+.Resolved,
+.cm-alert.success,
+.notice.success {
+  background: rgba(34, 197, 94, 0.22) !important;
+  border-color: rgba(74, 222, 128, 0.62) !important;
+  color: #bbf7d0 !important;
+}
+
+.priority-row.status-row-On-Track,
+.workspace-row.status-row-On-Track,
+.cm-task-card.status-row-On-Track {
+  box-shadow: inset 4px 0 0 #4ade80, 0 18px 44px rgba(9, 20, 35, 0.18) !important;
+}
+
+.kpi-score-ring {
+  background:
+    radial-gradient(circle at center, rgba(35, 50, 70, 0.96) 0 58%, transparent 59%),
+    conic-gradient(#4ade80 var(--score), rgba(222, 235, 248, 0.18) 0) !important;
+}
+
+.standards-week-links {
+  margin: 0 0 16px;
+}
+
+.standards-week-links summary {
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+  width: max-content;
+}
+
+.standards-week-links summary::-webkit-details-marker {
+  display: none;
+}
+
+.standards-week-links div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.standards-week-links a {
+  background: rgba(10, 22, 38, 0.44);
+  border: 1px solid rgba(203, 219, 239, 0.24);
+  border-radius: 999px;
+  color: #eaf2ff;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 8px 11px;
+  text-decoration: none;
+}
+
+.standards-week-links a:hover {
+  background: rgba(154, 167, 255, 0.22);
+  border-color: rgba(191, 219, 254, 0.46);
+}
+
+/* Solid chart bars: no rainbow gradients, easier scanning. */
+.queue-meter-bar,
+.standard-fill,
+.kpi-fill,
+.bar-fill,
+.workflow-track span,
+.issue-fill {
+  background: #8ea2ff !important;
+}
+
+.attorney-standard-line b {
+  background: #9fbfbc !important;
+}
+
+.attorney-standard-line.welcome b {
+  background: #60d394 !important;
+}
+
+.attorney-standard-line.meeting b {
+  background: #8ea2ff !important;
+}
+
+.attorney-standard-line.court-date b,
+.workflow-area-row .workflow-track span {
+  background: #f0b46b !important;
+}
+
+.workflow-area-row:first-child .workflow-track span {
+  background: #60d394 !important;
+}
+
+.workflow-area-row:nth-child(2) .workflow-track span {
+  background: #8ea2ff !important;
+}

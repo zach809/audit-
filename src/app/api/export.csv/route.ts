@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { actionItemsCsv, auditLogicIssuesCsv, caseManagerTodoText, dashboardCsv, standardsCsv } from "@/lib/dashboard-data";
+import { actionItemsCsv, auditLogicIssuesCsv, caseManagerTodoText, dashboardCsv, standardsWorkbook } from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     : isLogicIssues
       ? await auditLogicIssuesCsv(filters, url.origin)
       : isStandards
-        ? await standardsCsv(filters)
+        ? await standardsWorkbook(filters)
       : isActionList
         ? await actionItemsCsv(filters, url.origin)
         : await dashboardCsv(filters);
@@ -41,13 +41,13 @@ export async function POST(request: NextRequest) {
     : isLogicIssues
       ? "cwca-audit-logic-issues.csv"
       : isStandards
-        ? "cwca-weekly-standards-scorecard.csv"
+        ? "cwca-weekly-standards-by-case-manager.xls"
       : isActionList
         ? "cwca-case-manager-action-report.csv"
         : "cwca-audit.csv";
   return new NextResponse(body, {
     headers: {
-      "content-type": `${isCaseManagerText ? "text/plain" : "text/csv"}; charset=utf-8`,
+      "content-type": `${isCaseManagerText ? "text/plain" : isStandards ? "application/vnd.ms-excel" : "text/csv"}; charset=utf-8`,
       "content-disposition": `attachment; filename="${filename}"`,
     },
   });

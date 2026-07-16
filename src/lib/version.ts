@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-usa-theme-standards-weekly-fix-2026-07-15";
+export const APP_VERSION = "cwca-standards-cm-workbook-ui-2026-07-16";

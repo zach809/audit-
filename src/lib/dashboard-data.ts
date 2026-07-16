@@ -914,7 +914,37 @@ function standardsAssignmentNote(item: WorkspaceAuditItem): string {
   return "Attorney assignment map";
 }
 
-export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {
+type StandardsReportRow = {
+  owner: string;
+  newMatters: number;
+  attorneyCall: number;
+  welcome: number;
+  courtDate: number;
+  completion: string;
+  date: string;
+  sortDate: string;
+};
+
+const STANDARDS_HEADERS = [
+  "Case Manager",
+  "Cases / new matters #",
+  "Initial Meeting set - Phone call",
+  "Welcome letters sent",
+  "Court date event made",
+  "Workflow completion %",
+  "Date",
+];
+
+function standardsOwnerSort(a: string, b: string): number {
+  const aIndex = STANDARD_CASE_MANAGERS.indexOf(a as (typeof STANDARD_CASE_MANAGERS)[number]);
+  const bIndex = STANDARD_CASE_MANAGERS.indexOf(b as (typeof STANDARD_CASE_MANAGERS)[number]);
+  if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+  if (aIndex === -1) return 1;
+  if (bIndex === -1) return -1;
+  return aIndex - bIndex;
+}
+
+async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
   const { workspaceItems } = await getDashboardData(filters);
   const today = csvDateKey(new Date());
   const from = filters.from || today;
@@ -968,15 +998,7 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     const createdKey = csvDateKey(item.matter_created_at);
     return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
   });
-  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor)))
-    .sort((a, b) => {
-      const aIndex = STANDARD_CASE_MANAGERS.indexOf(a as (typeof STANDARD_CASE_MANAGERS)[number]);
-      const bIndex = STANDARD_CASE_MANAGERS.indexOf(b as (typeof STANDARD_CASE_MANAGERS)[number]);
-      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    });
+  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor))).sort(standardsOwnerSort);
   for (const owner of owners) {
     for (const date of dates) getRow(owner, date);
   }
@@ -1013,34 +1035,111 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     }
   }
 
-  const headers = [
-    "Case Manager",
-    "Cases / new matters #",
-    "Initial Meeting set - Phone call",
-    "Welcome letters sent",
-    "Court date event made",
-    "Workflow completion %",
-    "Date",
-  ];
-  const rows = Array.from(rowsByOwnerDate.values())
+  return Array.from(rowsByOwnerDate.values())
     .filter((row) => row.newMatters.size > 0)
-    .sort((a, b) => a.owner.localeCompare(b.owner) || a.date.localeCompare(b.date))
+    .sort((a, b) => standardsOwnerSort(a.owner, b.owner) || a.date.localeCompare(b.date))
     .map((row) => {
       const expected = row.newMatters.size * 3;
       const completed = row.attorneyCall + row.welcome + row.courtDate;
       const score = expected ? `${Math.round((completed / expected) * 100)}%` : "0%";
-      return [
-        row.owner,
-        row.newMatters.size,
-        row.attorneyCall,
-        row.welcome,
-        row.courtDate,
-        score,
-        csvDisplayDate(row.date),
-      ];
+      return {
+        owner: row.owner,
+        newMatters: row.newMatters.size,
+        attorneyCall: row.attorneyCall,
+        welcome: row.welcome,
+        courtDate: row.courtDate,
+        completion: score,
+        date: csvDisplayDate(row.date),
+        sortDate: row.date,
+      };
     });
+}
 
-  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {
+  const rows = await standardsReportRows(filters);
+  const csvRows = rows.map((row) => [
+    row.owner,
+    row.newMatters,
+    row.attorneyCall,
+    row.welcome,
+    row.courtDate,
+    row.completion,
+    row.date,
+  ]);
+
+  return [STANDARDS_HEADERS, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function xmlEscape(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function xmlCell(value: unknown, type: "String" | "Number" = "String", style = ""): string {
+  const styleAttr = style ? ` ss:StyleID="${style}"` : "";
+  return `<Cell${styleAttr}><Data ss:Type="${type}">${xmlEscape(value)}</Data></Cell>`;
+}
+
+function worksheetName(name: string): string {
+  const cleaned = (name || "Unassigned").replace(/[\\/?*[\]:]/g, " ").replace(/\s+/g, " ").trim();
+  return (cleaned || "Unassigned").slice(0, 31);
+}
+
+export async function standardsWorkbook(filters: DashboardFilters = {}): Promise<string> {
+  const rows = await standardsReportRows(filters);
+  const ownersWithRows = new Set(rows.map((row) => row.owner));
+  const owners = [
+    ...STANDARD_CASE_MANAGERS,
+    ...Array.from(ownersWithRows).filter((owner) => !STANDARD_CASE_MANAGERS.includes(owner as (typeof STANDARD_CASE_MANAGERS)[number])).sort(),
+  ];
+  const sheets = owners.map((owner) => {
+    const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+    const tableRows = [
+      `<Row>${STANDARDS_HEADERS.map((header) => xmlCell(header, "String", "Header")).join("")}</Row>`,
+      ...ownerRows.map((row) =>
+        `<Row>${[
+          xmlCell(row.owner),
+          xmlCell(row.newMatters, "Number"),
+          xmlCell(row.attorneyCall, "Number"),
+          xmlCell(row.welcome, "Number"),
+          xmlCell(row.courtDate, "Number"),
+          xmlCell(row.completion),
+          xmlCell(row.date),
+        ].join("")}</Row>`,
+      ),
+    ].join("");
+    return `
+      <Worksheet ss:Name="${xmlEscape(worksheetName(owner))}">
+        <Table>
+          <Column ss:Width="110"/>
+          <Column ss:Width="130"/>
+          <Column ss:Width="160"/>
+          <Column ss:Width="140"/>
+          <Column ss:Width="140"/>
+          <Column ss:Width="135"/>
+          <Column ss:Width="90"/>
+          ${tableRows}
+        </Table>
+      </Worksheet>`;
+  }).join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="Header">
+      <Font ss:Bold="1"/>
+      <Interior ss:Color="#DCEBFF" ss:Pattern="Solid"/>
+    </Style>
+  </Styles>
+  ${sheets}
+</Workbook>`;
 }
 
 function textLine(label: string, value: unknown): string {

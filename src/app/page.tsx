@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { getDashboardData, type WorkspaceAuditItem } from "@/lib/dashboard-data";
+import { getDashboardData, standardsCaseManagerFor, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
@@ -463,6 +463,12 @@ function displayShortDate(dateKey: string): string {
   return `${month}/${day}/${String(year).slice(-2)}`;
 }
 
+function addDaysInput(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateInput(date);
+}
+
 function filterLink(filters: Record<string, string>, next: Record<string, string>) {
   const params = new URLSearchParams({ ...filters, ...next });
   for (const [key, value] of Array.from(params.entries())) {
@@ -529,7 +535,7 @@ const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_C
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
-  { id: "kpi", label: "Standards", description: "Weekly attorney standards" },
+  { id: "kpi", label: "Standards", description: "Weekly CM standards" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
   { id: "guide", label: "Guide", description: "How to read the results" },
@@ -737,6 +743,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     : "No audit has run yet";
   const allWorkspaceRows = (dashboardData.workspaceItems as WorkspaceAuditItem[]).map((item) => ({
     attorney: item.responsible_attorney_name || "Unassigned",
+    caseManager: standardsCaseManagerFor(item),
     row: {
       matterId: item.matter_id,
       matterNumber: item.matter_number,
@@ -941,8 +948,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     allWorkspaceRows
       .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode))
       .reduce((map, item) => {
-        const current = map.get(item.attorney) ?? {
-          attorney: item.attorney,
+        const current = map.get(item.caseManager) ?? {
+          caseManager: item.caseManager,
           matters: new Set<string>(),
           welcome: 0,
           attorneyCall: 0,
@@ -960,9 +967,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         if (late && item.row.stepCode === "SETUP_WELCOME") current.welcomeLate += 1;
         if (late && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCallLate += 1;
         if (late && item.row.stepCode === "SETUP_COURT_DATE") current.courtDateLate += 1;
-        map.set(item.attorney, current);
+        map.set(item.caseManager, current);
         return map;
-      }, new Map<string, { attorney: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; welcomeLate: number; attorneyCallLate: number; courtDateLate: number }>())
+      }, new Map<string, { caseManager: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; welcomeLate: number; attorneyCallLate: number; courtDateLate: number }>())
       .values(),
   )
     .map((item) => {
@@ -973,7 +980,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       const totalStandards = cases * 3;
       const scorePoints = onTimeStandards + lateStandards * 0.5;
       return {
-        attorney: item.attorney,
+        caseManager: item.caseManager,
         cases,
         welcome: item.welcome,
         attorneyCall: item.attorneyCall,
@@ -987,8 +994,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         completionRate: totalStandards ? Math.round((scorePoints / totalStandards) * 100) : 0,
       };
     })
-    .sort((a, b) => a.attorney.localeCompare(b.attorney));
+    .sort((a, b) => a.caseManager.localeCompare(b.caseManager));
   const standardsDate = filters.to || today;
+  const priorStandardWeeks = Array.from({ length: 6 }, (_, index) => {
+    const start = addDaysInput(weekStart, -7 * (index + 1));
+    const end = addDaysInput(start, 4);
+    return { label: `${displayShortDate(start)} - ${displayShortDate(end)}`, from: start, to: end };
+  });
   const standardsTotals = standardRows.reduce(
     (totals, row) => ({
       newMatters: totals.newMatters + row.newMatters,
@@ -1516,7 +1528,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Weekly Report</span>
               <h2>Standards</h2>
-              <p className="muted small">Weekly attorney standards for Welcome Letter, Initial Meeting, and Court Date Added.</p>
+              <p className="muted small">Weekly CM standards for Welcome Letter, Initial Meeting, and Court Date Added.</p>
             </div>
             <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
           </div>
@@ -1547,8 +1559,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <input type="hidden" name="overall" value={filters.overall} />
             <input type="hidden" name="from" value={filters.from} />
             <input type="hidden" name="to" value={filters.to} />
-            <button className="button primary" type="submit">Download Standards CSV</button>
+            <button className="button primary" type="submit">Download Standards Workbook</button>
           </form>
+          <details className="standards-week-links">
+            <summary>Past weekly reports</summary>
+            <div>
+              {priorStandardWeeks.map((week) => (
+                <a key={week.from} href={filterLink({ tab: "kpi" }, { from: week.from, to: week.to })}>
+                  {week.label}
+                </a>
+              ))}
+            </div>
+          </details>
           <div className="kpi-score-row">
             <div className="kpi-score-ring" style={{ "--score": `${kpiScore * 3.6}deg` } as CSSProperties}>
               <span>{kpiScore}%</span>
@@ -1570,16 +1592,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <section className="panel kpi-panel standards-graphic">
           <div className="panel-heading">
             <div>
-              <h2>Standards By Attorney</h2>
+              <h2>Standards By CM</h2>
               <p className="muted small">Quick visual for Welcome Letter, Initial Meeting, and Court Date Added.</p>
             </div>
           </div>
           {standardRows.length ? (
             <div className="standards-attorney-chart">
               {standardRows.map((item) => (
-                <article className="standards-attorney-row" key={item.attorney}>
+                <article className="standards-attorney-row" key={item.caseManager}>
                   <div className="standards-attorney-name">
-                    <strong>{item.attorney}</strong>
+                    <strong>{item.caseManager}</strong>
                     <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
                     <em>{item.completionRate}% standards score</em>
                   </div>
@@ -1615,18 +1637,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="panel kpi-panel">
             <div className="panel-heading">
               <div>
-                <h2>Attorney Standards Scorecard</h2>
-                <p className="muted small">Simple weekly counts by attorney.</p>
+                <h2>CM Standards Scorecard</h2>
+                <p className="muted small">Simple weekly counts by case manager.</p>
               </div>
             </div>
             {standardRows.length ? (
               <div className="standards-list">
                 {standardRows.map((item) => (
-                  <article className="standards-card" key={item.attorney}>
+                  <article className="standards-card" key={item.caseManager}>
                     <div className="standards-card-head">
                       <div>
-                        <span className="label">Case Manager / Attorney</span>
-                        <strong>{item.attorney}</strong>
+                        <span className="label">CM</span>
+                        <strong>{item.caseManager}</strong>
                       </div>
                       <div>
                         <span className="label">Date</span>
