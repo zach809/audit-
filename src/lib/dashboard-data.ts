@@ -840,7 +840,7 @@ function csvDateKey(value: unknown): string {
 function csvDisplayDate(dateKey: string): string {
   const [year, month, day] = dateKey.split("-").map(Number);
   if (!year || !month || !day) return dateKey;
-  return `${month}/${day}/${String(year).slice(-2)}`;
+  return `${month}/${day}/${year}`;
 }
 
 function eachDateKey(from: string, to: string): string[] {
@@ -862,16 +862,16 @@ function normalizeOwnerName(value: string | null | undefined): string {
 }
 
 const STANDARD_CASE_MANAGERS = [
-  "Alessandra",
-  "Anahi",
-  "Camila",
-  "Claudia",
-  "Ivan",
-  "Jesus",
-  "Lori",
-  "Nathaly",
-  "Ronald",
   "Svetlana",
+  "Jesus",
+  "Alessandra",
+  "Ivan",
+  "Ronald",
+  "Camila",
+  "Anahi",
+  "Lori",
+  "Claudia",
+  "Nathaly",
 ] as const;
 
 function canonicalCaseManagerName(value: string | null | undefined): string {
@@ -945,7 +945,7 @@ const STANDARDS_HEADERS = [
   "Initial Meeting set - Phone call",
   "Welcome letters sent",
   "Court date event made",
-  "Workflow completion %",
+  "Worflow completion %",
   "Date",
 ];
 
@@ -1105,15 +1105,11 @@ function worksheetName(name: string): string {
 
 export async function standardsWorkbook(filters: DashboardFilters = {}): Promise<string> {
   const rows = await standardsReportRows(filters);
-  const ownersWithRows = new Set(rows.map((row) => row.owner));
-  const owners = [
-    ...STANDARD_CASE_MANAGERS,
-    ...Array.from(ownersWithRows).filter((owner) => !STANDARD_CASE_MANAGERS.includes(owner as (typeof STANDARD_CASE_MANAGERS)[number])).sort(),
-  ];
+  const owners = [...STANDARD_CASE_MANAGERS];
   const sheets = owners.map((owner) => {
     const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
     const tableRows = [
-      `<Row>${STANDARDS_HEADERS.map((header) => xmlCell(header, "String", "Header")).join("")}</Row>`,
+      `<Row>${STANDARDS_HEADERS.map((header) => xmlCell(header)).join("")}</Row>`,
       ...ownerRows.map((row) =>
         `<Row>${[
           xmlCell(row.owner),
@@ -1129,13 +1125,13 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
     return `
       <Worksheet ss:Name="${xmlEscape(worksheetName(owner))}">
         <Table>
-          <Column ss:Width="110"/>
-          <Column ss:Width="130"/>
+          <Column ss:Width="95"/>
+          <Column ss:Width="145"/>
+          <Column ss:Width="165"/>
+          <Column ss:Width="150"/>
+          <Column ss:Width="165"/>
           <Column ss:Width="160"/>
-          <Column ss:Width="140"/>
-          <Column ss:Width="140"/>
-          <Column ss:Width="135"/>
-          <Column ss:Width="90"/>
+          <Column ss:Width="105"/>
           ${tableRows}
         </Table>
       </Worksheet>`;
@@ -1147,12 +1143,6 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
   xmlns:o="urn:schemas-microsoft-com:office:office"
   xmlns:x="urn:schemas-microsoft-com:office:excel"
   xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Styles>
-    <Style ss:ID="Header">
-      <Font ss:Bold="1"/>
-      <Interior ss:Color="#DCEBFF" ss:Pattern="Solid"/>
-    </Style>
-  </Styles>
   ${sheets}
 </Workbook>`;
 }

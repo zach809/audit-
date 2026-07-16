@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-metric-exclusions-cm-reminders-2026-07-16";
+export const APP_VERSION = "cwca-standards-excel-exact-format-2026-07-16";

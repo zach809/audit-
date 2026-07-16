@@ -18,6 +18,8 @@ What changed:
 - Version cwca-metric-exclusions-cm-reminders-2026-07-16 adds admin-approved Standards metric exclusions.
 - Case managers can request a matter be reviewed for Standards removal, but only admin exclusion removes it from scoring/export.
 - Case manager portal now shows follow-up, client-communication, and past-due reminder cards.
+- Version cwca-standards-excel-exact-format-2026-07-16 makes the Standards Excel workbook match the requested seven-column case-manager sheet format.
+- Standards workbook tabs now use only the known case-manager sheets and exclude non-matching extra report columns.
 - Header buttons are forced compact so Run Audit Batch does not stretch across the header.
 - Standards Focus now always shows Welcome Letter, Attorney Call, and Court Date Added even when one area has 0 follow-up.
 - Standards wording now says Welcome Letter, not Welcome Packet.
@@ -104,7 +106,7 @@ What changed:
 - Standards CSV now seeds rows only from Welcome Letter, Initial Meeting, and Court Date standards items.
 - Version cwca-usa-theme-standards-weekly-fix-2026-07-15 applies a USA patriotic red/white/blue palette with semantic statuses.
 - Red now indicates negative/needs-action states, yellow indicates timing/caution, green indicates success, and blue indicates neutral/info.
-- Standards CSV now matches the simple case-manager sheet format: Case Manager, Cases / new matters #, Initial Meeting set - Phone call, Welcome letters sent, Court date event made, Workflow completion %, Date.
+- Standards Excel now matches the simple case-manager sheet format: Case Manager, Cases / new matters #, Initial Meeting set - Phone call, Welcome letters sent, Court date event made, Worflow completion %, Date.
 - Weekly Client Check-In now marks nearby-date phone call proof as completed late/timing review instead of missing once the same-day window has passed.
 
 Deployment check:
