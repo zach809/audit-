@@ -106,7 +106,10 @@ What changed:
 - Standards CSV now seeds rows only from Welcome Letter, Initial Meeting, and Court Date standards items.
 - Version cwca-usa-theme-standards-weekly-fix-2026-07-15 applies a USA patriotic red/white/blue palette with semantic statuses.
 - Red now indicates negative/needs-action states, yellow indicates timing/caution, green indicates success, and blue indicates neutral/info.
-- Standards Excel now matches the simple case-manager sheet format: Case Manager, Cases / new matters #, Initial Meeting set - Phone call, Welcome letters sent, Court date event made, Worflow completion %, Date.
+- Standards Excel now matches the simple case-manager sheet format: Case Manager, Date, ATC / new matters #, Initial Meeting set - Phone call, Welcome letters sent, Court date event made, Worflow completion %.
+- Version cwca-final-standards-cm-webpage-2026-07-19 keeps the final Standards Excel workbook to only those seven columns, one worksheet per case manager, and includes the /case-manager portal.
+- Version cwca-google-sheets-standards-2hr-atty-call-2026-07-20 adds live Google Sheets Standards sync, an in-app spreadsheet preview, and changes the initial attorney call setup goal to 2 business hours.
+- Standards now separates New Matter Onboarding from Ongoing Cases. Ongoing Cases tracks client contact, weekly check-ins, court results, and appearance filing email proof separately.
 - Weekly Client Check-In now marks nearby-date phone call proof as completed late/timing review instead of missing once the same-day window has passed.
 
 Deployment check:

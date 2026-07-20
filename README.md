@@ -58,8 +58,8 @@ If the OpenAI key is not configured, CWCA still works normally and shows a clear
 CWCA checks open matters using Illinois business time: Monday-Friday, 8:00 AM-5:00 PM America/Chicago. After-hours and weekend items roll into business-time handling so the audit is less strict than a plain clock timer.
 
 - Welcome Letter: welcome letter / bienvenida communication sent within 2 business hours of a new matter being created.
-- Attorney Call: attorney/client call calendar event scheduled within 1 business hour of a new matter being created.
-- Court Date Added: court, hearing, status, or continuance calendar event added within 1 business hour when the court date is known.
+- Attorney Call: attorney/client call calendar event scheduled within 2 business hours of a new matter being created.
+- Court Date Added: court, hearing, status, or continuance calendar event added within 2 business hours when the court date is known.
 - Client Contact: outgoing client contact completed by the next business day at 5:00 PM.
 - Appearance Filed: appearance filing notification or template evidence checked after 48 hours from matter creation, skipping non-business days.
 - Court Results: court result communication sent by the next business day at 5:00 PM after court.
@@ -147,6 +147,17 @@ Do not enable write permissions.
 - `CLIO_BASE_URL`: `https://app.clio.com` for US.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
 - `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`. Current default CM setup uses the listed Hirsch emails with password `Hirsch12345678`.
+- `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: optional live Standards Google Sheet sync. Share the target Sheet with the service-account email as Editor, then use the Standards tab button or the weekday cron sync.
+
+## Standards Google Sheet
+
+The Standards tab can now update a live Google Sheet. CWCA writes one tab per case manager for New Matter Onboarding and uses this exact order:
+
+`Case Manager`, `Date`, `ATC / new matters #`, `Initial Meeting set - Phone call`, `Welcome letters sent`, `Court date event made`, `Worflow completion %`.
+
+This is one-way from CWCA to Google Sheets. It does not write to Clio.
+
+The CWCA Standards page also separates Ongoing Cases from onboarding so case managers can see client contact, weekly check-ins, court results, and appearance filing email follow-up without mixing those items into the new-matter score.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.

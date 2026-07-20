@@ -80,7 +80,7 @@ Effective matter intake time:
 
 Setup on-time deadline:
 
-- 1 business hour after effective matter intake time.
+- 2 business hours after effective matter intake time for the initial attorney call standard.
 
 Setup same-day corrective deadline:
 
@@ -89,7 +89,7 @@ Setup same-day corrective deadline:
 Setup grading:
 
 - Evidence at or before the 1-business-hour deadline: On Time.
-- Evidence after 1 business hour but before 5:00 PM same business day: Late, coaching-worthy but completed.
+- Evidence after the 2-business-hour setup goal but before 5:00 PM same business day: Late, coaching-worthy but completed.
 - No evidence before 5:00 PM same business day: Missing.
 - Before 5:00 PM, the dashboard should show an operational state such as Needs Welcome Packet, Needs Attorney Call, or Needs Court Date.
 

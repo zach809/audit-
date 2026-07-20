@@ -8454,6 +8454,171 @@ body {
   border-color: rgba(191, 219, 254, 0.46);
 }
 
+.standards-online-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.standards-online-actions form {
+  margin: 0;
+}
+
+.standards-online-actions small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.standards-sheet-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.standards-sheet-scroll {
+  border: 1px solid rgba(203, 219, 239, 0.18);
+  border-radius: 16px;
+  overflow: auto;
+}
+
+.standards-sheet-table {
+  background: rgba(8, 13, 20, 0.45);
+  border-collapse: collapse;
+  min-width: 980px;
+  width: 100%;
+}
+
+.standards-sheet-table th,
+.standards-sheet-table td {
+  border: 1px solid rgba(203, 219, 239, 0.13);
+  padding: 9px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.standards-sheet-table th {
+  background: rgba(142, 162, 255, 0.16);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.standards-sheet-table td {
+  color: #eaf2ff;
+  font-size: 13px;
+}
+
+.standards-sheet-table td:nth-child(n+3) {
+  text-align: right;
+}
+
+.standards-sheet-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.ongoing-cases-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.ongoing-summary-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.ongoing-summary-grid div {
+  background: rgba(8, 13, 20, 0.42);
+  border: 1px solid rgba(203, 219, 239, 0.16);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.ongoing-summary-grid span,
+.ongoing-cm-row span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.ongoing-summary-grid strong {
+  color: var(--text);
+  display: block;
+  font-size: 26px;
+  line-height: 1;
+  margin-top: 7px;
+}
+
+.ongoing-cm-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ongoing-cm-row {
+  align-items: center;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.012)),
+    rgba(8, 13, 20, 0.42);
+  border: 1px solid rgba(203, 219, 239, 0.16);
+  border-radius: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(170px, 0.6fr) minmax(0, 1.4fr) 110px;
+  padding: 13px;
+}
+
+.ongoing-cm-row strong {
+  color: var(--text);
+  display: block;
+  font-size: 15px;
+}
+
+.ongoing-pill-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ongoing-pill-grid span {
+  background: rgba(12, 24, 40, 0.58);
+  border: 1px solid rgba(203, 219, 239, 0.14);
+  border-radius: 999px;
+  color: #d7e5f6;
+  padding: 8px 10px;
+  text-transform: none;
+}
+
+.ongoing-pill-grid b {
+  color: #60d394;
+  float: right;
+}
+
+.ongoing-score {
+  text-align: right;
+}
+
+.ongoing-score strong {
+  color: #60d394;
+  font-size: 20px;
+}
+
+@media (max-width: 900px) {
+  .ongoing-summary-grid,
+  .ongoing-cm-row,
+  .ongoing-pill-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ongoing-score {
+    text-align: left;
+  }
+}
+
 /* Solid chart bars: no rainbow gradients, easier scanning. */
 .queue-meter-bar,
 .standard-fill,

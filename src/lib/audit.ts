@@ -639,9 +639,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: commError,
       now,
     }),
-    classify("SETUP_ATTY_CALL", attorneyCallEvidence, setup.onTime, {
+    classify("SETUP_ATTY_CALL", attorneyCallEvidence, setup.twoBusinessHours, {
       required: !isPettyTrafficMatter(record),
-      correctiveDeadlineAt: setup.corrective,
+      correctiveDeadlineAt: setup.twoBusinessHoursCorrective,
       operationalState: "Needs Attorney Call",
       unknown: Boolean(calendarError),
       reasonCode: calendarError,

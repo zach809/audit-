@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { getDashboardData, standardsCaseManagerFor, type WorkspaceAuditItem } from "@/lib/dashboard-data";
+import { getDashboardData, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
-import { APP_TZ } from "@/lib/config";
+import { APP_TZ, optionalEnv } from "@/lib/config";
+import { googleSheetsConfigured } from "@/lib/google-sheets";
 import {
   getPostClosureData,
   POST_CLOSURE_CONTACT_METHODS,
@@ -540,6 +541,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 
 type DashboardTab = "workspace" | "matters" | "case-manager" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
+const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_RESULTS", "APPEARANCE_FILING"]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
@@ -1008,7 +1010,108 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       };
     })
     .sort((a, b) => a.caseManager.localeCompare(b.caseManager));
+  const ongoingCaseRows = Array.from(
+    allWorkspaceRows
+      .filter((item) => ONGOING_CASE_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
+      .filter((item) => !["Pending", "Not Due Yet", "N/A", "Not Checked"].includes(item.row.status))
+      .reduce((map, item) => {
+        const current = map.get(item.caseManager) ?? {
+          caseManager: item.caseManager,
+          matters: new Set<string>(),
+          clientContact: 0,
+          weeklyCheckIn: 0,
+          courtResults: 0,
+          appearanceFiling: 0,
+          expected: 0,
+          completed: 0,
+          followUp: 0,
+        };
+        current.matters.add(item.row.matterId);
+        current.expected += 1;
+        const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        if (complete) current.completed += 1;
+        else if (isFollowUpStatus(item.row.status)) current.followUp += 1;
+        if (complete && item.row.stepCode === "CLIENT_CONTACT") current.clientContact += 1;
+        if (complete && item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") current.weeklyCheckIn += 1;
+        if (complete && item.row.stepCode === "COURT_RESULTS") current.courtResults += 1;
+        if (complete && item.row.stepCode === "APPEARANCE_FILING") current.appearanceFiling += 1;
+        map.set(item.caseManager, current);
+        return map;
+      }, new Map<string, { caseManager: string; matters: Set<string>; clientContact: number; weeklyCheckIn: number; courtResults: number; appearanceFiling: number; expected: number; completed: number; followUp: number }>())
+      .values(),
+  )
+    .map((item) => ({
+      ...item,
+      cases: item.matters.size,
+      completionRate: item.expected ? Math.round((item.completed / item.expected) * 100) : 0,
+    }))
+    .filter((item) => item.expected > 0)
+    .sort((a, b) => b.followUp - a.followUp || a.caseManager.localeCompare(b.caseManager));
+  const ongoingTotals = ongoingCaseRows.reduce(
+    (totals, row) => ({
+      cases: totals.cases + row.cases,
+      clientContact: totals.clientContact + row.clientContact,
+      weeklyCheckIn: totals.weeklyCheckIn + row.weeklyCheckIn,
+      courtResults: totals.courtResults + row.courtResults,
+      appearanceFiling: totals.appearanceFiling + row.appearanceFiling,
+      expected: totals.expected + row.expected,
+      completed: totals.completed + row.completed,
+      followUp: totals.followUp + row.followUp,
+    }),
+    { cases: 0, clientContact: 0, weeklyCheckIn: 0, courtResults: 0, appearanceFiling: 0, expected: 0, completed: 0, followUp: 0 },
+  );
+  const ongoingCompletionRate = ongoingTotals.expected ? Math.round((ongoingTotals.completed / ongoingTotals.expected) * 100) : 0;
+  const standardsSheetPreviewRows = Array.from(
+    allWorkspaceRows
+      .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
+      .reduce((map, item) => {
+        const date = item.row.matterCreatedAt ? dateInput(new Date(item.row.matterCreatedAt)) : "";
+        if (!date) return map;
+        const key = `${item.caseManager}__${date}`;
+        const current = map.get(key) ?? {
+          caseManager: item.caseManager,
+          sortDate: date,
+          date: displayShortDate(date),
+          matters: new Set<string>(),
+          welcome: 0,
+          attorneyCall: 0,
+          courtDate: 0,
+        };
+        current.matters.add(item.row.matterId);
+        const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
+        if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
+        if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
+        map.set(key, current);
+        return map;
+      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number }>())
+      .values(),
+  )
+    .map((row) => {
+      const newMatters = row.matters.size;
+      const completed = row.attorneyCall + row.welcome + row.courtDate;
+      const expected = newMatters * 3;
+      return {
+        caseManager: row.caseManager,
+        sortDate: row.sortDate,
+        date: row.date,
+        newMatters,
+        attorneyCall: row.attorneyCall,
+        welcome: row.welcome,
+        courtDate: row.courtDate,
+        completion: expected ? `${Math.round((completed / expected) * 100)}%` : "0%",
+      };
+    })
+    .sort((a, b) => {
+      const aIndex = STANDARD_CASE_MANAGERS.indexOf(a.caseManager as (typeof STANDARD_CASE_MANAGERS)[number]);
+      const bIndex = STANDARD_CASE_MANAGERS.indexOf(b.caseManager as (typeof STANDARD_CASE_MANAGERS)[number]);
+      const ownerSort = (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+      return ownerSort || a.sortDate.localeCompare(b.sortDate) || a.caseManager.localeCompare(b.caseManager);
+    });
   const standardsDate = filters.to || today;
+  const googleSheetId = optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID");
+  const googleSheetUrl = googleSheetId ? `https://docs.google.com/spreadsheets/d/${googleSheetId}/edit` : "";
+  const googleSyncReady = googleSheetsConfigured();
   const priorStandardWeeks = Array.from({ length: 6 }, (_, index) => {
     const start = addDaysInput(weekStart, -7 * (index + 1));
     const end = addDaysInput(start, 4);
@@ -1082,6 +1185,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     if (searchParams.metrics === "excluded") return searchParams.notice || "Matter excluded from Standards metrics.";
     if (searchParams.metrics === "restored") return searchParams.notice || "Matter restored to Standards metrics.";
     if (searchParams.metrics === "failed") return searchParams.notice || "Metric update failed.";
+    if (searchParams.sheets === "synced") return searchParams.notice || "Google Sheet updated.";
+    if (searchParams.sheets === "failed") return searchParams.notice || "Google Sheets sync failed.";
     if (searchParams.clio === "connected") return "Clio connected successfully.";
     if (searchParams.clio === "failed") return `Clio connection failed${searchParams.reason ? `: ${searchParams.reason}` : "."}`;
     return "";
@@ -1134,7 +1239,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       {notice ? (
-        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" || searchParams.metrics === "failed" ? "notice danger" : "notice"}>
+        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" || searchParams.metrics === "failed" || searchParams.sheets === "failed" ? "notice danger" : "notice"}>
           {notice}
         </section>
       ) : null}
@@ -1571,6 +1676,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <input type="hidden" name="to" value={filters.to} />
             <button className="button primary" type="submit">Download Standards Workbook</button>
           </form>
+          <div className="standards-online-actions">
+            <form action="/api/standards/google-sync" method="post">
+              <input type="hidden" name="attorney" value={filters.attorney} />
+              <input type="hidden" name="overall" value={filters.overall} />
+              <input type="hidden" name="from" value={filters.from || weekStart} />
+              <input type="hidden" name="to" value={filters.to || today} />
+              <button className="button" type="submit" disabled={!googleSyncReady}>Sync Google Sheet</button>
+            </form>
+            {googleSheetUrl ? <a className="button" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Google Sheet</a> : null}
+            {!googleSyncReady ? <small>Add Google Sheets env vars to turn on live sync.</small> : <small>Updates one tab per case manager using this date range.</small>}
+          </div>
           <details className="standards-week-links">
             <summary>Past weekly reports</summary>
             <div>
@@ -1599,11 +1715,53 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="kpi-card"><span>Court Date Added To Clio</span><strong>{standardsTotals.courtDate}</strong><p>Court date proof found.</p></div>
         </section>
 
+        <section className="panel standards-sheet-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Standards Spreadsheet Preview</h2>
+              <p className="muted small">Same order used in Excel and Google Sheets.</p>
+            </div>
+            {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
+          </div>
+          <div className="standards-sheet-scroll">
+            <table className="standards-sheet-table">
+              <thead>
+                <tr>
+                  <th>Case Manager</th>
+                  <th>Date</th>
+                  <th>ATC / new matters #</th>
+                  <th>Initial Meeting set - Phone call</th>
+                  <th>Welcome letters sent</th>
+                  <th>Court date event made</th>
+                  <th>Worflow completion %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {standardsSheetPreviewRows.length ? standardsSheetPreviewRows.map((row) => (
+                  <tr key={`${row.caseManager}-${row.sortDate}`}>
+                    <td>{row.caseManager}</td>
+                    <td>{row.date}</td>
+                    <td>{row.newMatters}</td>
+                    <td>{row.attorneyCall}</td>
+                    <td>{row.welcome}</td>
+                    <td>{row.courtDate}</td>
+                    <td>{row.completion}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={7}>No Standards rows in this date range yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <section className="panel kpi-panel standards-graphic">
           <div className="panel-heading">
             <div>
-              <h2>Standards By CM</h2>
-              <p className="muted small">Quick visual for Welcome Letter, Initial Meeting, and Court Date Added.</p>
+              <h2>New Matter Onboarding</h2>
+              <p className="muted small">First setup work after a new matter is created.</p>
             </div>
           </div>
           {standardRows.length ? (
@@ -1639,6 +1797,51 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div className="workspace-empty compact">
               <strong>No Standards data in this range yet.</strong>
               <p>Run an audit batch or choose a date range with audited matters.</p>
+            </div>
+          )}
+        </section>
+
+        <section className="panel ongoing-cases-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Ongoing Cases</h2>
+              <p className="muted small">Active-case maintenance: client contact, weekly check-ins, court results, and appearance filing emails.</p>
+            </div>
+            <span className={`badge ${ongoingCompletionRate >= 90 ? "Pass" : ongoingCompletionRate >= 75 ? "Late" : "Flag"}`}>{ongoingCompletionRate}% complete</span>
+          </div>
+          <div className="ongoing-summary-grid">
+            <div><span>Reviewable Cases</span><strong>{ongoingTotals.cases}</strong></div>
+            <div><span>Client Contact</span><strong>{ongoingTotals.clientContact}</strong></div>
+            <div><span>Weekly Check-Ins</span><strong>{ongoingTotals.weeklyCheckIn}</strong></div>
+            <div><span>Court Results</span><strong>{ongoingTotals.courtResults}</strong></div>
+            <div><span>Filing Emails</span><strong>{ongoingTotals.appearanceFiling}</strong></div>
+            <div><span>Needs Follow-Up</span><strong>{ongoingTotals.followUp}</strong></div>
+          </div>
+          {ongoingCaseRows.length ? (
+            <div className="ongoing-cm-list">
+              {ongoingCaseRows.map((row) => (
+                <article className="ongoing-cm-row" key={row.caseManager}>
+                  <div>
+                    <strong>{row.caseManager}</strong>
+                    <span>{row.cases} active case{row.cases === 1 ? "" : "s"} checked</span>
+                  </div>
+                  <div className="ongoing-pill-grid">
+                    <span>Client contact <b>{row.clientContact}</b></span>
+                    <span>Weekly check-in <b>{row.weeklyCheckIn}</b></span>
+                    <span>Court results <b>{row.courtResults}</b></span>
+                    <span>Filing email <b>{row.appearanceFiling}</b></span>
+                  </div>
+                  <div className="ongoing-score">
+                    <strong>{row.completionRate}%</strong>
+                    <span>{row.followUp} follow-up</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="workspace-empty compact">
+              <strong>No ongoing case items are due in this range.</strong>
+              <p>Not-due-yet items are not counted against the team.</p>
             </div>
           )}
         </section>

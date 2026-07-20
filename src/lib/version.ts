@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-standards-excel-exact-format-2026-07-16";
+export const APP_VERSION = "cwca-google-sheets-standards-2hr-atty-call-2026-07-20";

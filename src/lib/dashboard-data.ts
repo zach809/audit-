@@ -861,7 +861,7 @@ function normalizeOwnerName(value: string | null | undefined): string {
     .trim();
 }
 
-const STANDARD_CASE_MANAGERS = [
+export const STANDARD_CASE_MANAGERS = [
   "Svetlana",
   "Jesus",
   "Alessandra",
@@ -941,13 +941,15 @@ type StandardsReportRow = {
 
 const STANDARDS_HEADERS = [
   "Case Manager",
-  "Cases / new matters #",
+  "Date",
+  "ATC / new matters #",
   "Initial Meeting set - Phone call",
   "Welcome letters sent",
   "Court date event made",
   "Worflow completion %",
-  "Date",
 ];
+
+export const STANDARDS_SHEET_HEADERS = STANDARDS_HEADERS;
 
 function standardsOwnerSort(a: string, b: string): number {
   const aIndex = STANDARD_CASE_MANAGERS.indexOf(a as (typeof STANDARD_CASE_MANAGERS)[number]);
@@ -958,7 +960,7 @@ function standardsOwnerSort(a: string, b: string): number {
   return aIndex - bIndex;
 }
 
-async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
+export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
   const { workspaceItems } = await getDashboardData(filters);
   const today = csvDateKey(new Date());
   const from = filters.from || today;
@@ -1074,12 +1076,12 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
   const rows = await standardsReportRows(filters);
   const csvRows = rows.map((row) => [
     row.owner,
+    row.date,
     row.newMatters,
     row.attorneyCall,
     row.welcome,
     row.courtDate,
     row.completion,
-    row.date,
   ]);
 
   return [STANDARDS_HEADERS, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
@@ -1113,12 +1115,12 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
       ...ownerRows.map((row) =>
         `<Row>${[
           xmlCell(row.owner),
+          xmlCell(row.date),
           xmlCell(row.newMatters, "Number"),
           xmlCell(row.attorneyCall, "Number"),
           xmlCell(row.welcome, "Number"),
           xmlCell(row.courtDate, "Number"),
           xmlCell(row.completion),
-          xmlCell(row.date),
         ].join("")}</Row>`,
       ),
     ].join("");
@@ -1126,12 +1128,12 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
       <Worksheet ss:Name="${xmlEscape(worksheetName(owner))}">
         <Table>
           <Column ss:Width="95"/>
-          <Column ss:Width="145"/>
+          <Column ss:Width="105"/>
+          <Column ss:Width="165"/>
           <Column ss:Width="165"/>
           <Column ss:Width="150"/>
           <Column ss:Width="165"/>
           <Column ss:Width="160"/>
-          <Column ss:Width="105"/>
           ${tableRows}
         </Table>
       </Worksheet>`;
