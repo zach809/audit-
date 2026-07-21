@@ -2,8 +2,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "CWCA Dashboard",
-  description: "Clio Workflow Compliance Auditor",
+  title: "Clio Workflow Auditor",
+  description: "Clio Workflow Auditor",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

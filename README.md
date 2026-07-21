@@ -1,4 +1,4 @@
-# Clio Workflow Compliance Auditor
+# Clio Workflow Auditor
 
 Read-only Clio Manage workflow audit dashboard for Vercel + Neon Postgres. CWCA is for internal compliance checking and workflow coaching only.
 

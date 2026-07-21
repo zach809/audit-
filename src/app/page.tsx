@@ -647,11 +647,8 @@ function DashboardUnavailable({ message, connected }: { message: string; connect
             <span className="eyebrow">Internal Workflow Coaching</span>
             <span className="badge Pass">Read-Only Clio</span>
           </div>
-          <h1>Workflow Auditor</h1>
+          <h1>Clio Workflow Auditor</h1>
           <p>Open matters, proof links, and follow-up in one focused workspace.</p>
-          <div className="header-meta">
-            <span>Version: {APP_VERSION}</span>
-          </div>
         </div>
         <div className="actions header-actions">
           {connected ? <span className="badge Pass">Clio Connected</span> : <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>}
@@ -748,9 +745,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   actionExportParams.set("type", "actions");
   const logicIssueExportParams = new URLSearchParams(filters);
   logicIssueExportParams.set("type", "logic-issues");
-  const lastRunText = dashboardData.lastRun
-    ? `${dashboardData.lastRun.status} at ${formatLocal(dashboardData.lastRun.finished_at ?? dashboardData.lastRun.started_at)}`
-    : "No audit has run yet";
   const allWorkspaceRows = (dashboardData.workspaceItems as WorkspaceAuditItem[]).map((item) => ({
     attorney: item.responsible_attorney_name || "Unassigned",
     caseManager: standardsCaseManagerFor(item),
@@ -1228,12 +1222,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <span className="eyebrow">Internal Workflow Coaching</span>
             <span className="badge Pass">Read-Only Clio</span>
           </div>
-          <h1>Workflow Auditor</h1>
+          <h1>Clio Workflow Auditor</h1>
           <p>Open matters, proof links, and follow-up in one focused workspace.</p>
-          <div className="header-meta">
-            <span>Last run: {lastRunText}</span>
-            <span>Version: {APP_VERSION}</span>
-          </div>
         </div>
         <div className="actions header-actions">
           {connected ? (

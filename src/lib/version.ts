@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-ongoing-reminder-table-cleanup-2026-07-20";
+export const APP_VERSION = "cwca-clio-workflow-auditor-header-cleanup-2026-07-20";
