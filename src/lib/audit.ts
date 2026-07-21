@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
+import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, isBusinessDay, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -7,6 +7,7 @@ import {
   isAttorneyCall,
   isCalendarEmailContact,
   isCourtEvent,
+  isCourtReminderTemplate,
   isCourtResultTemplate,
   isPossibleCourtEvent,
   isPhoneCallCommunication,
@@ -124,6 +125,16 @@ function isPettyTrafficMatter(record: MatterRecord): boolean {
 
 function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
+}
+
+function previousBusinessDayEnd(date: Date): Date {
+  const parts = localParts(date);
+  let candidate = zonedDateTimeToUtc(parts.year, parts.month, parts.day - 1, 17, 0, 0);
+  while (!isBusinessDay(candidate)) {
+    const candidateParts = localParts(candidate);
+    candidate = zonedDateTimeToUtc(candidateParts.year, candidateParts.month, candidateParts.day - 1, 17, 0, 0);
+  }
+  return candidate;
 }
 
 function localDateKey(date: Date): string {
@@ -247,6 +258,7 @@ const AUDIT_STEP_CODES: StepCode[] = [
   "APPEARANCE_FILING",
   "COURT_RESULTS",
   "POST_COURT_CALL",
+  "COURT_REMINDER_CALL",
   "CLIENT_FOLLOWUP",
   "WEEKLY_CLIENT_CHECKIN",
 ];
@@ -533,6 +545,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
+  const courtReminderDeadline = nextCourt ? previousBusinessDayEnd(nextCourt.at) : null;
+  const courtReminderWindowStart = nextCourt ? new Date(nextCourt.at.getTime() - 14 * 24 * 60 * 60 * 1000) : null;
+  const courtReminderEvidence = courtReminderWindowStart ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true }) : null;
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
   const postCourtCall = courtResult?.at
@@ -571,6 +586,14 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         : nextCourt
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
+  const courtReminderItem = nextCourt
+    ? classify("COURT_REMINDER_CALL", courtReminderEvidence, courtReminderDeadline, {
+        operationalState: "Waiting for court reminder window",
+        unknown: Boolean(!courtReminderEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
+        reasonCode: commError,
+        now,
+      })
+    : base("COURT_REMINDER_CALL", "N/A", "", null, null);
 
   const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
   const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart);
@@ -668,6 +691,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     }),
     courtResultItem,
     postCourtCallItem,
+    courtReminderItem,
     commError
       ? base("CLIENT_FOLLOWUP", "Unknown", "Unknown", null, null, commError)
       : currentClientFollowUpRisk

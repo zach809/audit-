@@ -111,6 +111,7 @@ What changed:
 - Version cwca-google-sheets-standards-2hr-atty-call-2026-07-20 adds live Google Sheets Standards sync, an in-app spreadsheet preview, and changes the initial attorney call setup goal to 2 business hours.
 - Standards now separates New Matter Onboarding from Ongoing Cases. Ongoing Cases tracks client contact, weekly check-ins, court results, and appearance filing email proof separately.
 - Weekly Client Check-In now marks nearby-date phone call proof as completed late/timing review instead of missing once the same-day window has passed.
+- Version cwca-ongoing-court-reminders-polish-2026-07-20 polishes Ongoing Cases and adds Court Reminder Call checks using court reminder email templates.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.

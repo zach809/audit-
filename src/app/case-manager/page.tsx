@@ -10,7 +10,7 @@ import { workflowLabel } from "@/lib/workflow-rules";
 export const dynamic = "force-dynamic";
 
 const CLEARING_DECISIONS = new Set(["Resolved", "No Action Needed", "Approved Exception"]);
-const CLIENT_COMMUNICATION_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN"]);
+const CLIENT_COMMUNICATION_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 const DATE_PART_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Chicago",
   year: "numeric",
@@ -29,7 +29,7 @@ function clioTaskPath(row: WorkspaceAuditItem): string {
   if (["SETUP_ATTY_CALL", "SETUP_COURT_DATE", "POST_COURT_CALL", "WEEKLY_CLIENT_CHECKIN"].includes(row.step_code)) {
     return `${matterUrl}/calendar`;
   }
-  if (["SETUP_WELCOME", "APPEARANCE_FILING", "COURT_RESULTS", "CLIENT_CONTACT", "CLIENT_FOLLOWUP"].includes(row.step_code)) {
+  if (["SETUP_WELCOME", "APPEARANCE_FILING", "COURT_RESULTS", "CLIENT_CONTACT", "CLIENT_FOLLOWUP", "COURT_REMINDER_CALL"].includes(row.step_code)) {
     return `${matterUrl}/communications`;
   }
   return matterUrl;

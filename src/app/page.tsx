@@ -541,7 +541,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 
 type DashboardTab = "workspace" | "matters" | "case-manager" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
-const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_RESULTS", "APPEARANCE_FILING"]);
+const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL", "COURT_RESULTS", "APPEARANCE_FILING"]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
@@ -1019,9 +1019,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           caseManager: item.caseManager,
           matters: new Set<string>(),
           clientContact: 0,
+          clientContactExpected: 0,
           weeklyCheckIn: 0,
+          weeklyCheckInExpected: 0,
+          courtReminder: 0,
+          courtReminderExpected: 0,
           courtResults: 0,
+          courtResultsExpected: 0,
           appearanceFiling: 0,
+          appearanceFilingExpected: 0,
           expected: 0,
           completed: 0,
           followUp: 0,
@@ -1031,13 +1037,29 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
         if (complete) current.completed += 1;
         else if (isFollowUpStatus(item.row.status)) current.followUp += 1;
-        if (complete && item.row.stepCode === "CLIENT_CONTACT") current.clientContact += 1;
-        if (complete && item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") current.weeklyCheckIn += 1;
-        if (complete && item.row.stepCode === "COURT_RESULTS") current.courtResults += 1;
-        if (complete && item.row.stepCode === "APPEARANCE_FILING") current.appearanceFiling += 1;
+        if (item.row.stepCode === "CLIENT_CONTACT") {
+          current.clientContactExpected += 1;
+          if (complete) current.clientContact += 1;
+        }
+        if (item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") {
+          current.weeklyCheckInExpected += 1;
+          if (complete) current.weeklyCheckIn += 1;
+        }
+        if (item.row.stepCode === "COURT_REMINDER_CALL") {
+          current.courtReminderExpected += 1;
+          if (complete) current.courtReminder += 1;
+        }
+        if (item.row.stepCode === "COURT_RESULTS") {
+          current.courtResultsExpected += 1;
+          if (complete) current.courtResults += 1;
+        }
+        if (item.row.stepCode === "APPEARANCE_FILING") {
+          current.appearanceFilingExpected += 1;
+          if (complete) current.appearanceFiling += 1;
+        }
         map.set(item.caseManager, current);
         return map;
-      }, new Map<string, { caseManager: string; matters: Set<string>; clientContact: number; weeklyCheckIn: number; courtResults: number; appearanceFiling: number; expected: number; completed: number; followUp: number }>())
+      }, new Map<string, { caseManager: string; matters: Set<string>; clientContact: number; clientContactExpected: number; weeklyCheckIn: number; weeklyCheckInExpected: number; courtReminder: number; courtReminderExpected: number; courtResults: number; courtResultsExpected: number; appearanceFiling: number; appearanceFilingExpected: number; expected: number; completed: number; followUp: number }>())
       .values(),
   )
     .map((item) => ({
@@ -1051,14 +1073,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     (totals, row) => ({
       cases: totals.cases + row.cases,
       clientContact: totals.clientContact + row.clientContact,
+      clientContactExpected: totals.clientContactExpected + row.clientContactExpected,
       weeklyCheckIn: totals.weeklyCheckIn + row.weeklyCheckIn,
+      weeklyCheckInExpected: totals.weeklyCheckInExpected + row.weeklyCheckInExpected,
+      courtReminder: totals.courtReminder + row.courtReminder,
+      courtReminderExpected: totals.courtReminderExpected + row.courtReminderExpected,
       courtResults: totals.courtResults + row.courtResults,
+      courtResultsExpected: totals.courtResultsExpected + row.courtResultsExpected,
       appearanceFiling: totals.appearanceFiling + row.appearanceFiling,
+      appearanceFilingExpected: totals.appearanceFilingExpected + row.appearanceFilingExpected,
       expected: totals.expected + row.expected,
       completed: totals.completed + row.completed,
       followUp: totals.followUp + row.followUp,
     }),
-    { cases: 0, clientContact: 0, weeklyCheckIn: 0, courtResults: 0, appearanceFiling: 0, expected: 0, completed: 0, followUp: 0 },
+    { cases: 0, clientContact: 0, clientContactExpected: 0, weeklyCheckIn: 0, weeklyCheckInExpected: 0, courtReminder: 0, courtReminderExpected: 0, courtResults: 0, courtResultsExpected: 0, appearanceFiling: 0, appearanceFilingExpected: 0, expected: 0, completed: 0, followUp: 0 },
   );
   const ongoingCompletionRate = ongoingTotals.expected ? Math.round((ongoingTotals.completed / ongoingTotals.expected) * 100) : 0;
   const standardsSheetPreviewRows = Array.from(
@@ -1804,37 +1832,47 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <section className="panel ongoing-cases-panel">
           <div className="panel-heading">
             <div>
-              <h2>Ongoing Cases</h2>
-              <p className="muted small">Active-case maintenance: client contact, weekly check-ins, court results, and appearance filing emails.</p>
+              <h2>Ongoing Case Maintenance</h2>
+              <p className="muted small">Only items that are due or reviewable in this date range. Not-due-yet items are left out.</p>
             </div>
-            <span className={`badge ${ongoingCompletionRate >= 90 ? "Pass" : ongoingCompletionRate >= 75 ? "Late" : "Flag"}`}>{ongoingCompletionRate}% complete</span>
+            <span className={`badge ${ongoingTotals.followUp ? "Late" : "Pass"}`}>{ongoingTotals.followUp ? `${ongoingTotals.followUp} need follow-up` : "All clear"}</span>
           </div>
           <div className="ongoing-summary-grid">
-            <div><span>Reviewable Cases</span><strong>{ongoingTotals.cases}</strong></div>
-            <div><span>Client Contact</span><strong>{ongoingTotals.clientContact}</strong></div>
-            <div><span>Weekly Check-Ins</span><strong>{ongoingTotals.weeklyCheckIn}</strong></div>
-            <div><span>Court Results</span><strong>{ongoingTotals.courtResults}</strong></div>
-            <div><span>Filing Emails</span><strong>{ongoingTotals.appearanceFiling}</strong></div>
+            <div><span>Active Cases Checked</span><strong>{ongoingTotals.cases}</strong></div>
+            <div><span>Items Reviewed</span><strong>{ongoingTotals.expected}</strong></div>
+            <div><span>Completed</span><strong>{ongoingTotals.completed}</strong></div>
             <div><span>Needs Follow-Up</span><strong>{ongoingTotals.followUp}</strong></div>
+            <div><span>Court Reminders</span><strong>{ongoingTotals.courtReminder}/{ongoingTotals.courtReminderExpected}</strong></div>
+            <div><span>Score</span><strong>{ongoingCompletionRate}%</strong></div>
           </div>
           {ongoingCaseRows.length ? (
-            <div className="ongoing-cm-list">
+            <div className="ongoing-cm-table" role="table" aria-label="Ongoing case maintenance by case manager">
+              <div className="ongoing-cm-header" role="row">
+                <span>Case Manager</span>
+                <span>Progress</span>
+                <span>Client Contact</span>
+                <span>Weekly Check-In</span>
+                <span>Court Reminder</span>
+                <span>Court Results</span>
+                <span>Filing Email</span>
+                <span>Follow-Up</span>
+              </div>
               {ongoingCaseRows.map((row) => (
                 <article className="ongoing-cm-row" key={row.caseManager}>
-                  <div>
+                  <div className="ongoing-cm-person">
                     <strong>{row.caseManager}</strong>
-                    <span>{row.cases} active case{row.cases === 1 ? "" : "s"} checked</span>
+                    <span>{row.cases} case{row.cases === 1 ? "" : "s"} checked</span>
                   </div>
-                  <div className="ongoing-pill-grid">
-                    <span>Client contact <b>{row.clientContact}</b></span>
-                    <span>Weekly check-in <b>{row.weeklyCheckIn}</b></span>
-                    <span>Court results <b>{row.courtResults}</b></span>
-                    <span>Filing email <b>{row.appearanceFiling}</b></span>
-                  </div>
-                  <div className="ongoing-score">
+                  <div className="ongoing-progress-cell">
                     <strong>{row.completionRate}%</strong>
-                    <span>{row.followUp} follow-up</span>
+                    <div className="ongoing-progress-track"><span style={{ width: `${row.completionRate}%` }} /></div>
                   </div>
+                  <span className={row.clientContactExpected ? row.clientContact === row.clientContactExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.clientContactExpected ? `${row.clientContact}/${row.clientContactExpected}` : "None due"}</span>
+                  <span className={row.weeklyCheckInExpected ? row.weeklyCheckIn === row.weeklyCheckInExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.weeklyCheckInExpected ? `${row.weeklyCheckIn}/${row.weeklyCheckInExpected}` : "None due"}</span>
+                  <span className={row.courtReminderExpected ? row.courtReminder === row.courtReminderExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.courtReminderExpected ? `${row.courtReminder}/${row.courtReminderExpected}` : "None due"}</span>
+                  <span className={row.courtResultsExpected ? row.courtResults === row.courtResultsExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.courtResultsExpected ? `${row.courtResults}/${row.courtResultsExpected}` : "None due"}</span>
+                  <span className={row.appearanceFilingExpected ? row.appearanceFiling === row.appearanceFilingExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.appearanceFilingExpected ? `${row.appearanceFiling}/${row.appearanceFilingExpected}` : "None due"}</span>
+                  <span className={row.followUp ? "ongoing-followup needs" : "ongoing-followup"}>{row.followUp ? `${row.followUp} item${row.followUp === 1 ? "" : "s"}` : "Clear"}</span>
                 </article>
               ))}
             </div>

@@ -96,6 +96,9 @@ export const TEMPLATE_PATTERNS = {
   ],
   courtResults: [
     "court result and next court date",
+    "court result mm/dd/yr next court date mm/dd/yr",
+    "court result mm/dd/yr || next court date mm/dd/yr",
+    "court result next court date",
     "court result and upcoming court date",
     "court results and next court date",
     "final court result - your representation has ended",
