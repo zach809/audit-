@@ -56,6 +56,26 @@ function isClientCommunicationTask(row: WorkspaceAuditItem): boolean {
   return CLIENT_COMMUNICATION_STEPS.has(row.step_code);
 }
 
+function cmOpportunityText(row: WorkspaceAuditItem): string {
+  switch (row.step_code) {
+    case "SETUP_WELCOME":
+      return "Send or confirm the Welcome Letter email template in Clio.";
+    case "SETUP_ATTY_CALL":
+      return "Create or confirm the attorney/client phone-call calendar event.";
+    case "SETUP_COURT_DATE":
+      return "Add or confirm the client's court-date calendar event.";
+    case "WEEKLY_CLIENT_CHECKIN":
+      return "Confirm the weekly client check-in event and same-day call proof.";
+    case "COURT_REMINDER_CALL":
+      return "Confirm the court reminder call before the upcoming court date.";
+    case "CLIENT_CONTACT":
+    case "CLIENT_FOLLOWUP":
+      return "Confirm the client received a firm response or outreach.";
+    default:
+      return "Open Clio, complete the missing proof, then verify with CWCA.";
+  }
+}
+
 function normalizeName(value: string | null | undefined): string {
   return String(value ?? "")
     .normalize("NFD")
@@ -202,6 +222,10 @@ export default async function CaseManagerPortalPage({
     });
   const communicationTasks = tasks.filter(isClientCommunicationTask);
   const overdueTasks = tasks.filter((row) => row.deadline_at && new Date(String(row.deadline_at)).getTime() < Date.now());
+  const weeklyCallTasks = tasks.filter((row) => row.step_code === "WEEKLY_CLIENT_CHECKIN");
+  const courtReminderTasks = tasks.filter((row) => row.step_code === "COURT_REMINDER_CALL");
+  const onboardingTasks = tasks.filter((row) => ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].includes(row.step_code));
+  const reviewOpportunityTasks = tasks.filter((row) => ["Unknown", "Needs Review"].includes(workspaceStatus(row.item_status, row.reason_code)));
 
   const message = searchParams.message ? decodeURIComponent(String(searchParams.message)) : "";
   const messageClass = searchParams.cm === "cleared" ? "cm-alert success" : searchParams.cm ? "cm-alert warning" : "cm-alert";
@@ -266,6 +290,26 @@ export default async function CaseManagerPortalPage({
           <strong>{overdueTasks.length}</strong>
           <small>{overdueTasks.length ? "Handle these first or request admin review if they should not count." : "Nothing past due in this view."}</small>
         </div>
+        <div className={weeklyCallTasks.length ? "attention" : ""}>
+          <span>Weekly calls</span>
+          <strong>{weeklyCallTasks.length}</strong>
+          <small>{weeklyCallTasks.length ? "Check weekly call events and matching call proof." : "No weekly call tasks in this view."}</small>
+        </div>
+        <div className={courtReminderTasks.length ? "attention" : ""}>
+          <span>Court reminders</span>
+          <strong>{courtReminderTasks.length}</strong>
+          <small>{courtReminderTasks.length ? "Confirm court reminder calls before court." : "No court reminder tasks in this view."}</small>
+        </div>
+        <div className={onboardingTasks.length ? "attention" : ""}>
+          <span>New matter setup</span>
+          <strong>{onboardingTasks.length}</strong>
+          <small>{onboardingTasks.length ? "Welcome Letter, phone call, or court date needs proof." : "No onboarding tasks in this view."}</small>
+        </div>
+        <div className={reviewOpportunityTasks.length ? "attention" : ""}>
+          <span>Needs a second look</span>
+          <strong>{reviewOpportunityTasks.length}</strong>
+          <small>{reviewOpportunityTasks.length ? "Open Clio and verify proof before asking admin." : "No manual-review tasks in this view."}</small>
+        </div>
       </section>
 
       <form className="cm-task-filters" action="/case-manager" method="get">
@@ -308,6 +352,11 @@ export default async function CaseManagerPortalPage({
                   <span>Before this clears, Clio needs proof that the client was contacted or followed up with.</span>
                 </div>
               ) : null}
+
+              <div className="cm-task-opportunity">
+                <strong>{workflowLabel(row.step_code)} opportunity</strong>
+                <span>{cmOpportunityText(row)}</span>
+              </div>
 
               <div className="cm-task-meta">
                 <span><b>Case Manager</b>{assignedOwner}</span>

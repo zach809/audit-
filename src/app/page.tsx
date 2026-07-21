@@ -578,12 +578,14 @@ const WORKSPACE_STATUS_FILTERS = [
 const WORKSPACE_FOCUS_FILTERS = [
   { id: "all", label: "All Areas" },
   { id: "initial-client-setup", label: "Initial Client Setup" },
+  { id: "ongoing-cases", label: "Ongoing Cases" },
   { id: "court-follow-up", label: "Court Follow-Up" },
   { id: "client-follow-up", label: "Client Follow-Up" },
 ];
 
 const WORKSPACE_FOCUS_STEPS: Record<string, string[]> = {
   "initial-client-setup": ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE", "CLIENT_CONTACT", "APPEARANCE_FILING"],
+  "ongoing-cases": ["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"],
   "court-follow-up": ["COURT_RESULTS", "POST_COURT_CALL"],
   "client-follow-up": ["CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN"],
 };
@@ -686,6 +688,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const activeTab = dashboardTab(searchParams.tab);
   const workspaceStatusFilter = searchParams.wstatus ?? "followup";
   const workspaceFocusFilter = searchParams.wfocus ?? "all";
+  const workspaceCaseManagerFilter = searchParams.cm ?? "";
   const closureStatusFilter = searchParams.closure_status ?? "all";
   const closureStageFilter = searchParams.closure_stage ?? "";
   const closureAttorneyFilter = searchParams.closure_attorney ?? "";
@@ -781,7 +784,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       metricExclusionUpdatedAt: item.metric_exclusion_updated_at ? String(item.metric_exclusion_updated_at) : null,
     } satisfies WorkspaceRow,
   }));
-  const focusedWorkspaceRows = allWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter));
+  const caseManagerWorkspaceRows = allWorkspaceRows.filter(
+    (item) => !workspaceCaseManagerFilter || item.caseManager.toLowerCase() === workspaceCaseManagerFilter.toLowerCase(),
+  );
+  const focusedWorkspaceRows = caseManagerWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter));
+  const workspaceLinkFilters = { ...filters, tab: "workspace", wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter };
   const workspaceGroups = new Map<string, WorkspaceRow[]>();
   for (const item of focusedWorkspaceRows.filter((item) => workspaceFilterMatches(item.row.status, workspaceStatusFilter))) {
     const rows = workspaceGroups.get(item.attorney) ?? [];
@@ -1024,12 +1031,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           appearanceFilingExpected: 0,
           expected: 0,
           completed: 0,
+          scorePoints: 0,
           followUp: 0,
         };
         current.matters.add(item.row.matterId);
         current.expected += 1;
-        const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
-        if (complete) current.completed += 1;
+        const late = item.row.status === "Late";
+        const complete = item.row.status === "On Track" || late || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        if (complete) {
+          current.completed += 1;
+          current.scorePoints += late ? 0.5 : 1;
+        }
         else if (isFollowUpStatus(item.row.status)) current.followUp += 1;
         if (item.row.stepCode === "CLIENT_CONTACT") {
           current.clientContactExpected += 1;
@@ -1053,13 +1065,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         }
         map.set(item.caseManager, current);
         return map;
-      }, new Map<string, { caseManager: string; matters: Set<string>; clientContact: number; clientContactExpected: number; weeklyCheckIn: number; weeklyCheckInExpected: number; courtReminder: number; courtReminderExpected: number; courtResults: number; courtResultsExpected: number; appearanceFiling: number; appearanceFilingExpected: number; expected: number; completed: number; followUp: number }>())
+      }, new Map<string, { caseManager: string; matters: Set<string>; clientContact: number; clientContactExpected: number; weeklyCheckIn: number; weeklyCheckInExpected: number; courtReminder: number; courtReminderExpected: number; courtResults: number; courtResultsExpected: number; appearanceFiling: number; appearanceFilingExpected: number; expected: number; completed: number; scorePoints: number; followUp: number }>())
       .values(),
   )
     .map((item) => ({
       ...item,
       cases: item.matters.size,
-      completionRate: item.expected ? Math.round((item.completed / item.expected) * 100) : 0,
+      completionRate: item.expected ? Math.round((item.scorePoints / item.expected) * 100) : 0,
     }))
     .filter((item) => item.expected > 0)
     .sort((a, b) => b.followUp - a.followUp || a.caseManager.localeCompare(b.caseManager));
@@ -1078,11 +1090,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       appearanceFilingExpected: totals.appearanceFilingExpected + row.appearanceFilingExpected,
       expected: totals.expected + row.expected,
       completed: totals.completed + row.completed,
+      scorePoints: totals.scorePoints + row.scorePoints,
       followUp: totals.followUp + row.followUp,
     }),
-    { cases: 0, clientContact: 0, clientContactExpected: 0, weeklyCheckIn: 0, weeklyCheckInExpected: 0, courtReminder: 0, courtReminderExpected: 0, courtResults: 0, courtResultsExpected: 0, appearanceFiling: 0, appearanceFilingExpected: 0, expected: 0, completed: 0, followUp: 0 },
+    { cases: 0, clientContact: 0, clientContactExpected: 0, weeklyCheckIn: 0, weeklyCheckInExpected: 0, courtReminder: 0, courtReminderExpected: 0, courtResults: 0, courtResultsExpected: 0, appearanceFiling: 0, appearanceFilingExpected: 0, expected: 0, completed: 0, scorePoints: 0, followUp: 0 },
   );
-  const ongoingCompletionRate = ongoingTotals.expected ? Math.round((ongoingTotals.completed / ongoingTotals.expected) * 100) : 0;
+  const ongoingCompletionRate = ongoingTotals.expected ? Math.round((ongoingTotals.scorePoints / ongoingTotals.expected) * 100) : 0;
+  const ongoingWorkspaceLink = (caseManager: string) =>
+    filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "ongoing-cases", cm: caseManager }, {});
+  const caseManagerPortalLink = (caseManager: string) => {
+    const params = new URLSearchParams({ window: "this-week", cmname: caseManager });
+    return `/case-manager?${params.toString()}`;
+  };
   const standardsSheetPreviewRows = Array.from(
     allWorkspaceRows
       .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
@@ -1850,15 +1869,32 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <div className="ongoing-cm-person">
                     <strong>{row.caseManager}</strong>
                     <span>{row.cases} case{row.cases === 1 ? "" : "s"} checked</span>
+                    <a href={caseManagerPortalLink(row.caseManager)}>Open CM task page</a>
                   </div>
                   <div className="ongoing-progress-cell">
                     <strong>{row.completionRate}%</strong>
                     <div className="ongoing-progress-track"><span style={{ width: `${row.completionRate}%` }} /></div>
                   </div>
-                  <span className={row.clientContactExpected ? row.clientContact === row.clientContactExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.clientContactExpected ? `${row.clientContact}/${row.clientContactExpected}` : "None due"}</span>
-                  <span className={row.weeklyCheckInExpected ? row.weeklyCheckIn === row.weeklyCheckInExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.weeklyCheckInExpected ? `${row.weeklyCheckIn}/${row.weeklyCheckInExpected}` : "None due"}</span>
-                  <span className={row.courtReminderExpected ? row.courtReminder === row.courtReminderExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.courtReminderExpected ? `${row.courtReminder}/${row.courtReminderExpected}` : "None due"}</span>
-                  <span className={row.followUp ? "ongoing-followup needs" : "ongoing-followup"}>{row.followUp ? `${row.followUp} item${row.followUp === 1 ? "" : "s"}` : "Clear"}</span>
+                  {row.clientContactExpected && row.clientContact < row.clientContactExpected ? (
+                    <a className="ongoing-status needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.clientContact}/{row.clientContactExpected}</a>
+                  ) : (
+                    <span className={row.clientContactExpected ? "ongoing-status good" : "ongoing-status quiet"}>{row.clientContactExpected ? `${row.clientContact}/${row.clientContactExpected}` : "None due"}</span>
+                  )}
+                  {row.weeklyCheckInExpected && row.weeklyCheckIn < row.weeklyCheckInExpected ? (
+                    <a className="ongoing-status needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.weeklyCheckIn}/{row.weeklyCheckInExpected}</a>
+                  ) : (
+                    <span className={row.weeklyCheckInExpected ? "ongoing-status good" : "ongoing-status quiet"}>{row.weeklyCheckInExpected ? `${row.weeklyCheckIn}/${row.weeklyCheckInExpected}` : "None due"}</span>
+                  )}
+                  {row.courtReminderExpected && row.courtReminder < row.courtReminderExpected ? (
+                    <a className="ongoing-status needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.courtReminder}/{row.courtReminderExpected}</a>
+                  ) : (
+                    <span className={row.courtReminderExpected ? "ongoing-status good" : "ongoing-status quiet"}>{row.courtReminderExpected ? `${row.courtReminder}/${row.courtReminderExpected}` : "None due"}</span>
+                  )}
+                  {row.followUp ? (
+                    <a className="ongoing-followup needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.followUp} item{row.followUp === 1 ? "" : "s"}</a>
+                  ) : (
+                    <span className="ongoing-followup">Clear</span>
+                  )}
                 </article>
               ))}
             </div>
@@ -2319,10 +2355,10 @@ Items Still Needing Action
           <a className="button" href="/">Clear</a>
         </form>
         <div className="quick-filters">
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: today, to: today })}>Today</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: weekStart, to: today })}>This Week</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: monthStart, to: today })}>This Month</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter }, { from: "", to: "" })}>All Dates</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: today, to: today })}>Today</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: weekStart, to: today })}>This Week</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: monthStart, to: today })}>This Month</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: "", to: "" })}>All Dates</a>
         </div>
         {hasFilters ? (
           <p className="filter-alert">
@@ -2354,7 +2390,7 @@ Items Still Needing Action
           {WORKSPACE_STATUS_FILTERS.map((filter) => (
             <a
               className={workspaceStatusFilter === filter.id ? "workspace-filter active" : "workspace-filter"}
-              href={filterLink({ ...filters, tab: "workspace", wstatus: filter.id, wfocus: workspaceFocusFilter }, {})}
+              href={filterLink({ ...workspaceLinkFilters, wstatus: filter.id }, {})}
               key={filter.id}
             >
               {filter.label}
@@ -2368,13 +2404,19 @@ Items Still Needing Action
           {WORKSPACE_FOCUS_FILTERS.map((filter) => (
             <a
               className={workspaceFocusFilter === filter.id ? "workspace-focus active" : "workspace-focus"}
-              href={filterLink({ ...filters, tab: "workspace", wstatus: workspaceStatusFilter, wfocus: filter.id }, {})}
+              href={filterLink({ ...workspaceLinkFilters, wfocus: filter.id }, {})}
               key={filter.id}
             >
               {filter.label}
             </a>
           ))}
           </div>
+          {workspaceCaseManagerFilter ? (
+            <p className="workspace-filter-note">
+              Showing case manager: <strong>{workspaceCaseManagerFilter}</strong>
+              <a href={filterLink({ ...workspaceLinkFilters }, { cm: "" })}>Clear case manager</a>
+            </p>
+          ) : null}
         </div>
         <div className="attorney-health-grid">
           {attorneyHealth.map((attorney) => (

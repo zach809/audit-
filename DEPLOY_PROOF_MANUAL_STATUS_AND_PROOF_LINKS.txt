@@ -114,6 +114,7 @@ What changed:
 - Version cwca-ongoing-court-reminders-polish-2026-07-20 polishes Ongoing Cases and adds Court Reminder Call checks using court reminder email templates.
 - Version cwca-ongoing-reminder-table-cleanup-2026-07-20 keeps Ongoing Case Maintenance focused on Client Contact, Weekly Check-In, and Court Reminder only.
 - Version cwca-clio-workflow-auditor-header-cleanup-2026-07-20 renames the app to Clio Workflow Auditor and removes the header last-run/version strip.
+- Version cwca-ongoing-links-cm-portal-scoring-2026-07-21 removes the header stripe, makes Ongoing Case Maintenance follow-up counts link to the filtered Workspace, scores late ongoing work as completed with a timing penalty, and adds clearer case-manager portal reminders for weekly calls, court reminders, and onboarding opportunities.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.
