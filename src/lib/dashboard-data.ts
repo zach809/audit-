@@ -229,6 +229,22 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       )
     `,
   ];
+  const workspaceDateCondition =
+    filters.from || filters.to
+      ? sql`
+          (
+            (
+              ${filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`}
+              and ${filters.to ? sql`m.matter_created_at < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`}
+            )
+            or (
+              i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
+              and ${filters.from ? sql`coalesce(i.deadline_at, i.evidence_at, m.matter_created_at) >= ${new Date(filters.from)}` : sql`true`}
+              and ${filters.to ? sql`coalesce(i.deadline_at, i.evidence_at, m.matter_created_at) < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`}
+            )
+          )
+        `
+      : sql`true`;
   const normalizedItemStatus = sql`
     case
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -462,7 +478,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
     left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
-    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${workspaceDateCondition} and ${conditions[5]} and ${conditions[6]}
     order by
       m.responsible_attorney_name,
       case

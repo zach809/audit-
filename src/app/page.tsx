@@ -541,7 +541,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 
 type DashboardTab = "workspace" | "matters" | "case-manager" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
-const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL", "COURT_RESULTS", "APPEARANCE_FILING"]);
+const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
@@ -1853,8 +1853,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 <span>Client Contact</span>
                 <span>Weekly Check-In</span>
                 <span>Court Reminder</span>
-                <span>Court Results</span>
-                <span>Filing Email</span>
                 <span>Follow-Up</span>
               </div>
               {ongoingCaseRows.map((row) => (
@@ -1870,8 +1868,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <span className={row.clientContactExpected ? row.clientContact === row.clientContactExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.clientContactExpected ? `${row.clientContact}/${row.clientContactExpected}` : "None due"}</span>
                   <span className={row.weeklyCheckInExpected ? row.weeklyCheckIn === row.weeklyCheckInExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.weeklyCheckInExpected ? `${row.weeklyCheckIn}/${row.weeklyCheckInExpected}` : "None due"}</span>
                   <span className={row.courtReminderExpected ? row.courtReminder === row.courtReminderExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.courtReminderExpected ? `${row.courtReminder}/${row.courtReminderExpected}` : "None due"}</span>
-                  <span className={row.courtResultsExpected ? row.courtResults === row.courtResultsExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.courtResultsExpected ? `${row.courtResults}/${row.courtResultsExpected}` : "None due"}</span>
-                  <span className={row.appearanceFilingExpected ? row.appearanceFiling === row.appearanceFilingExpected ? "ongoing-status good" : "ongoing-status needs" : "ongoing-status quiet"}>{row.appearanceFilingExpected ? `${row.appearanceFiling}/${row.appearanceFilingExpected}` : "None due"}</span>
                   <span className={row.followUp ? "ongoing-followup needs" : "ongoing-followup"}>{row.followUp ? `${row.followUp} item${row.followUp === 1 ? "" : "s"}` : "Clear"}</span>
                 </article>
               ))}
