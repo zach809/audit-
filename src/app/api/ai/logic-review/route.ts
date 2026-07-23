@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
     .slice(0, 80);
   const staleRows = flagged.filter((item) => item.audit_version !== APP_VERSION);
   const staleSummary = countBy(staleRows, (item) => `${workflowLabel(item.step_code)} / ${item.reason_code || "NO_REASON"}`).slice(0, 10);
+  const staleRatio = flagged.length ? staleRows.length / flagged.length : 0;
 
   const grouped = flagged.reduce((map, item) => {
     const key = `${item.step_code}__${item.item_status}__${item.reason_code || "NO_REASON"}`;
@@ -108,6 +109,39 @@ export async function POST(request: NextRequest) {
     proof: item.evidence_source && item.evidence_ref_id ? `${item.evidence_source} #${item.evidence_ref_id}` : "",
     auditVersion: item.audit_version,
   }));
+
+  if (staleRatio >= 0.5) {
+    const topPatterns = staleSummary.length
+      ? staleSummary.map((item) => `- ${item.key}: ${item.count}`).join("\n")
+      : "- No stale patterns found.";
+    const sampleRows = examples
+      .filter((item) => item.auditVersion !== APP_VERSION)
+      .slice(0, 8)
+      .map((item) => `- ${item.client || item.matterNumber} (${item.matterNumber}) - ${item.workflow}: ${item.status} / ${item.reasonCode || "NO_REASON"} / ${item.auditVersion || "no version"}`)
+      .join("\n");
+
+    return NextResponse.json({
+      answer: [
+        "Stop here: this report is mostly old audit data.",
+        "",
+        `${staleRows.length} of ${flagged.length} selected flagged rows were saved by an older CWCA version, so this is not reliable enough for rule tuning yet.`,
+        "",
+        "What this means:",
+        "- Generic NOT_FOUND rows may be from old logic.",
+        "- These rows may not know whether the issue was a missing calendar event, missing phone-call proof, missing template email, or timing-window issue.",
+        "- Do not treat these counts as current bugs until the matters are rechecked.",
+        "",
+        "Old-row patterns found:",
+        topPatterns,
+        "",
+        "Examples to rerun first:",
+        sampleRows || "- No examples available.",
+        "",
+        "Next step:",
+        "Run Audit Batch for this date range, or use Recheck Matter on the examples above. After the rows save under the current CWCA version, run AI Debug again.",
+      ].join("\n"),
+    });
+  }
 
   const prompt = [
     "You are CWCA's manual AI logic-review helper for a read-only Clio workflow audit app.",
