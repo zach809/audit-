@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     "- WEEKLY_CALL_FOUND_EVENT_NOT_FOUND means a phone call exists, but the weekly check-in calendar event is missing.",
     "- WEEKLY_EVENT_FOUND_CALL_NOT_FOUND means the weekly calendar event exists, but call proof is missing.",
     "- REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND means court reminder email/template proof exists, but court reminder phone-call proof is missing.",
-    "- CALL_NOT_FOUND_PRE_COURT means no phone-call communication was found in the 7 days before the upcoming court date.",
+    "- CALL_NOT_FOUND_PRE_COURT means no phone-call communication was found on the prior business day before the upcoming court date.",
     "- NOT_FOUND means no matching proof was saved for that workflow in the audited Clio evidence.",
     "- CURRENT_UNANSWERED_CLIENT_MESSAGES means only the latest unresolved inbound streak should matter; later firm responses should clear it.",
     "Use this structure:",

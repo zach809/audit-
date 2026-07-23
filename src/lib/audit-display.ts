@@ -66,10 +66,10 @@ export function actionFor(stepCode: string, status: string, reasonCode?: string 
       return "Weekly check-in calendar event exists, but CWCA did not find matching phone-call proof. Check Communications for the client call.";
     }
     if (reasonCode === "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND") {
-      return "Court reminder email proof exists, but CWCA did not find the court reminder phone call. Check Communications for the call log before court.";
+      return "Court reminder email proof exists, but CWCA did not find the court reminder phone call from the business day before court. Check Communications for the call log.";
     }
     if (reasonCode === "CALL_NOT_FOUND_PRE_COURT") {
-      return "CWCA did not find a court reminder phone call in the 7 days before court. Check Communications for the call log.";
+      return "CWCA did not find a court reminder phone call from the business day before court. Check Communications for the call log.";
     }
     return info ? `${info.missing} ${info.action}` : "Complete or verify this workflow step in Clio.";
   }
@@ -98,7 +98,7 @@ export function whyFlagged(stepCode: string, status: string, reasonCode?: string
     if (reasonCode === "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND") return "CWCA found phone-call proof, but not the matching weekly check-in calendar event.";
     if (reasonCode === "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND") return "CWCA found the weekly check-in calendar event, but not the matching phone-call communication.";
     if (reasonCode === "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND") return "CWCA found the court reminder email/template, but not the required reminder phone-call proof.";
-    if (reasonCode === "CALL_NOT_FOUND_PRE_COURT") return "CWCA did not find a phone-call communication in the pre-court reminder window.";
+    if (reasonCode === "CALL_NOT_FOUND_PRE_COURT") return "CWCA did not find a phone-call communication from the business day before court.";
     return `${workflowLabel(stepCode)} needs follow-up because CWCA did not find matching proof in Clio.`;
   }
   if (status === "Late") return `${workflowLabel(stepCode)} was found, but after the expected timeliness goal.`;

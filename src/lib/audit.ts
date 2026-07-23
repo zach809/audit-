@@ -610,7 +610,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
   const courtReminderDeadline = nextCourt ? previousBusinessDayEnd(nextCourt.at) : null;
-  const courtReminderCallWindowStart = nextCourt ? addDaysRaw(nextCourt.at, -7) : null;
+  const courtReminderCallWindowStart = nextCourt ? previousBusinessDayStart(nextCourt.at) : null;
   const courtReminderWindowStart = nextCourt ? new Date(nextCourt.at.getTime() - 14 * 24 * 60 * 60 * 1000) : null;
   const courtReminderTemplateEvidence = courtReminderWindowStart
     ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true })
@@ -629,6 +629,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .filter(Boolean) as Evidence<ClioCommunication>[],
       )
     : null;
+  const courtReminderWindowIsOpen = Boolean(courtReminderCallWindowStart && now >= courtReminderCallWindowStart);
   const courtReminderMissingReason = courtReminderTemplateEvidence ? "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND" : "CALL_NOT_FOUND_PRE_COURT";
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
@@ -669,12 +670,14 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
   const courtReminderItem = nextCourt
-    ? classify("COURT_REMINDER_CALL", courtReminderCallEvidence, courtReminderDeadline, {
-        operationalState: "Waiting for court reminder call window",
-        unknown: Boolean(!courtReminderCallEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
-        reasonCode: commError || courtReminderMissingReason,
-        now,
-      })
+    ? courtReminderWindowIsOpen
+      ? classify("COURT_REMINDER_CALL", courtReminderCallEvidence, courtReminderDeadline, {
+          operationalState: "Waiting for court reminder call window",
+          unknown: Boolean(!courtReminderCallEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
+          reasonCode: commError || courtReminderMissingReason,
+          now,
+        })
+      : base("COURT_REMINDER_CALL", "Pending", "Not Due Yet", courtReminderDeadline, null)
     : base("COURT_REMINDER_CALL", "N/A", "", null, null);
 
   const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
