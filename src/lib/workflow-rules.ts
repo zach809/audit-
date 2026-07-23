@@ -66,11 +66,11 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   COURT_REMINDER_CALL: {
     label: "Court Reminder Call",
-    goal: "Send or log the court reminder by 5:00 PM on the prior business day before the upcoming court date.",
-    missing: "Court reminder still needs proof in Clio.",
-    action: "Check or send the In-Person Court Reminder / Zoom Instructions / Spanish court reminder template.",
-    late: "Court reminder proof was found, but it was completed after the reminder goal.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm the court reminder from Clio.",
+    goal: "Complete or log the court reminder call by 5:00 PM on the prior business day before the upcoming court date.",
+    missing: "Court reminder call still needs phone-call proof in Clio.",
+    action: "Check the Communications tab for a phone-call log before court. The reminder email template is helpful, but it does not clear the call by itself.",
+    late: "Court reminder call proof was found, but it was completed after the reminder goal.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the court reminder call from Clio.",
   },
   CLIENT_FOLLOWUP: {
     label: "Client Follow-Up",
@@ -83,7 +83,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   WEEKLY_CLIENT_CHECKIN: {
     label: "Weekly Client Check-In",
     goal: "Verify a weekly client check-in/courtesy call calendar event and a same-day client call communication. A nearby call can count as completed with timing review.",
-    missing: "Weekly client check-in still needs same-day call proof in Clio.",
+    missing: "Weekly client check-in still needs calendar and phone-call proof in Clio.",
     action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists on the same day or nearby date.",
     late: "Weekly client check-in call proof was found, but not on the expected same-day window.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the weekly check-in call from Clio.",

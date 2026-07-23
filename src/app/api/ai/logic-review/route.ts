@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
+import { APP_VERSION } from "@/lib/version";
 import { workflowLabel } from "@/lib/workflow-rules";
 
 export const maxDuration = 45;
@@ -104,9 +105,17 @@ export async function POST(request: NextRequest) {
     "For the matters focus, analyze the whole selected Matters date range. Prioritize repeated patterns across clients, attorneys, and workflow steps over one-off explanations.",
     "For ongoing cases, separate true missing proof from likely false positives. Tell the auditor what Clio proof to capture: communication subject/title, calendar title, date/time, and direct Clio tab.",
     "Reason-code rules:",
+    `- Current CWCA version is ${APP_VERSION}.`,
+    "- If many examples have an auditVersion different from the current CWCA version, say the saved audit rows are stale and should be rerun before tuning the rule.",
+    "- Generic NOT_FOUND rows from older versions may not distinguish missing calendar event, missing call proof, missing email/template proof, or timing-window issues. Treat those as stale unless they were created by the current version.",
     "- FOUND_AFTER_DEADLINE means proof exists, but CWCA scored it as a timing issue. Do not call it missing work.",
     "- CALL_FOUND_NEARBY_DATE means a weekly check-in call exists near the expected date. Suggest timing-window review, not a missing-call bug.",
     "- CALL_NOT_FOUND_SAME_DAY means CWCA found the weekly check-in calendar event but no same-day/nearby call communication.",
+    "- WEEKLY_CALENDAR_EVENT_NOT_FOUND means no matter-linked weekly check-in calendar event was found.",
+    "- WEEKLY_CALL_FOUND_EVENT_NOT_FOUND means a phone call exists, but the weekly check-in calendar event is missing.",
+    "- WEEKLY_EVENT_FOUND_CALL_NOT_FOUND means the weekly calendar event exists, but call proof is missing.",
+    "- REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND means court reminder email/template proof exists, but court reminder phone-call proof is missing.",
+    "- CALL_NOT_FOUND_PRE_COURT means no phone-call communication was found in the 7 days before the upcoming court date.",
     "- NOT_FOUND means no matching proof was saved for that workflow in the audited Clio evidence.",
     "- CURRENT_UNANSWERED_CLIENT_MESSAGES means only the latest unresolved inbound streak should matter; later firm responses should clear it.",
     "Use this structure:",

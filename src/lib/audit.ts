@@ -127,6 +127,10 @@ function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }
 
+function addDaysRaw(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
 function previousBusinessDayEnd(date: Date): Date {
   const parts = localParts(date);
   let candidate = zonedDateTimeToUtc(parts.year, parts.month, parts.day - 1, 17, 0, 0);
@@ -524,13 +528,34 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         .filter(Boolean) as Array<Evidence<ClioCommunication> & { distance: number }>)
         .sort((a, b) => a.distance - b.distance || a.at.getTime() - b.at.getTime())[0] ?? null
     : null;
+  const weeklyCallWithoutCalendar = !weeklyCheckInEvent
+    ? earliest(
+        evidence.communications
+          .map((comm): Evidence<ClioCommunication> | null => {
+            const at = commDate(comm);
+            if (!at || at < addDaysRaw(firstWeeklyCheckInDeadline, -7)) return null;
+            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
+            const direction = isOutbound(comm, record.client_id);
+            if (direction === false) return null;
+            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+          })
+          .filter(Boolean) as Evidence<ClioCommunication>[],
+      )
+    : null;
   const weeklyCheckInItem = (() => {
     if (calendarError) {
       return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
     }
     if (!weeklyCheckInEvent) {
+      if (weeklyCallWithoutCalendar && now > firstWeeklyCheckInDeadline) {
+        return withEvidence(
+          base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Weekly Calendar Event", firstWeeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
+          weeklyCallWithoutCalendar,
+        );
+      }
       return classify("WEEKLY_CLIENT_CHECKIN", null, firstWeeklyCheckInDeadline, {
         operationalState: "Waiting for weekly check-in window",
+        reasonCode: "WEEKLY_CALENDAR_EVENT_NOT_FOUND",
         now,
       });
     }
@@ -546,7 +571,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     if (commError) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError), weeklyCheckInEvent);
     }
-    return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "CALL_NOT_FOUND_SAME_DAY"), weeklyCheckInEvent);
+    return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND"), weeklyCheckInEvent);
   })();
 
   const courtEvents = evidence.calendars
@@ -585,7 +610,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
   const courtReminderDeadline = nextCourt ? previousBusinessDayEnd(nextCourt.at) : null;
-  const courtReminderCallWindowStart = nextCourt ? previousBusinessDayStart(nextCourt.at) : null;
+  const courtReminderCallWindowStart = nextCourt ? addDaysRaw(nextCourt.at, -7) : null;
   const courtReminderWindowStart = nextCourt ? new Date(nextCourt.at.getTime() - 14 * 24 * 60 * 60 * 1000) : null;
   const courtReminderTemplateEvidence = courtReminderWindowStart
     ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true })
@@ -604,7 +629,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .filter(Boolean) as Evidence<ClioCommunication>[],
       )
     : null;
-  const courtReminderEvidence = courtReminderTemplateEvidence ?? courtReminderCallEvidence;
+  const courtReminderMissingReason = courtReminderTemplateEvidence ? "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND" : "CALL_NOT_FOUND_PRE_COURT";
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
   const postCourtCall = courtResult?.at
@@ -644,10 +669,10 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
   const courtReminderItem = nextCourt
-    ? classify("COURT_REMINDER_CALL", courtReminderEvidence, courtReminderDeadline, {
-        operationalState: "Waiting for court reminder window",
-        unknown: Boolean(!courtReminderEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
-        reasonCode: commError,
+    ? classify("COURT_REMINDER_CALL", courtReminderCallEvidence, courtReminderDeadline, {
+        operationalState: "Waiting for court reminder call window",
+        unknown: Boolean(!courtReminderCallEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
+        reasonCode: commError || courtReminderMissingReason,
         now,
       })
     : base("COURT_REMINDER_CALL", "N/A", "", null, null);
