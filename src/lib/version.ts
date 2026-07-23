@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-weekly-cm-compliance-ai-review-2026-07-23";
+export const APP_VERSION = "cwca-onboarding-report-tab-friendly-ui-2026-07-23";

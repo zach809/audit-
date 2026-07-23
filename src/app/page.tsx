@@ -540,13 +540,14 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "case-manager" | "kpi" | "post-closure" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "case-manager" | "onboarding" | "ongoing" | "post-closure" | "reports" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
-  { id: "kpi", label: "Standards", description: "Weekly CM standards" },
+  { id: "onboarding", label: "Onboarding", description: "New matter setup report" },
+  { id: "ongoing", label: "Ongoing", description: "Active case maintenance" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Case manager and audit exports" },
   { id: "guide", label: "Guide", description: "How to read the results" },
@@ -625,6 +626,7 @@ const GUIDE_STATUS_CARDS = [
 ];
 
 function dashboardTab(value?: string): DashboardTab {
+  if (value === "kpi") return "onboarding";
   return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "matters";
 }
 
@@ -697,7 +699,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const today = dateInput(new Date());
   const weekStart = weekStartInput(new Date());
   const monthStart = monthStartInput(new Date());
-  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "kpi";
+  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "onboarding" || activeTab === "ongoing";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -936,7 +938,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const kpiTotal = kpiRows.length;
   const kpiFollowUp = kpiRows.filter((item) => isFollowUpStatus(item.row.status)).length;
   const kpiClear = Math.max(0, kpiTotal - kpiFollowUp);
-  const kpiOnTrack = kpiClear;
   const kpiLate = kpiRows.filter((item) => item.row.status === "Late").length;
   const kpiReview = kpiRows.filter((item) => REVIEW_STATUSES.has(item.row.status)).length;
   const kpiScore = kpiTotal ? Math.max(0, Math.min(100, Math.round((kpiClear / kpiTotal) * 100))) : 0;
@@ -1156,7 +1157,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       const ownerSort = (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
       return ownerSort || a.sortDate.localeCompare(b.sortDate) || a.caseManager.localeCompare(b.caseManager);
     });
-  const standardsDate = filters.to || today;
   const googleSheetId = optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID");
   const googleSheetUrl = googleSheetId ? `https://docs.google.com/spreadsheets/d/${googleSheetId}/edit` : "";
   const googleSyncReady = googleSheetsConfigured();
@@ -1165,35 +1165,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     const end = addDaysInput(start, 4);
     return { label: `${displayShortDate(start)} - ${displayShortDate(end)}`, from: start, to: end };
   });
-  const standardsTotals = standardRows.reduce(
-    (totals, row) => ({
-      newMatters: totals.newMatters + row.newMatters,
-      initialMeeting: totals.initialMeeting + row.attorneyCall,
-      welcome: totals.welcome + row.welcome,
-      courtDate: totals.courtDate + row.courtDate,
-    }),
-    { newMatters: 0, initialMeeting: 0, welcome: 0, courtDate: 0 },
-  );
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
-  const kpiWorkflowFocus = [
-    ["SETUP_WELCOME", "Welcome Letter"],
-    ["SETUP_ATTY_CALL", "Attorney Call"],
-    ["SETUP_COURT_DATE", "Court Date Added"],
-  ] as const;
-  const kpiWorkflowFocusRows = kpiWorkflowFocus
-    .map(([code, label]) => ({
-      code,
-      label,
-      followUp: kpiRows.filter((item) => item.row.stepCode === code && isFollowUpStatus(item.row.status)).length,
-      checked: kpiRows.filter((item) => item.row.stepCode === code).length,
-    }));
-  const maxKpiWorkflowCount = Math.max(1, ...kpiWorkflowFocusRows.map((item) => item.followUp));
   const kpiReportLines = [
-    `Weekly CWCA Standards Report`,
+    `Weekly CWCA New Matter Onboarding Report`,
     `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
-    `Standards: Welcome Letter Sent, Initial Meeting Set, Court Date Added To Clio`,
+    `Checked: Welcome Letter Sent, Initial Meeting Set, Court Date Added To Clio`,
     ``,
-    `Overall standards score: ${kpiScore}% (${kpiGrade})`,
+    `Overall onboarding score: ${kpiScore}% (${kpiGrade})`,
     `Checked workflow items: ${kpiTotal}`,
     `Clear items: ${kpiClear}`,
     `Still needs follow-up: ${kpiFollowUp}`,
@@ -1230,8 +1208,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     if (searchParams.postClosure === "synced") return searchParams.message || "Post-closure follow-ups refreshed.";
     if (searchParams.postClosure === "saved") return searchParams.message || "Post-closure follow-up saved.";
     if (searchParams.postClosure === "failed") return searchParams.message || "Post-closure follow-up update failed.";
-    if (searchParams.metrics === "excluded") return searchParams.notice || "Matter excluded from Standards metrics.";
-    if (searchParams.metrics === "restored") return searchParams.notice || "Matter restored to Standards metrics.";
+    if (searchParams.metrics === "excluded") return searchParams.notice || "Matter excluded from Onboarding metrics.";
+    if (searchParams.metrics === "restored") return searchParams.notice || "Matter restored to Onboarding metrics.";
     if (searchParams.metrics === "failed") return searchParams.notice || "Metric update failed.";
     if (searchParams.sheets === "synced") return searchParams.notice || "Google Sheet updated.";
     if (searchParams.sheets === "failed") return searchParams.notice || "Google Sheets sync failed.";
@@ -1680,19 +1658,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
       ) : null}
 
-      {activeTab === "kpi" ? (
+      {activeTab === "onboarding" ? (
       <section className="kpi-layout">
         <section className="panel kpi-hero">
           <div className="panel-heading">
             <div>
               <span className="label">Weekly Report</span>
-              <h2>Standards</h2>
-              <p className="muted small">Weekly CM standards for Welcome Letter, Initial Meeting, and Court Date Added.</p>
+              <h2>New Matter Onboarding</h2>
+              <p className="muted small">Simple view of the first three setup steps every new matter should have.</p>
             </div>
             <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
           </div>
           <form className="kpi-range-form" action="/" method="get">
-            <input type="hidden" name="tab" value="kpi" />
+            <input type="hidden" name="tab" value="onboarding" />
             <label>
               From
               <input name="from" type="date" defaultValue={filters.from || weekStart} />
@@ -1710,15 +1688,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 ))}
               </select>
             </label>
-            <button className="primary" type="submit">Update Standards</button>
-            <a className="button" href={filterLink({ tab: "kpi" }, { from: weekStart, to: today })}>This Week</a>
+            <button className="primary" type="submit">Update View</button>
+            <a className="button" href={filterLink({ tab: "onboarding" }, { from: weekStart, to: today })}>This Week</a>
           </form>
           <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
             <input type="hidden" name="attorney" value={filters.attorney} />
             <input type="hidden" name="overall" value={filters.overall} />
             <input type="hidden" name="from" value={filters.from} />
             <input type="hidden" name="to" value={filters.to} />
-            <button className="button primary" type="submit">Download Standards Workbook</button>
+            <button className="button primary" type="submit">Download Onboarding Workbook</button>
           </form>
           <div className="standards-online-actions">
             <form action="/api/standards/google-sync" method="post">
@@ -1732,10 +1710,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             {!googleSyncReady ? <small>Add Google Sheets env vars to turn on live sync.</small> : <small>Updates one tab per case manager using this date range.</small>}
           </div>
           <details className="standards-week-links">
-            <summary>Past weekly reports</summary>
+            <summary>Past weeks</summary>
             <div>
               {priorStandardWeeks.map((week) => (
-                <a key={week.from} href={filterLink({ tab: "kpi" }, { from: week.from, to: week.to })}>
+                <a key={week.from} href={filterLink({ tab: "onboarding" }, { from: week.from, to: week.to })}>
                   {week.label}
                 </a>
               ))}
@@ -1752,21 +1730,60 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
         </section>
 
-        <section className="kpi-cards">
-          <div className="kpi-card"><span># New Matters</span><strong>{standardsTotals.newMatters}</strong><p>New matters in this date range.</p></div>
-          <div className="kpi-card"><span>Initial Meeting Set</span><strong>{standardsTotals.initialMeeting}</strong><p>Attorney call proof found.</p></div>
-          <div className="kpi-card"><span>Welcome Letter Sent</span><strong>{standardsTotals.welcome}</strong><p>Welcome letter proof found.</p></div>
-          <div className="kpi-card"><span>Court Date Added To Clio</span><strong>{standardsTotals.courtDate}</strong><p>Court date proof found.</p></div>
-        </section>
-
-        <section className="panel standards-sheet-panel">
+        <section className="panel kpi-panel standards-graphic">
           <div className="panel-heading">
             <div>
-              <h2>Standards Spreadsheet Preview</h2>
-              <p className="muted small">Same order used in Excel and Google Sheets.</p>
+              <h2>New Matter Onboarding</h2>
+              <p className="muted small">First setup work after a new matter is created.</p>
             </div>
-            {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
           </div>
+          {standardRows.length ? (
+            <div className="standards-attorney-chart">
+              {standardRows.map((item) => (
+                <article className="standards-attorney-row" key={item.caseManager}>
+                  <div className="standards-attorney-name">
+                    <strong>{item.caseManager}</strong>
+                    <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
+                    <em>{item.completionRate}% complete</em>
+                  </div>
+                  <div className="standards-attorney-bars">
+                    <div className="attorney-standard-line welcome">
+                      <span>Welcome Letter{item.welcomeLate ? ` - ${item.welcomeLate} late` : ""}</span>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.welcome / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.welcome}/{item.cases}</strong>
+                    </div>
+                    <div className="attorney-standard-line meeting">
+                      <span>Initial Meeting{item.attorneyCallLate ? ` - ${item.attorneyCallLate} late` : ""}</span>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.attorneyCall / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.attorneyCall}/{item.cases}</strong>
+                    </div>
+                    <div className="attorney-standard-line court-date">
+                      <span>Court Date{item.courtDateLate ? ` - ${item.courtDateLate} late` : ""}</span>
+                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.courtDate / item.cases) * 100))) : 0}%` }} /></div>
+                      <strong>{item.courtDate}/{item.cases}</strong>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="workspace-empty compact">
+              <strong>No onboarding data in this range yet.</strong>
+              <p>Run an audit batch or choose a date range with audited matters.</p>
+            </div>
+          )}
+        </section>
+
+        <details className="panel standards-sheet-panel">
+          <summary>
+            <div>
+              <span className="label">Optional</span>
+              <h3>Spreadsheet preview</h3>
+              <p className="muted small">Open only when you want to check the Excel or Google Sheet rows.</p>
+            </div>
+            <span className="summary-action">Show Rows</span>
+          </summary>
+          {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
           <div className="standards-sheet-scroll">
             <table className="standards-sheet-table">
               <thead>
@@ -1793,71 +1810,47 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={7}>No Standards rows in this date range yet.</td>
+                    <td colSpan={7}>No onboarding rows in this date range yet.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </section>
+        </details>
 
-        <section className="panel kpi-panel standards-graphic">
-          <div className="panel-heading">
+        <details className="panel kpi-report-copy">
+          <summary>
             <div>
-              <h2>New Matter Onboarding</h2>
-              <p className="muted small">First setup work after a new matter is created.</p>
+              <span className="label">Copy-Ready</span>
+              <h3>Weekly onboarding summary for Teams</h3>
+              <p className="muted small">Open when you want a short note to paste to the team.</p>
             </div>
+            <span className="summary-action">Open Summary</span>
+          </summary>
+          <div className="post-closure-note-toolbar">
+              <CopyTextButton targetId="kpi-weekly-report" label="Copy Onboarding Report" />
           </div>
-          {standardRows.length ? (
-            <div className="standards-attorney-chart">
-              {standardRows.map((item) => (
-                <article className="standards-attorney-row" key={item.caseManager}>
-                  <div className="standards-attorney-name">
-                    <strong>{item.caseManager}</strong>
-                    <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
-                    <em>{item.completionRate}% standards score</em>
-                  </div>
-                  <div className="standards-attorney-bars">
-                    <div className="attorney-standard-line welcome">
-                      <span>Welcome Letter{item.welcomeLate ? ` - ${item.welcomeLate} late` : ""}</span>
-                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.welcome / item.cases) * 100))) : 0}%` }} /></div>
-                      <strong>{item.welcome}/{item.cases}</strong>
-                    </div>
-                    <div className="attorney-standard-line meeting">
-                      <span>Initial Meeting{item.attorneyCallLate ? ` - ${item.attorneyCallLate} late` : ""}</span>
-                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.attorneyCall / item.cases) * 100))) : 0}%` }} /></div>
-                      <strong>{item.attorneyCall}/{item.cases}</strong>
-                    </div>
-                    <div className="attorney-standard-line court-date">
-                      <span>Court Date{item.courtDateLate ? ` - ${item.courtDateLate} late` : ""}</span>
-                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.courtDate / item.cases) * 100))) : 0}%` }} /></div>
-                      <strong>{item.courtDate}/{item.cases}</strong>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="workspace-empty compact">
-              <strong>No Standards data in this range yet.</strong>
-              <p>Run an audit batch or choose a date range with audited matters.</p>
-            </div>
-          )}
-        </section>
+          <textarea id="kpi-weekly-report" readOnly rows={Math.min(16, Math.max(8, kpiReportLines.split("\n").length + 1))} defaultValue={kpiReportLines} />
+        </details>
+      </section>
+      ) : null}
 
+      {activeTab === "ongoing" ? (
+      <section className="kpi-layout">
         <section className="panel ongoing-cases-panel">
           <div className="panel-heading">
             <div>
+              <span className="label">Active Cases</span>
               <h2>Ongoing Case Maintenance</h2>
-              <p className="muted small">Only items that are due or reviewable in this date range. Not-due-yet items are left out.</p>
+              <p className="muted small">Client contact, weekly calls, and court reminders that are due now. Not-due-yet items are not counted.</p>
             </div>
             <span className={`badge ${ongoingTotals.followUp ? "Late" : "Pass"}`}>{ongoingTotals.followUp ? `${ongoingTotals.followUp} need follow-up` : "All clear"}</span>
           </div>
           <div className="ongoing-summary-grid">
-            <div><span>Active Cases Checked</span><strong>{ongoingTotals.cases}</strong></div>
-            <div><span>Items Reviewed</span><strong>{ongoingTotals.expected}</strong></div>
+            <div><span>Cases Checked</span><strong>{ongoingTotals.cases}</strong></div>
+            <div><span>Items Due</span><strong>{ongoingTotals.expected}</strong></div>
             <div><span>Completed</span><strong>{ongoingTotals.completed}</strong></div>
-            <div><span>Needs Follow-Up</span><strong>{ongoingTotals.followUp}</strong></div>
+            <div><span>Needs Help</span><strong>{ongoingTotals.followUp}</strong></div>
             <div><span>Court Reminders</span><strong>{ongoingTotals.courtReminder}/{ongoingTotals.courtReminderExpected}</strong></div>
             <div><span>Score</span><strong>{ongoingCompletionRate}%</strong></div>
           </div>
@@ -1912,84 +1905,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </div>
           )}
         </section>
-
-        <section className="kpi-grid">
-          <div className="panel kpi-panel">
-            <div className="panel-heading">
-              <div>
-                <h2>CM Standards Scorecard</h2>
-                <p className="muted small">Simple weekly counts by case manager.</p>
-              </div>
-            </div>
-            {standardRows.length ? (
-              <div className="standards-list">
-                {standardRows.map((item) => (
-                  <article className="standards-card" key={item.caseManager}>
-                    <div className="standards-card-head">
-                      <div>
-                        <span className="label">CM</span>
-                        <strong>{item.caseManager}</strong>
-                      </div>
-                      <div>
-                        <span className="label">Date</span>
-                        <strong>{standardsDate}</strong>
-                      </div>
-                    </div>
-                    <div className="standards-metrics">
-                      <div className="standard-metric cases"><span>Cases</span><strong>{item.cases}</strong><em>opened</em></div>
-                      <div className="standard-metric welcome"><span>Welcome Letter</span><strong>{item.welcome}</strong><em>sent</em></div>
-                      <div className="standard-metric meeting"><span>Initial Meeting</span><strong>{item.attorneyCall}</strong><em>set</em></div>
-                      <div className="standard-metric new-matters"><span>New Matters</span><strong>{item.newMatters}</strong><em>added</em></div>
-                      <div className="standard-metric court-date"><span>Court Date</span><strong>{item.courtDate}</strong><em>added to Clio</em></div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="workspace-empty">
-                <strong>No Standards data in this range yet.</strong>
-                <p>Run an audit batch or choose a date range with audited matters.</p>
-              </div>
-            )}
-          </div>
-
-          <div className="panel kpi-panel">
-            <div className="panel-heading">
-              <div>
-                <h2>Standards Focus</h2>
-                <p className="muted small">Welcome Letter, Attorney Call, and Court Date Added follow-up.</p>
-              </div>
-            </div>
-            <div className="workflow-area-bars">
-              {kpiWorkflowFocusRows.map((item) => (
-                <div className="workflow-area-row" key={item.code}>
-                  <div>
-                    <strong>{item.label}</strong>
-                    <small>{item.followUp} follow-up / {item.checked} checked</small>
-                  </div>
-                  <div className="workflow-track">
-                    <span style={{ width: `${item.followUp ? Math.max(3, Math.round((item.followUp / maxKpiWorkflowCount) * 100)) : 0}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <details className="panel kpi-report-copy">
-          <summary>
-            <div>
-              <span className="label">Copy-Ready</span>
-              <h3>Weekly Standards summary for Teams</h3>
-              <p className="muted small">Open when you want a short note to paste to the team.</p>
-            </div>
-            <span className="summary-action">Open Summary</span>
-          </summary>
-          <div className="post-closure-note-toolbar">
-              <CopyTextButton targetId="kpi-weekly-report" label="Copy Standards Report" />
-          </div>
-          <textarea id="kpi-weekly-report" readOnly rows={Math.min(16, Math.max(8, kpiReportLines.split("\n").length + 1))} defaultValue={kpiReportLines} />
-        </details>
       </section>
       ) : null}
 
