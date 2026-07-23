@@ -4,6 +4,10 @@
     {
       "path": "/api/audit/run",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/standards/google-sync",
+      "schedule": "30 23 * * 1-5"
     }
   ]
 }

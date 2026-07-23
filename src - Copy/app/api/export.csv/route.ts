@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { actionItemsCsv, auditLogicIssuesCsv, caseManagerTodoText, dashboardCsv, standardsCsv } from "@/lib/dashboard-data";
+import {
+  actionItemsCsv,
+  auditLogicIssuesCsv,
+  caseManagerTodoText,
+  dashboardCsv,
+  standardsWorkbook,
+  weeklyComplianceComparisonCsv,
+} from "@/lib/dashboard-data";
 import { isValidSessionCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
@@ -27,12 +34,15 @@ export async function POST(request: NextRequest) {
   const isCaseManagerText = exportType === "case-manager-text";
   const isLogicIssues = exportType === "logic-issues";
   const isStandards = exportType === "standards";
+  const isWeeklyCompliance = exportType === "weekly-compliance";
   const body = isCaseManagerText
     ? await caseManagerTodoText(filters, url.origin)
     : isLogicIssues
       ? await auditLogicIssuesCsv(filters, url.origin)
+      : isWeeklyCompliance
+        ? await weeklyComplianceComparisonCsv(filters)
       : isStandards
-        ? await standardsCsv(filters)
+        ? await standardsWorkbook(filters)
       : isActionList
         ? await actionItemsCsv(filters, url.origin)
         : await dashboardCsv(filters);
@@ -40,14 +50,16 @@ export async function POST(request: NextRequest) {
     ? "cwca-end-of-week-case-manager-audit-report.txt"
     : isLogicIssues
       ? "cwca-audit-logic-issues.csv"
+      : isWeeklyCompliance
+        ? "cwca-case-manager-weekly-compliance-comparison.csv"
       : isStandards
-        ? "cwca-weekly-standards-scorecard.csv"
+        ? "cwca-weekly-standards-by-case-manager.xls"
       : isActionList
         ? "cwca-case-manager-action-report.csv"
         : "cwca-audit.csv";
   return new NextResponse(body, {
     headers: {
-      "content-type": `${isCaseManagerText ? "text/plain" : "text/csv"}; charset=utf-8`,
+      "content-type": `${isCaseManagerText ? "text/plain" : isStandards ? "application/vnd.ms-excel" : "text/csv"}; charset=utf-8`,
       "content-disposition": `attachment; filename="${filename}"`,
     },
   });

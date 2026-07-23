@@ -1167,6 +1167,141 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
 </Workbook>`;
 }
 
+export type WeeklyComplianceComparisonRow = {
+  caseManager: string;
+  category: string;
+  previousWeek: number;
+  currentWeek: number;
+  change: number;
+};
+
+export type WeeklyComplianceComparisonSection = {
+  caseManager: string;
+  currentWeekLabel: string;
+  previousWeekLabel: string;
+  rows: WeeklyComplianceComparisonRow[];
+};
+
+type WeeklyComplianceCategory = {
+  id: string;
+  label: string;
+  stepCodes?: string[];
+  uniqueMatters?: boolean;
+};
+
+export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
+  { id: "urgent", label: "Urgent matters not cleared daily", uniqueMatters: true },
+  { id: "welcome", label: "Welcome letters missing", stepCodes: ["SETUP_WELCOME"] },
+  { id: "attorney_call", label: "Attorney phone calls for new Clio matters not scheduled", stepCodes: ["SETUP_ATTY_CALL"] },
+  { id: "appearance", label: "Court Appearance Filed template emails missing", stepCodes: ["APPEARANCE_FILING"] },
+  { id: "weekly_checkup", label: "Weekly checkup calls not completed", stepCodes: ["WEEKLY_CLIENT_CHECKIN"] },
+  { id: "results_calls", label: "Results calls not completed", stepCodes: ["POST_COURT_CALL"] },
+  { id: "court_results", label: "Court Results template emails missing", stepCodes: ["COURT_RESULTS"] },
+  { id: "court_reminder_call", label: "Court reminder calls not completed", stepCodes: ["COURT_REMINDER_CALL"] },
+  { id: "court_reminder_template", label: "Court reminder template emails missing", stepCodes: ["COURT_REMINDER_CALL"] },
+];
+
+function weekStartDateKey(baseDate: Date): string {
+  const localKey = csvDateKey(baseDate);
+  const localNoon = new Date(`${localKey}T12:00:00`);
+  const day = localNoon.getDay();
+  localNoon.setDate(localNoon.getDate() - ((day + 6) % 7));
+  return csvDateKey(localNoon);
+}
+
+function addDateKeyDays(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return csvDateKey(date);
+}
+
+function comparisonWeekLabel(start: string, end: string): string {
+  return `${csvDisplayDate(start)} - ${csvDisplayDate(end)}`;
+}
+
+function comparisonDateKey(item: WorkspaceAuditItem): string {
+  return csvDateKey(item.deadline_at || item.matter_created_at);
+}
+
+function isClearedByHumanReview(item: WorkspaceAuditItem): boolean {
+  const result = reviewResult(item.review_decision);
+  return result === "Resolved" || result === "Approved Exception";
+}
+
+function isIncompleteForWeeklyComparison(item: WorkspaceAuditItem): boolean {
+  if (item.metric_excluded || isClearedByHumanReview(item)) return false;
+  return ["Missing", "Unknown", "Late", "Needs Review", "Needs Recheck"].includes(item.item_status);
+}
+
+function countWeeklyCategory(
+  items: WorkspaceAuditItem[],
+  caseManager: string,
+  category: WeeklyComplianceCategory,
+  from: string,
+  to: string,
+): number {
+  const matching = items.filter((item) => {
+    if (standardsCaseManagerFor(item) !== caseManager) return false;
+    if (!isIncompleteForWeeklyComparison(item)) return false;
+    const dateKey = comparisonDateKey(item);
+    if (!dateKey || dateKey < from || dateKey > to) return false;
+    return !category.stepCodes?.length || category.stepCodes.includes(item.step_code);
+  });
+
+  if (!category.uniqueMatters) return matching.length;
+  return new Set(matching.map((item) => item.matter_id)).size;
+}
+
+export function weeklyComplianceComparisonRows(
+  items: WorkspaceAuditItem[],
+  baseDate: Date = new Date(),
+): WeeklyComplianceComparisonSection[] {
+  const currentStart = weekStartDateKey(baseDate);
+  const currentEnd = addDateKeyDays(currentStart, 6);
+  const previousStart = addDateKeyDays(currentStart, -7);
+  const previousEnd = addDateKeyDays(currentStart, -1);
+  const owners = Array.from(new Set([...STANDARD_CASE_MANAGERS, ...items.map(standardsCaseManagerFor)]))
+    .filter(Boolean)
+    .sort(standardsOwnerSort);
+
+  return owners.map((caseManager) => ({
+    caseManager,
+    currentWeekLabel: comparisonWeekLabel(currentStart, currentEnd),
+    previousWeekLabel: comparisonWeekLabel(previousStart, previousEnd),
+    rows: WEEKLY_COMPLIANCE_CATEGORIES.map((category) => {
+      const previousWeek = countWeeklyCategory(items, caseManager, category, previousStart, previousEnd);
+      const currentWeek = countWeeklyCategory(items, caseManager, category, currentStart, currentEnd);
+      return {
+        caseManager,
+        category: category.label,
+        previousWeek,
+        currentWeek,
+        change: currentWeek - previousWeek,
+      };
+    }),
+  }));
+}
+
+export async function weeklyComplianceComparisonCsv(filters: DashboardFilters = {}): Promise<string> {
+  const { workspaceItems } = await getDashboardData({});
+  const baseDate = filters.to ? new Date(`${filters.to}T12:00:00`) : new Date();
+  const sections = weeklyComplianceComparisonRows(workspaceItems, baseDate);
+  const rows = sections.flatMap((section) => [
+    [section.caseManager, "", "", "", ""],
+    ["Compliance Category", `Previous Week (${section.previousWeekLabel})`, `Current Week (${section.currentWeekLabel})`, "Change", "Meaning"],
+    ...section.rows.map((row) => [
+      row.category,
+      row.previousWeek,
+      row.currentWeek,
+      row.change > 0 ? `+${row.change}` : String(row.change),
+      row.change < 0 ? "Improved" : row.change > 0 ? "Needs attention" : "No change",
+    ]),
+    ["", "", "", "", ""],
+  ]);
+
+  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
 function textLine(label: string, value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
   return text ? `${label}: ${text}` : "";

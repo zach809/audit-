@@ -11,7 +11,15 @@ What changed:
 - KPI Score is now labeled Standards in the app.
 - Standards now includes a by-attorney completion graphic for Welcome Letter, Initial Meeting, and Court Date Added.
 - The by-attorney Standards bars now show completion against each attorney's own cases, so 1 out of 1 complete shows as 100%.
-- Standards buttons are forced compact so Update Standards and Download Standards CSV do not stretch across the page.
+- Standards buttons are forced compact so Update Standards and Download Standards Workbook do not stretch across the page.
+- Version cwca-standards-cm-workbook-ui-2026-07-16 changes Standards to a CM-focused view.
+- Standards export now downloads an Excel-compatible workbook with one worksheet tab per case manager.
+- Standards page now includes quick links for recent weekly reports and solid bar charts.
+- Version cwca-metric-exclusions-cm-reminders-2026-07-16 adds admin-approved Standards metric exclusions.
+- Case managers can request a matter be reviewed for Standards removal, but only admin exclusion removes it from scoring/export.
+- Case manager portal now shows follow-up, client-communication, and past-due reminder cards.
+- Version cwca-standards-excel-exact-format-2026-07-16 makes the Standards Excel workbook match the requested seven-column case-manager sheet format.
+- Standards workbook tabs now use only the known case-manager sheets and exclude non-matching extra report columns.
 - Header buttons are forced compact so Run Audit Batch does not stretch across the header.
 - Standards Focus now always shows Welcome Letter, Attorney Call, and Court Date Added even when one area has 0 follow-up.
 - Standards wording now says Welcome Letter, not Welcome Packet.
@@ -98,8 +106,16 @@ What changed:
 - Standards CSV now seeds rows only from Welcome Letter, Initial Meeting, and Court Date standards items.
 - Version cwca-usa-theme-standards-weekly-fix-2026-07-15 applies a USA patriotic red/white/blue palette with semantic statuses.
 - Red now indicates negative/needs-action states, yellow indicates timing/caution, green indicates success, and blue indicates neutral/info.
-- Standards CSV now matches the simple case-manager sheet format: Case Manager, Cases / new matters #, Initial Meeting set - Phone call, Welcome letters sent, Court date event made, Workflow completion %, Date.
+- Standards Excel now matches the simple case-manager sheet format: Case Manager, Date, ATC / new matters #, Initial Meeting set - Phone call, Welcome letters sent, Court date event made, Worflow completion %.
+- Version cwca-final-standards-cm-webpage-2026-07-19 keeps the final Standards Excel workbook to only those seven columns, one worksheet per case manager, and includes the /case-manager portal.
+- Version cwca-google-sheets-standards-2hr-atty-call-2026-07-20 adds live Google Sheets Standards sync, an in-app spreadsheet preview, and changes the initial attorney call setup goal to 2 business hours.
+- Standards now separates New Matter Onboarding from Ongoing Cases. Ongoing Cases tracks client contact, weekly check-ins, court results, and appearance filing email proof separately.
 - Weekly Client Check-In now marks nearby-date phone call proof as completed late/timing review instead of missing once the same-day window has passed.
+- Version cwca-ongoing-court-reminders-polish-2026-07-20 polishes Ongoing Cases and adds Court Reminder Call checks using court reminder email templates.
+- Version cwca-ongoing-reminder-table-cleanup-2026-07-20 keeps Ongoing Case Maintenance focused on Client Contact, Weekly Check-In, and Court Reminder only.
+- Version cwca-clio-workflow-auditor-header-cleanup-2026-07-20 renames the app to Clio Workflow Auditor and removes the header last-run/version strip.
+- Version cwca-ongoing-links-cm-portal-scoring-2026-07-21 removes the header stripe, makes Ongoing Case Maintenance follow-up counts link to the filtered Workspace, scores late ongoing work as completed with a timing penalty, and adds clearer case-manager portal reminders for weekly calls, court reminders, and onboarding opportunities.
+- Version cwca-cm-portal-score-search-polish-2026-07-21 improves the case-manager portal layout, fixes task search to be accent/case/punctuation tolerant, hides zero-count reminder cards, and adds a weekly Standards Score card for each case manager.
 
 Deployment check:
 - After deploying, open /api/health and confirm the version marker above appears.

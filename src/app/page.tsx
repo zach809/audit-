@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { getDashboardData, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, type WorkspaceAuditItem } from "@/lib/dashboard-data";
+import { getDashboardData, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, weeklyComplianceComparisonRows, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
@@ -19,6 +19,7 @@ import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
 import { CopyTextButton } from "./copy-text-button";
 import { MatterAiHelp } from "./matter-ai-help";
+import { LogicAiReview } from "./logic-ai-review";
 import {
   actionFor,
   auditItemPriority,
@@ -748,6 +749,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   actionExportParams.set("type", "actions");
   const logicIssueExportParams = new URLSearchParams(filters);
   logicIssueExportParams.set("type", "logic-issues");
+  const weeklyComplianceExportParams = new URLSearchParams(filters);
+  weeklyComplianceExportParams.set("type", "weekly-compliance");
   const allWorkspaceRows = (dashboardData.workspaceItems as WorkspaceAuditItem[]).map((item) => ({
     attorney: item.responsible_attorney_name || "Unassigned",
     caseManager: standardsCaseManagerFor(item),
@@ -784,6 +787,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       metricExclusionUpdatedAt: item.metric_exclusion_updated_at ? String(item.metric_exclusion_updated_at) : null,
     } satisfies WorkspaceRow,
   }));
+  const weeklyComplianceSections = weeklyComplianceComparisonRows(
+    dashboardData.workspaceItems as WorkspaceAuditItem[],
+    filters.to ? new Date(`${filters.to}T12:00:00`) : new Date(),
+  );
   const caseManagerWorkspaceRows = allWorkspaceRows.filter(
     (item) => !workspaceCaseManagerFilter || item.caseManager.toLowerCase() === workspaceCaseManagerFilter.toLowerCase(),
   );
@@ -2220,6 +2227,57 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </summary>
           <ReviewBuilder items={reviewBuilderItems} initialFrom={filters.from} initialTo={filters.to} />
         </details>
+        <section className="weekly-compliance-panel">
+          <div className="weekly-compliance-head">
+            <div>
+              <span className="label">Case Manager Comparison</span>
+              <h3>Weekly missing-item report</h3>
+              <p>Lower numbers are better. Change compares the current week to the previous week.</p>
+            </div>
+            <form action={`/api/export.csv?${weeklyComplianceExportParams.toString()}`} method="post">
+              <input type="hidden" name="from" value={filters.from} />
+              <input type="hidden" name="to" value={filters.to} />
+              <button className="primary compact" type="submit">Download Comparison CSV</button>
+            </form>
+          </div>
+          <div className="weekly-compliance-list">
+            {weeklyComplianceSections.map((section) => (
+              <details className="weekly-compliance-section" key={section.caseManager} open={section.rows.some((row) => row.currentWeek > 0 || row.previousWeek > 0)}>
+                <summary>
+                  <strong>Case Manager: {section.caseManager}</strong>
+                  <span>{section.previousWeekLabel} vs {section.currentWeekLabel}</span>
+                </summary>
+                <div className="weekly-compliance-table-wrap">
+                  <table className="weekly-compliance-table">
+                    <thead>
+                      <tr>
+                        <th>Compliance Category</th>
+                        <th>Previous Week</th>
+                        <th>Current Week</th>
+                        <th>Change</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.rows.map((row) => (
+                        <tr key={`${section.caseManager}-${row.category}`}>
+                          <td>{row.category}</td>
+                          <td>{row.previousWeek}</td>
+                          <td>{row.currentWeek}</td>
+                          <td>
+                            <span className={`weekly-change ${row.change < 0 ? "improved" : row.change > 0 ? "worse" : "same"}`}>
+                              {row.change > 0 ? `+${row.change}` : row.change}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+        <LogicAiReview from={filters.from} to={filters.to} />
         <div className="report-grid">
           <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>

@@ -18,10 +18,10 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   SETUP_ATTY_CALL: {
     label: "Attorney Call",
-    goal: "Schedule within 1 business hour of a new matter being created.",
+    goal: "Schedule within 2 business hours of a new matter being created.",
     missing: "Attorney/client phone call still needs matching proof in Clio.",
     action: "Add or verify a Phone Call / Client Call calendar event, or confirm the phone-call communication is logged on the matter.",
-    late: "Attorney/client call proof was found, but it was completed after the 1-hour setup goal.",
+    late: "Attorney/client call proof was found, but it was completed after the 2-hour setup goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the attorney call from Clio.",
   },
   SETUP_COURT_DATE: {
@@ -63,6 +63,14 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     action: "Schedule or verify a calendar event showing the post-court attorney phone call after court results are received, if the case continues.",
     late: "Post-court call was scheduled, but it was completed after the 24-hour post-result goal.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the post-court call from Clio.",
+  },
+  COURT_REMINDER_CALL: {
+    label: "Court Reminder Call",
+    goal: "Send or log the court reminder by 5:00 PM on the prior business day before the upcoming court date.",
+    missing: "Court reminder still needs proof in Clio.",
+    action: "Check or send the In-Person Court Reminder / Zoom Instructions / Spanish court reminder template.",
+    late: "Court reminder proof was found, but it was completed after the reminder goal.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the court reminder from Clio.",
   },
   CLIENT_FOLLOWUP: {
     label: "Client Follow-Up",

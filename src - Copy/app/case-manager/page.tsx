@@ -10,6 +10,8 @@ import { workflowLabel } from "@/lib/workflow-rules";
 export const dynamic = "force-dynamic";
 
 const CLEARING_DECISIONS = new Set(["Resolved", "No Action Needed", "Approved Exception"]);
+const CLIENT_COMMUNICATION_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
+const STANDARDS_STEPS = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const DATE_PART_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Chicago",
   year: "numeric",
@@ -28,7 +30,7 @@ function clioTaskPath(row: WorkspaceAuditItem): string {
   if (["SETUP_ATTY_CALL", "SETUP_COURT_DATE", "POST_COURT_CALL", "WEEKLY_CLIENT_CHECKIN"].includes(row.step_code)) {
     return `${matterUrl}/calendar`;
   }
-  if (["SETUP_WELCOME", "APPEARANCE_FILING", "COURT_RESULTS", "CLIENT_CONTACT", "CLIENT_FOLLOWUP"].includes(row.step_code)) {
+  if (["SETUP_WELCOME", "APPEARANCE_FILING", "COURT_RESULTS", "CLIENT_CONTACT", "CLIENT_FOLLOWUP", "COURT_REMINDER_CALL"].includes(row.step_code)) {
     return `${matterUrl}/communications`;
   }
   return matterUrl;
@@ -51,10 +53,51 @@ function isOpenTask(row: WorkspaceAuditItem): boolean {
   return isFollowUpStatus(status) && !CLEARING_DECISIONS.has(row.review_decision ?? "");
 }
 
+function isClientCommunicationTask(row: WorkspaceAuditItem): boolean {
+  return CLIENT_COMMUNICATION_STEPS.has(row.step_code);
+}
+
+function isStandardsTask(row: WorkspaceAuditItem): boolean {
+  return STANDARDS_STEPS.has(row.step_code);
+}
+
+function isCompletedForScore(row: WorkspaceAuditItem): boolean {
+  return row.item_status === "On Track" || row.item_status === "Late" || Boolean(row.evidence_ref_id);
+}
+
+function cmOpportunityText(row: WorkspaceAuditItem): string {
+  switch (row.step_code) {
+    case "SETUP_WELCOME":
+      return "Send or confirm the Welcome Letter email template in Clio.";
+    case "SETUP_ATTY_CALL":
+      return "Create or confirm the attorney/client phone-call calendar event.";
+    case "SETUP_COURT_DATE":
+      return "Add or confirm the client's court-date calendar event.";
+    case "WEEKLY_CLIENT_CHECKIN":
+      return "Confirm the weekly client check-in event and same-day call proof.";
+    case "COURT_REMINDER_CALL":
+      return "Confirm the court reminder call before the upcoming court date.";
+    case "CLIENT_CONTACT":
+    case "CLIENT_FOLLOWUP":
+      return "Confirm the client received a firm response or outreach.";
+    default:
+      return "Open Clio, complete the missing proof, then verify with CWCA.";
+  }
+}
+
 function normalizeName(value: string | null | undefined): string {
   return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeSearch(value: string | number | Date | null | undefined): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
     .trim()
     .toLowerCase();
 }
@@ -152,19 +195,35 @@ function windowHref(window: CaseManagerWindow, query: string, caseManager: strin
 }
 
 function taskMatches(row: WorkspaceAuditItem, query: string, caseManager: string): boolean {
+  const status = workspaceStatus(row.item_status, row.reason_code);
   const assignedOwner = standardsCaseManagerFor(row);
-  const haystack = [
+  const searchableFields = [
     clientName(row),
+    row.client_first_name,
+    row.client_last_name,
     row.matter_number,
+    row.matter_id,
     row.responsible_attorney_name,
     row.case_manager_name,
     assignedOwner,
     workflowLabel(row.step_code),
-  ].join(" ").toLowerCase();
-  const queryMatch = !query || haystack.includes(query.toLowerCase());
-  const cmHaystack = [assignedOwner, row.case_manager_name].join(" ").toLowerCase();
-  const cmMatch = !caseManager || cmHaystack.includes(caseManager.toLowerCase());
+    displayAuditStatus(status, row.reason_code),
+    status,
+    row.reason_code,
+    row.deadline_at ? formatLocal(row.deadline_at) : "",
+    taskDueKey(row),
+  ];
+  const haystack = normalizeSearch(searchableFields.join(" "));
+  const queryTerms = normalizeSearch(query).split(" ").filter(Boolean);
+  const queryMatch = !queryTerms.length || queryTerms.every((term) => haystack.includes(term));
+  const cmHaystack = normalizeSearch([assignedOwner, row.case_manager_name].join(" "));
+  const cmTerms = normalizeSearch(caseManager).split(" ").filter(Boolean);
+  const cmMatch = !cmTerms.length || cmTerms.every((term) => cmHaystack.includes(term));
   return queryMatch && cmMatch;
+}
+
+function pct(completed: number, expected: number): number {
+  return expected ? Math.round((completed / expected) * 100) : 0;
 }
 
 export default async function CaseManagerPortalPage({
@@ -186,6 +245,33 @@ export default async function CaseManagerPortalPage({
     .filter(isOpenTask)
     .filter((row) => showAllAssignments || ownerMatches(row, portalOwner))
     .filter((row) => taskMatches(row, query, cmNameFilter));
+  const scoreOwnerFilter = showAllAssignments ? cmNameFilter : portalOwner;
+  const standardsRows = dashboardData.workspaceItems
+    .filter(isStandardsTask)
+    .filter((row) => !row.metric_excluded)
+    .filter((row) => {
+      const key = dateKey(row.matter_created_at);
+      return key >= activeWindowBounds.start && key <= activeWindowBounds.end;
+    })
+    .filter((row) => !scoreOwnerFilter || normalizeName(standardsCaseManagerFor(row)) === normalizeName(scoreOwnerFilter));
+  const standardsMatterIds = new Set(standardsRows.map((row) => String(row.matter_id)));
+  const standardsExpected = standardsMatterIds.size * 3;
+  const standardsCompleted = standardsRows.filter(isCompletedForScore).length;
+  const standardsLate = standardsRows.filter((row) => row.item_status === "Late" && isCompletedForScore(row)).length;
+  const standardsScorePoints = standardsCompleted - standardsLate * 0.5;
+  const standardsScore = standardsExpected ? Math.max(0, Math.round((standardsScorePoints / standardsExpected) * 100)) : 100;
+  const standardsWelcome = standardsRows.filter((row) => row.step_code === "SETUP_WELCOME" && isCompletedForScore(row)).length;
+  const standardsAttorneyCall = standardsRows.filter((row) => row.step_code === "SETUP_ATTY_CALL" && isCompletedForScore(row)).length;
+  const standardsCourtDate = standardsRows.filter((row) => row.step_code === "SETUP_COURT_DATE" && isCompletedForScore(row)).length;
+  const standardsAreas = [
+    { label: "Welcome Letter", completed: standardsWelcome, expected: standardsMatterIds.size },
+    { label: "Initial Meeting", completed: standardsAttorneyCall, expected: standardsMatterIds.size },
+    { label: "Court Date", completed: standardsCourtDate, expected: standardsMatterIds.size },
+  ];
+  const weakestStandardsArea = standardsAreas
+    .filter((area) => area.expected > 0)
+    .sort((a, b) => pct(a.completed, a.expected) - pct(b.completed, b.expected))[0];
+  const standardsOwnerLabel = scoreOwnerFilter || "All case managers";
   const thisWeekCount = visibleBaseTasks.filter((row) => inTaskWindow(row, "this-week")).length;
   const pastWeekCount = visibleBaseTasks.filter((row) => inTaskWindow(row, "past-week")).length;
   const tasks = visibleBaseTasks
@@ -195,6 +281,44 @@ export default async function CaseManagerPortalPage({
       const dueB = b.deadline_at ? new Date(String(b.deadline_at)).getTime() : Number.MAX_SAFE_INTEGER;
       return dueA - dueB || clientName(a).localeCompare(clientName(b));
     });
+  const communicationTasks = tasks.filter(isClientCommunicationTask);
+  const overdueTasks = tasks.filter((row) => row.deadline_at && new Date(String(row.deadline_at)).getTime() < Date.now());
+  const weeklyCallTasks = tasks.filter((row) => row.step_code === "WEEKLY_CLIENT_CHECKIN");
+  const courtReminderTasks = tasks.filter((row) => row.step_code === "COURT_REMINDER_CALL");
+  const onboardingTasks = tasks.filter((row) => ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].includes(row.step_code));
+  const reviewOpportunityTasks = tasks.filter((row) => ["Unknown", "Needs Review"].includes(workspaceStatus(row.item_status, row.reason_code)));
+  const reminderCards = [
+    {
+      label: "Client reminders",
+      count: communicationTasks.length,
+      text: "Open Clio and confirm the client was contacted.",
+    },
+    {
+      label: "Past due",
+      count: overdueTasks.length,
+      text: "Handle these first or ask admin to review if they should not count.",
+    },
+    {
+      label: "Weekly calls",
+      count: weeklyCallTasks.length,
+      text: "Check weekly call events and matching call proof.",
+    },
+    {
+      label: "Court reminders",
+      count: courtReminderTasks.length,
+      text: "Confirm court reminder calls before court.",
+    },
+    {
+      label: "New matter setup",
+      count: onboardingTasks.length,
+      text: "Welcome Letter, phone call, or court date needs proof.",
+    },
+    {
+      label: "Second look",
+      count: reviewOpportunityTasks.length,
+      text: "Open Clio and verify proof before asking admin.",
+    },
+  ].filter((card) => card.count > 0);
 
   const message = searchParams.message ? decodeURIComponent(String(searchParams.message)) : "";
   const messageClass = searchParams.cm === "cleared" ? "cm-alert success" : searchParams.cm ? "cm-alert warning" : "cm-alert";
@@ -243,6 +367,52 @@ export default async function CaseManagerPortalPage({
         </ol>
       </section>
 
+      <section className="cm-notification-strip" aria-label="Case manager reminders">
+        <div className="primary-card">
+          <span>Follow-ups</span>
+          <strong>{tasks.length}</strong>
+          <small>{activeWindowBounds.label} tasks assigned to this view.</small>
+        </div>
+        {reminderCards.map((card) => (
+          <div className="attention" key={card.label}>
+            <span>{card.label}</span>
+            <strong>{card.count}</strong>
+            <small>{card.text}</small>
+          </div>
+        ))}
+      </section>
+
+      <section className="cm-score-card" aria-label="Case manager standards score">
+        <div className="cm-score-head">
+          <div>
+            <span className="label">Standards Score</span>
+            <h2>{standardsOwnerLabel}</h2>
+            <p>{activeWindowBounds.label}: Welcome Letter, Initial Meeting, and Court Date proof.</p>
+          </div>
+          <strong className={standardsScore >= 90 ? "good" : standardsScore >= 75 ? "watch" : "needs"}>{standardsScore}%</strong>
+        </div>
+        <div className="cm-score-metrics">
+          <span><b>{standardsMatterIds.size}</b> new matter{standardsMatterIds.size === 1 ? "" : "s"}</span>
+          <span><b>{standardsCompleted}/{standardsExpected}</b> standards complete</span>
+          <span><b>{standardsLate}</b> timing item{standardsLate === 1 ? "" : "s"}</span>
+          <span><b>{weakestStandardsArea ? weakestStandardsArea.label : "No area"}</b> focus area</span>
+        </div>
+        <div className="cm-score-bars">
+          {standardsAreas.map((area) => (
+            <div className="cm-score-bar" key={area.label}>
+              <span>{area.label}</span>
+              <div><b style={{ width: `${pct(area.completed, area.expected)}%` }} /></div>
+              <strong>{area.completed}/{area.expected}</strong>
+            </div>
+          ))}
+        </div>
+        <p className="cm-score-note">
+          {standardsMatterIds.size
+            ? "Complete the open tasks below, then verify with CWCA so the score can update from Clio proof."
+            : "No new matters are showing for this standards window."}
+        </p>
+      </section>
+
       <form className="cm-task-filters" action="/case-manager" method="get">
         <input type="hidden" name="window" value={activeWindow} />
         <label>
@@ -275,6 +445,18 @@ export default async function CaseManagerPortalPage({
               <div className="cm-next-step">
                 <span>What to do</span>
                 <strong>{actionFor(row.step_code, status, row.reason_code)}</strong>
+              </div>
+
+              {isClientCommunicationTask(row) ? (
+                <div className="cm-client-reminder">
+                  <strong>Client communication reminder</strong>
+                  <span>Before this clears, Clio needs proof that the client was contacted or followed up with.</span>
+                </div>
+              ) : null}
+
+              <div className="cm-task-opportunity">
+                <strong>{workflowLabel(row.step_code)} opportunity</strong>
+                <span>{cmOpportunityText(row)}</span>
               </div>
 
               <div className="cm-task-meta">
@@ -310,6 +492,23 @@ export default async function CaseManagerPortalPage({
                   </label>
                   <button className="primary" type="submit">Verify With CWCA</button>
                   <small>CWCA will recheck Clio. If proof is not found, this task stays open.</small>
+                </form>
+              </details>
+
+              <details className="cm-complete-details cm-admin-request">
+                <summary>
+                  <span>This should not count in Standards</span>
+                  <b>Ask Admin</b>
+                </summary>
+                <form className="cm-complete-form" action="/api/metrics/exclusion" method="post">
+                  <input type="hidden" name="action" value="request" />
+                  <input type="hidden" name="matter_id" value={row.matter_id} />
+                  <label>
+                    Why should admin review this?
+                    <textarea name="reason" rows={3} placeholder="Example: Duplicate matter, wrong assignment, not a Standards case, or special exception." />
+                  </label>
+                  <button className="button" type="submit">Send Admin Request</button>
+                  <small>This only asks admin to review it. It does not remove the task or change the score by itself.</small>
                 </form>
               </details>
             </article>

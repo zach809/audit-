@@ -95,6 +95,10 @@ export type WorkspaceAuditItem = {
   review_completed_at: string | Date | null;
   review_updated_at: string | Date | null;
   review_history: unknown;
+  metric_excluded: boolean | null;
+  metric_exclusion_requested_by: string | null;
+  metric_exclusion_reason: string | null;
+  metric_exclusion_updated_at: string | Date | null;
 };
 
 function csvCell(value: unknown): string {
@@ -225,6 +229,22 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       )
     `,
   ];
+  const workspaceDateCondition =
+    filters.from || filters.to
+      ? sql`
+          (
+            (
+              ${filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`}
+              and ${filters.to ? sql`m.matter_created_at < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`}
+            )
+            or (
+              i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
+              and ${filters.from ? sql`coalesce(i.deadline_at, i.evidence_at, m.matter_created_at) >= ${new Date(filters.from)}` : sql`true`}
+              and ${filters.to ? sql`coalesce(i.deadline_at, i.evidence_at, m.matter_created_at) < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`}
+            )
+          )
+        `
+      : sql`true`;
   const normalizedItemStatus = sql`
     case
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -262,6 +282,10 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const matters = await sql`
     select
       m.*,
+      coalesce(mex.active, false) as metric_excluded,
+      mex.requested_by as metric_exclusion_requested_by,
+      mex.request_reason as metric_exclusion_reason,
+      mex.updated_at as metric_exclusion_updated_at,
       case
         when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 'Unchecked'
         when count(*) filter (where (${normalizedItemStatus}) = 'Unknown') > 0 then 'Review'
@@ -321,13 +345,14 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     from audit_matter m
     left join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
+    left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
     where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       and exists (
         select 1
         from audit_item visible_item
         where visible_item.matter_id = m.matter_id
       )
-    group by m.matter_id
+    group by m.matter_id, mex.active, mex.requested_by, mex.request_reason, mex.updated_at
     order by
       case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
       m.matter_created_at desc
@@ -424,6 +449,10 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       r.reviewed_by,
       r.review_completed_at,
       r.updated_at as review_updated_at,
+      coalesce(mex.active, false) as metric_excluded,
+      mex.requested_by as metric_exclusion_requested_by,
+      mex.request_reason as metric_exclusion_reason,
+      mex.updated_at as metric_exclusion_updated_at,
       coalesce((
         select json_agg(
           json_build_object(
@@ -448,7 +477,8 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     from audit_matter m
     join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
-    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
+    left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${workspaceDateCondition} and ${conditions[5]} and ${conditions[6]}
     order by
       m.responsible_attorney_name,
       case
@@ -489,6 +519,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     "Appearance Filed",
     "Court Results",
     "Post-Court Call",
+    "Court Reminder Call",
     "Client Follow-Up",
     "Weekly Client Check-In",
     "Matter Created Date",
@@ -515,6 +546,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
       getWithReason("APPEARANCE_FILING"),
       getWithReason("COURT_RESULTS"),
       getWithReason("POST_COURT_CALL"),
+      getWithReason("COURT_REMINDER_CALL"),
       getWithReason("CLIENT_FOLLOWUP"),
       getWithReason("WEEKLY_CLIENT_CHECKIN"),
       m.matter_created_at,
@@ -826,7 +858,7 @@ function csvDateKey(value: unknown): string {
 function csvDisplayDate(dateKey: string): string {
   const [year, month, day] = dateKey.split("-").map(Number);
   if (!year || !month || !day) return dateKey;
-  return `${month}/${day}/${String(year).slice(-2)}`;
+  return `${month}/${day}/${year}`;
 }
 
 function eachDateKey(from: string, to: string): string[] {
@@ -847,17 +879,17 @@ function normalizeOwnerName(value: string | null | undefined): string {
     .trim();
 }
 
-const STANDARD_CASE_MANAGERS = [
-  "Alessandra",
-  "Anahi",
-  "Camila",
-  "Claudia",
-  "Ivan",
-  "Jesus",
-  "Lori",
-  "Nathaly",
-  "Ronald",
+export const STANDARD_CASE_MANAGERS = [
   "Svetlana",
+  "Jesus",
+  "Alessandra",
+  "Ivan",
+  "Ronald",
+  "Camila",
+  "Anahi",
+  "Lori",
+  "Claudia",
+  "Nathaly",
 ] as const;
 
 function canonicalCaseManagerName(value: string | null | undefined): string {
@@ -914,7 +946,39 @@ function standardsAssignmentNote(item: WorkspaceAuditItem): string {
   return "Attorney assignment map";
 }
 
-export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {
+type StandardsReportRow = {
+  owner: string;
+  newMatters: number;
+  attorneyCall: number;
+  welcome: number;
+  courtDate: number;
+  completion: string;
+  date: string;
+  sortDate: string;
+};
+
+const STANDARDS_HEADERS = [
+  "Case Manager",
+  "Date",
+  "ATC / new matters #",
+  "Initial Meeting set - Phone call",
+  "Welcome letters sent",
+  "Court date event made",
+  "Worflow completion %",
+];
+
+export const STANDARDS_SHEET_HEADERS = STANDARDS_HEADERS;
+
+function standardsOwnerSort(a: string, b: string): number {
+  const aIndex = STANDARD_CASE_MANAGERS.indexOf(a as (typeof STANDARD_CASE_MANAGERS)[number]);
+  const bIndex = STANDARD_CASE_MANAGERS.indexOf(b as (typeof STANDARD_CASE_MANAGERS)[number]);
+  if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+  if (aIndex === -1) return 1;
+  if (bIndex === -1) return -1;
+  return aIndex - bIndex;
+}
+
+export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
   const { workspaceItems } = await getDashboardData(filters);
   const today = csvDateKey(new Date());
   const from = filters.from || today;
@@ -964,19 +1028,12 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
   };
 
   const standardsItems = workspaceItems.filter((item) => {
+    if (item.metric_excluded) return false;
     if (!isStandardsStep(item.step_code)) return false;
     const createdKey = csvDateKey(item.matter_created_at);
     return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
   });
-  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor)))
-    .sort((a, b) => {
-      const aIndex = STANDARD_CASE_MANAGERS.indexOf(a as (typeof STANDARD_CASE_MANAGERS)[number]);
-      const bIndex = STANDARD_CASE_MANAGERS.indexOf(b as (typeof STANDARD_CASE_MANAGERS)[number]);
-      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    });
+  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor))).sort(standardsOwnerSort);
   for (const owner of owners) {
     for (const date of dates) getRow(owner, date);
   }
@@ -1013,34 +1070,236 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     }
   }
 
-  const headers = [
-    "Case Manager",
-    "Cases / new matters #",
-    "Initial Meeting set - Phone call",
-    "Welcome letters sent",
-    "Court date event made",
-    "Workflow completion %",
-    "Date",
-  ];
-  const rows = Array.from(rowsByOwnerDate.values())
+  return Array.from(rowsByOwnerDate.values())
     .filter((row) => row.newMatters.size > 0)
-    .sort((a, b) => a.owner.localeCompare(b.owner) || a.date.localeCompare(b.date))
+    .sort((a, b) => standardsOwnerSort(a.owner, b.owner) || a.date.localeCompare(b.date))
     .map((row) => {
       const expected = row.newMatters.size * 3;
       const completed = row.attorneyCall + row.welcome + row.courtDate;
       const score = expected ? `${Math.round((completed / expected) * 100)}%` : "0%";
-      return [
-        row.owner,
-        row.newMatters.size,
-        row.attorneyCall,
-        row.welcome,
-        row.courtDate,
-        score,
-        csvDisplayDate(row.date),
-      ];
+      return {
+        owner: row.owner,
+        newMatters: row.newMatters.size,
+        attorneyCall: row.attorneyCall,
+        welcome: row.welcome,
+        courtDate: row.courtDate,
+        completion: score,
+        date: csvDisplayDate(row.date),
+        sortDate: row.date,
+      };
     });
+}
 
-  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {
+  const rows = await standardsReportRows(filters);
+  const csvRows = rows.map((row) => [
+    row.owner,
+    row.date,
+    row.newMatters,
+    row.attorneyCall,
+    row.welcome,
+    row.courtDate,
+    row.completion,
+  ]);
+
+  return [STANDARDS_HEADERS, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function xmlEscape(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function xmlCell(value: unknown, type: "String" | "Number" = "String", style = ""): string {
+  const styleAttr = style ? ` ss:StyleID="${style}"` : "";
+  return `<Cell${styleAttr}><Data ss:Type="${type}">${xmlEscape(value)}</Data></Cell>`;
+}
+
+function worksheetName(name: string): string {
+  const cleaned = (name || "Unassigned").replace(/[\\/?*[\]:]/g, " ").replace(/\s+/g, " ").trim();
+  return (cleaned || "Unassigned").slice(0, 31);
+}
+
+export async function standardsWorkbook(filters: DashboardFilters = {}): Promise<string> {
+  const rows = await standardsReportRows(filters);
+  const owners = [...STANDARD_CASE_MANAGERS];
+  const sheets = owners.map((owner) => {
+    const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+    const tableRows = [
+      `<Row>${STANDARDS_HEADERS.map((header) => xmlCell(header)).join("")}</Row>`,
+      ...ownerRows.map((row) =>
+        `<Row>${[
+          xmlCell(row.owner),
+          xmlCell(row.date),
+          xmlCell(row.newMatters, "Number"),
+          xmlCell(row.attorneyCall, "Number"),
+          xmlCell(row.welcome, "Number"),
+          xmlCell(row.courtDate, "Number"),
+          xmlCell(row.completion),
+        ].join("")}</Row>`,
+      ),
+    ].join("");
+    return `
+      <Worksheet ss:Name="${xmlEscape(worksheetName(owner))}">
+        <Table>
+          <Column ss:Width="95"/>
+          <Column ss:Width="105"/>
+          <Column ss:Width="165"/>
+          <Column ss:Width="165"/>
+          <Column ss:Width="150"/>
+          <Column ss:Width="165"/>
+          <Column ss:Width="160"/>
+          ${tableRows}
+        </Table>
+      </Worksheet>`;
+  }).join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  ${sheets}
+</Workbook>`;
+}
+
+export type WeeklyComplianceComparisonRow = {
+  caseManager: string;
+  category: string;
+  previousWeek: number;
+  currentWeek: number;
+  change: number;
+};
+
+export type WeeklyComplianceComparisonSection = {
+  caseManager: string;
+  currentWeekLabel: string;
+  previousWeekLabel: string;
+  rows: WeeklyComplianceComparisonRow[];
+};
+
+type WeeklyComplianceCategory = {
+  id: string;
+  label: string;
+  stepCodes?: string[];
+  uniqueMatters?: boolean;
+};
+
+export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
+  { id: "urgent", label: "Urgent matters not cleared daily", uniqueMatters: true },
+  { id: "welcome", label: "Welcome letters missing", stepCodes: ["SETUP_WELCOME"] },
+  { id: "attorney_call", label: "Attorney phone calls for new Clio matters not scheduled", stepCodes: ["SETUP_ATTY_CALL"] },
+  { id: "appearance", label: "Court Appearance Filed template emails missing", stepCodes: ["APPEARANCE_FILING"] },
+  { id: "weekly_checkup", label: "Weekly checkup calls not completed", stepCodes: ["WEEKLY_CLIENT_CHECKIN"] },
+  { id: "results_calls", label: "Results calls not completed", stepCodes: ["POST_COURT_CALL"] },
+  { id: "court_results", label: "Court Results template emails missing", stepCodes: ["COURT_RESULTS"] },
+  { id: "court_reminder_call", label: "Court reminder calls not completed", stepCodes: ["COURT_REMINDER_CALL"] },
+  { id: "court_reminder_template", label: "Court reminder template emails missing", stepCodes: ["COURT_REMINDER_CALL"] },
+];
+
+function weekStartDateKey(baseDate: Date): string {
+  const localKey = csvDateKey(baseDate);
+  const localNoon = new Date(`${localKey}T12:00:00`);
+  const day = localNoon.getDay();
+  localNoon.setDate(localNoon.getDate() - ((day + 6) % 7));
+  return csvDateKey(localNoon);
+}
+
+function addDateKeyDays(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return csvDateKey(date);
+}
+
+function comparisonWeekLabel(start: string, end: string): string {
+  return `${csvDisplayDate(start)} - ${csvDisplayDate(end)}`;
+}
+
+function comparisonDateKey(item: WorkspaceAuditItem): string {
+  return csvDateKey(item.deadline_at || item.matter_created_at);
+}
+
+function isClearedByHumanReview(item: WorkspaceAuditItem): boolean {
+  const result = reviewResult(item.review_decision);
+  return result === "Resolved" || result === "Approved Exception";
+}
+
+function isIncompleteForWeeklyComparison(item: WorkspaceAuditItem): boolean {
+  if (item.metric_excluded || isClearedByHumanReview(item)) return false;
+  return ["Missing", "Unknown", "Late", "Needs Review", "Needs Recheck"].includes(item.item_status);
+}
+
+function countWeeklyCategory(
+  items: WorkspaceAuditItem[],
+  caseManager: string,
+  category: WeeklyComplianceCategory,
+  from: string,
+  to: string,
+): number {
+  const matching = items.filter((item) => {
+    if (standardsCaseManagerFor(item) !== caseManager) return false;
+    if (!isIncompleteForWeeklyComparison(item)) return false;
+    const dateKey = comparisonDateKey(item);
+    if (!dateKey || dateKey < from || dateKey > to) return false;
+    return !category.stepCodes?.length || category.stepCodes.includes(item.step_code);
+  });
+
+  if (!category.uniqueMatters) return matching.length;
+  return new Set(matching.map((item) => item.matter_id)).size;
+}
+
+export function weeklyComplianceComparisonRows(
+  items: WorkspaceAuditItem[],
+  baseDate: Date = new Date(),
+): WeeklyComplianceComparisonSection[] {
+  const currentStart = weekStartDateKey(baseDate);
+  const currentEnd = addDateKeyDays(currentStart, 6);
+  const previousStart = addDateKeyDays(currentStart, -7);
+  const previousEnd = addDateKeyDays(currentStart, -1);
+  const owners = Array.from(new Set([...STANDARD_CASE_MANAGERS, ...items.map(standardsCaseManagerFor)]))
+    .filter(Boolean)
+    .sort(standardsOwnerSort);
+
+  return owners.map((caseManager) => ({
+    caseManager,
+    currentWeekLabel: comparisonWeekLabel(currentStart, currentEnd),
+    previousWeekLabel: comparisonWeekLabel(previousStart, previousEnd),
+    rows: WEEKLY_COMPLIANCE_CATEGORIES.map((category) => {
+      const previousWeek = countWeeklyCategory(items, caseManager, category, previousStart, previousEnd);
+      const currentWeek = countWeeklyCategory(items, caseManager, category, currentStart, currentEnd);
+      return {
+        caseManager,
+        category: category.label,
+        previousWeek,
+        currentWeek,
+        change: currentWeek - previousWeek,
+      };
+    }),
+  }));
+}
+
+export async function weeklyComplianceComparisonCsv(filters: DashboardFilters = {}): Promise<string> {
+  const { workspaceItems } = await getDashboardData({});
+  const baseDate = filters.to ? new Date(`${filters.to}T12:00:00`) : new Date();
+  const sections = weeklyComplianceComparisonRows(workspaceItems, baseDate);
+  const rows = sections.flatMap((section) => [
+    [section.caseManager, "", "", "", ""],
+    ["Compliance Category", `Previous Week (${section.previousWeekLabel})`, `Current Week (${section.currentWeekLabel})`, "Change", "Meaning"],
+    ...section.rows.map((row) => [
+      row.category,
+      row.previousWeek,
+      row.currentWeek,
+      row.change > 0 ? `+${row.change}` : String(row.change),
+      row.change < 0 ? "Improved" : row.change > 0 ? "Needs attention" : "No change",
+    ]),
+    ["", "", "", "", ""],
+  ]);
+
+  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
 function textLine(label: string, value: unknown): string {
