@@ -36,6 +36,17 @@ function isFlagged(status: string | null | undefined): boolean {
   return ["Missing", "Unknown", "Late"].includes(String(status ?? ""));
 }
 
+function countBy<T>(items: T[], getKey: (item: T) => string): Array<{ key: string; count: number }> {
+  const grouped = items.reduce((map, item) => {
+    const key = getKey(item);
+    map.set(key, (map.get(key) ?? 0) + 1);
+    return map;
+  }, new Map<string, number>());
+  return Array.from(grouped.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => ({ key, count }));
+}
+
 export async function POST(request: NextRequest) {
   if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -66,6 +77,8 @@ export async function POST(request: NextRequest) {
     .filter((item) => !item.metric_excluded && isFlagged(item.item_status))
     .filter((item) => !focusSteps || focusSteps.has(item.step_code))
     .slice(0, 80);
+  const staleRows = flagged.filter((item) => item.audit_version !== APP_VERSION);
+  const staleSummary = countBy(staleRows, (item) => `${workflowLabel(item.step_code)} / ${item.reason_code || "NO_REASON"}`).slice(0, 10);
 
   const grouped = flagged.reduce((map, item) => {
     const key = `${item.step_code}__${item.item_status}__${item.reason_code || "NO_REASON"}`;
@@ -104,6 +117,9 @@ export async function POST(request: NextRequest) {
     "Do not merely say 'review the rule' or 'check configuration.' Name the exact workflow, reasonCode, due/found timing, and sample clients/matter numbers from the examples when available.",
     "For the matters focus, analyze the whole selected Matters date range. Prioritize repeated patterns across clients, attorneys, and workflow steps over one-off explanations.",
     "For ongoing cases, separate true missing proof from likely false positives. Tell the auditor what Clio proof to capture: communication subject/title, calendar title, date/time, and direct Clio tab.",
+    `Stale row count: ${staleRows.length} of ${flagged.length}.`,
+    `Stale row patterns JSON: ${JSON.stringify(staleSummary)}`,
+    "If stale row count is high, lead with this: the selected data must be rerun/rechecked before drawing conclusions because old saved rows do not reflect the current proof-specific matcher.",
     "Reason-code rules:",
     `- Current CWCA version is ${APP_VERSION}.`,
     "- If many examples have an auditVersion different from the current CWCA version, say the saved audit rows are stale and should be rerun before tuning the rule.",
@@ -157,7 +173,15 @@ export async function POST(request: NextRequest) {
 
     const answer = cleanText(extractOutputText(await response.json()), 2200);
     if (!answer) return NextResponse.json({ error: "AI did not return a logic review." }, { status: 502 });
-    return NextResponse.json({ answer });
+    const staleWarning =
+      staleRows.length > 0
+        ? [
+            `Important: ${staleRows.length} of ${flagged.length} selected flagged rows were created by an older CWCA version.`,
+            "Run Audit Batch or Recheck Matter before treating these as real rule problems. Older saved rows may still show generic NOT_FOUND or CALL_NOT_FOUND_SAME_DAY and do not prove the current matcher is failing.",
+            "",
+          ].join("\n")
+        : "";
+    return NextResponse.json({ answer: `${staleWarning}${answer}`.trim() });
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI logic review failed.";
     return NextResponse.json({ error: message }, { status: 502 });
