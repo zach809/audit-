@@ -137,6 +137,16 @@ function previousBusinessDayEnd(date: Date): Date {
   return candidate;
 }
 
+function previousBusinessDayStart(date: Date): Date {
+  const parts = localParts(date);
+  let candidate = zonedDateTimeToUtc(parts.year, parts.month, parts.day - 1, 8, 0, 0);
+  while (!isBusinessDay(candidate)) {
+    const candidateParts = localParts(candidate);
+    candidate = zonedDateTimeToUtc(candidateParts.year, candidateParts.month, candidateParts.day - 1, 8, 0, 0);
+  }
+  return candidate;
+}
+
 function localDateKey(date: Date): string {
   const parts = localParts(date);
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
@@ -204,7 +214,7 @@ function classify(
   }
   const status: AuditStatus = deadlineAt && evidence.at <= deadlineAt ? "On Time" : "Late";
   return {
-    ...base(stepCode, status, status, deadlineAt, options.correctiveDeadlineAt ?? null),
+    ...base(stepCode, status, status, deadlineAt, options.correctiveDeadlineAt ?? null, status === "Late" ? options.reasonCode ?? "FOUND_AFTER_DEADLINE" : null),
     evidenceAt: evidence.at,
     evidenceSource: evidence.source,
     evidenceRefId: String(evidence.item.id),
@@ -246,6 +256,34 @@ function matterNumber(matter: ClioMatter): string {
   return matter.display_number ?? String(matter.number ?? matter.id);
 }
 
+function isFirmPlaceholderAttorney(name?: string | null): boolean {
+  const text = haystack(name);
+  return !text || text === "hirsch law group" || text === "the hirsch law group" || text === "hirsch law" || text === "firm";
+}
+
+function matterAttorney(matter: ClioMatter): { id: string | null; name: string } {
+  const responsible = matter.responsible_attorney;
+  if (responsible?.name && !isFirmPlaceholderAttorney(responsible.name)) {
+    return {
+      id: responsible.id ? String(responsible.id) : null,
+      name: responsible.name,
+    };
+  }
+
+  const originating = matter.originating_attorney;
+  if (originating?.name && !isFirmPlaceholderAttorney(originating.name)) {
+    return {
+      id: originating.id ? String(originating.id) : null,
+      name: originating.name,
+    };
+  }
+
+  return {
+    id: responsible?.id ? String(responsible.id) : originating?.id ? String(originating.id) : null,
+    name: responsible?.name ?? originating?.name ?? "",
+  };
+}
+
 function evidenceUrl(type: "communications" | "calendar_entries", id: number): string {
   return `/evidence/${type}/${id}`;
 }
@@ -274,6 +312,7 @@ async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
   const splitName = clientName.split(" ");
   const first = matter.client?.first_name ?? splitName[0] ?? "";
   const last = matter.client?.last_name ?? splitName.slice(1).join(" ") ?? "";
+  const attorney = matterAttorney(matter);
   const record = {
     matter_id: String(matter.id),
     matter_number: matterNumber(matter),
@@ -281,8 +320,8 @@ async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
     client_id: matter.client?.id ? String(matter.client.id) : null,
     client_first_name: first,
     client_last_name: last,
-    responsible_attorney_id: matter.responsible_attorney?.id ? String(matter.responsible_attorney.id) : null,
-    responsible_attorney_name: matter.responsible_attorney?.name ?? "",
+    responsible_attorney_id: attorney.id,
+    responsible_attorney_name: attorney.name,
     matter_created_at: created,
     effective_intake_at: effective,
     last_court_date: null,
@@ -347,7 +386,7 @@ async function upsertItems(matterId: string, items: AuditItemResult[], overallSt
 export async function discoverMatters(client = new ClioClient(), lookbackDays = appConfig().initialLookbackDays): Promise<number> {
   await initDb();
   const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
-  const fields = "id,number,display_number,status,created_at,responsible_attorney{id,name},client{id,first_name,last_name,name}";
+  const fields = "id,number,display_number,status,created_at,responsible_attorney{id,name},originating_attorney{id,name},client{id,first_name,last_name,name}";
   const matters = await client.list<ClioMatter>("/matters.json", { fields, created_since: since.toISOString() });
   let count = 0;
   for (const matter of matters) {
@@ -498,7 +537,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     if (weeklyCheckInCall) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null), weeklyCheckInCall);
     }
-    if (nearbyWeeklyCheckInCall && now > weeklyCheckInDeadline) {
+    if (nearbyWeeklyCheckInCall) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
     }
     if (now <= weeklyCheckInDeadline) {
@@ -546,8 +585,26 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
   const courtReminderDeadline = nextCourt ? previousBusinessDayEnd(nextCourt.at) : null;
+  const courtReminderCallWindowStart = nextCourt ? previousBusinessDayStart(nextCourt.at) : null;
   const courtReminderWindowStart = nextCourt ? new Date(nextCourt.at.getTime() - 14 * 24 * 60 * 60 * 1000) : null;
-  const courtReminderEvidence = courtReminderWindowStart ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true }) : null;
+  const courtReminderTemplateEvidence = courtReminderWindowStart
+    ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true })
+    : null;
+  const courtReminderCallEvidence = courtReminderCallWindowStart && nextCourt
+    ? earliest(
+        evidence.communications
+          .map((comm): Evidence<ClioCommunication> | null => {
+            const at = commDate(comm);
+            if (!at || at < courtReminderCallWindowStart || at > nextCourt.at) return null;
+            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
+            const direction = isOutbound(comm, record.client_id);
+            if (direction === false) return null;
+            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+          })
+          .filter(Boolean) as Evidence<ClioCommunication>[],
+      )
+    : null;
+  const courtReminderEvidence = courtReminderTemplateEvidence ?? courtReminderCallEvidence;
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
   const postCourtCall = courtResult?.at

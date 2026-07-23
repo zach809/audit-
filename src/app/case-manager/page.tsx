@@ -62,6 +62,7 @@ function isStandardsTask(row: WorkspaceAuditItem): boolean {
 }
 
 function isCompletedForScore(row: WorkspaceAuditItem): boolean {
+  if (row.review_decision === "Approved Exception") return true;
   return row.item_status === "On Track" || row.item_status === "Late" || Boolean(row.evidence_ref_id);
 }
 
@@ -257,7 +258,7 @@ export default async function CaseManagerPortalPage({
   const standardsMatterIds = new Set(standardsRows.map((row) => String(row.matter_id)));
   const standardsExpected = standardsMatterIds.size * 3;
   const standardsCompleted = standardsRows.filter(isCompletedForScore).length;
-  const standardsLate = standardsRows.filter((row) => row.item_status === "Late" && isCompletedForScore(row)).length;
+  const standardsLate = standardsRows.filter((row) => row.item_status === "Late" && row.review_decision !== "Approved Exception" && isCompletedForScore(row)).length;
   const standardsScorePoints = standardsCompleted - standardsLate * 0.5;
   const standardsScore = standardsExpected ? Math.max(0, Math.round((standardsScorePoints / standardsExpected) * 100)) : 100;
   const standardsWelcome = standardsRows.filter((row) => row.step_code === "SETUP_WELCOME" && isCompletedForScore(row)).length;

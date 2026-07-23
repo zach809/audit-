@@ -836,7 +836,12 @@ export async function auditLogicIssuesCsv(filters: DashboardFilters = {}, origin
   return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
-function isStandardComplete(status: string | null | undefined, evidenceRefId?: string | null): boolean {
+function isApprovedException(reviewDecision?: string | null): boolean {
+  return reviewDecision === "Approved Exception";
+}
+
+function isStandardComplete(status: string | null | undefined, evidenceRefId?: string | null, reviewDecision?: string | null): boolean {
+  if (isApprovedException(reviewDecision)) return true;
   return status === "On Track" || status === "Late" || Boolean(evidenceRefId);
 }
 
@@ -1047,8 +1052,9 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     row.assignmentNotes.add(standardsAssignmentNote(item));
     row.newMatters.add(String(item.matter_id));
     row.expectedStandards += 1;
-    const late = item.item_status === "Late";
-    const complete = isStandardComplete(item.item_status, item.evidence_ref_id);
+    const approvedException = isApprovedException(item.review_decision);
+    const late = item.item_status === "Late" && !approvedException;
+    const complete = isStandardComplete(item.item_status, item.evidence_ref_id, item.review_decision);
     if (!complete) {
       row.needsFollowUp += 1;
       continue;
