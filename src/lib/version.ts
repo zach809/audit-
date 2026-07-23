@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-attorney-fallback-proof-matcher-2026-07-23";
+export const APP_VERSION = "cwca-ongoing-client-reminders-ai-2026-07-23";

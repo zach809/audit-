@@ -288,6 +288,15 @@ export default async function CaseManagerPortalPage({
   const courtReminderTasks = tasks.filter((row) => row.step_code === "COURT_REMINDER_CALL");
   const onboardingTasks = tasks.filter((row) => ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].includes(row.step_code));
   const reviewOpportunityTasks = tasks.filter((row) => ["Unknown", "Needs Review"].includes(workspaceStatus(row.item_status, row.reason_code)));
+  const clearFirstTasks = [...tasks]
+    .sort((a, b) => {
+      const overdueA = a.deadline_at && new Date(String(a.deadline_at)).getTime() < Date.now() ? 0 : 1;
+      const overdueB = b.deadline_at && new Date(String(b.deadline_at)).getTime() < Date.now() ? 0 : 1;
+      const dueA = a.deadline_at ? new Date(String(a.deadline_at)).getTime() : Number.MAX_SAFE_INTEGER;
+      const dueB = b.deadline_at ? new Date(String(b.deadline_at)).getTime() : Number.MAX_SAFE_INTEGER;
+      return overdueA - overdueB || dueA - dueB || clientName(a).localeCompare(clientName(b));
+    })
+    .slice(0, 8);
   const reminderCards = [
     {
       label: "Client reminders",
@@ -381,6 +390,43 @@ export default async function CaseManagerPortalPage({
             <small>{card.text}</small>
           </div>
         ))}
+      </section>
+
+      <section className="cm-clear-first-panel" aria-label="Highest priority tasks">
+        <div className="cm-section-head">
+          <div>
+            <span className="label">Start Here</span>
+            <h2>Clear These First</h2>
+            <p>These are the most urgent items in your current view. Open Clio, complete the work, then verify the task.</p>
+          </div>
+          <strong>{clearFirstTasks.length ? `${clearFirstTasks.length} shown` : "All clear"}</strong>
+        </div>
+        {clearFirstTasks.length ? (
+          <div className="cm-clear-first-list">
+            {clearFirstTasks.map((row) => {
+              const status = workspaceStatus(row.item_status, row.reason_code);
+              return (
+                <article className={`cm-clear-first-card status-row-${statusClass(status)}`} key={`${row.matter_id}-${row.step_code}`}>
+                  <div>
+                    <span className="label">{workflowLabel(row.step_code)}</span>
+                    <h3>{clientName(row)}</h3>
+                    <p>{row.matter_number}</p>
+                  </div>
+                  <div>
+                    <strong>{displayAuditStatus(status, row.reason_code)}</strong>
+                    <span>{row.deadline_at ? `Due ${formatLocal(row.deadline_at)}` : "No due date"}</span>
+                  </div>
+                  <a className="button compact primary" href={clioTaskPath(row)} target="_blank" rel="noreferrer">Open Clio Tab</a>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="cm-empty compact">
+            <strong>No urgent tasks in this view.</strong>
+            <p>Use Past Week if you need to review older items.</p>
+          </div>
+        )}
       </section>
 
       <section className="cm-score-card" aria-label="Case manager standards score">

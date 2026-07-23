@@ -153,7 +153,24 @@ function problemClioLinks(matterId: string, stepCode: string): Array<{ href: str
     return [calendar, communications];
   }
 
+  if (stepCode === "COURT_REMINDER_CALL") {
+    return [calendar, communications];
+  }
+
   return [{ href: clioMatterPath(matterId), label: "Open Matter" }];
+}
+
+function ongoingReminderText(stepCode: string): string {
+  switch (stepCode) {
+    case "CLIENT_CONTACT":
+      return "Please confirm the client was contacted. Proof can be an email, phone-call log, or communication note in Clio.";
+    case "WEEKLY_CLIENT_CHECKIN":
+      return "Please confirm the weekly client check-in calendar event and the matching client call communication in Clio.";
+    case "COURT_REMINDER_CALL":
+      return "Please confirm the court reminder call or court reminder template was sent before the upcoming court date.";
+    default:
+      return "Please open Clio, confirm the proof, and then recheck the task in CWCA.";
+  }
 }
 
 function postClosureClientName(row: PostClosureFollowUpRow): string {
@@ -1106,6 +1123,27 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const ongoingCompletionRate = ongoingTotals.expected ? Math.round((ongoingTotals.scorePoints / ongoingTotals.expected) * 100) : 0;
   const ongoingWorkspaceLink = (caseManager: string) =>
     filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "ongoing-cases", cm: caseManager }, {});
+  const ongoingFollowUpItems = allWorkspaceRows
+    .filter((item) => ONGOING_CASE_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
+    .filter((item) => isFollowUpStatus(item.row.status) && !isClosedByReview(item.row))
+    .sort((a, b) => {
+      const dueA = a.row.deadlineAt ? new Date(a.row.deadlineAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const dueB = b.row.deadlineAt ? new Date(b.row.deadlineAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return dueA - dueB || a.caseManager.localeCompare(b.caseManager) || a.row.clientName.localeCompare(b.row.clientName);
+    });
+  const ongoingReminderLines = [
+    "Hey team - these ongoing case items need follow-up in Clio.",
+    `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
+    "",
+    ...(ongoingFollowUpItems.length
+      ? ongoingFollowUpItems.map((item) => {
+          const links = problemClioLinks(item.row.matterId, item.row.stepCode).map((link) => `${link.label}: ${link.href}`).join(" | ");
+          return `- ${item.caseManager}: ${item.row.clientName} (${item.row.matterNumber}) - ${workflowLabel(item.row.stepCode)} - due ${item.row.deadlineAt ? formatLocal(item.row.deadlineAt) : "no due date"} - ${ongoingReminderText(item.row.stepCode)} ${links}`;
+        })
+      : ["No ongoing case follow-up items are showing in this date range."]),
+    "",
+    "Please complete or confirm the work in Clio first, then use the CM task page to verify it with CWCA.",
+  ].join("\n");
   const caseManagerPortalLink = (caseManager: string) => {
     const params = new URLSearchParams({ window: "this-week", cmname: caseManager });
     return `/case-manager?${params.toString()}`;
@@ -1904,6 +1942,62 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <p>Not-due-yet items are not counted against the team.</p>
             </div>
           )}
+          <section className="ongoing-action-panel">
+            <div className="panel-heading compact-heading">
+              <div>
+                <span className="label">Needs Follow-Up List</span>
+                <h3>Which Clients Need What</h3>
+                <p className="muted small">Use this list to see the exact client, missing item, due time, and Clio tab to open.</p>
+              </div>
+              <CopyTextButton targetId="ongoing-teams-reminder" label="Copy Team Reminder" />
+            </div>
+            <textarea id="ongoing-teams-reminder" className="sr-copy-source" readOnly defaultValue={ongoingReminderLines} />
+            {ongoingFollowUpItems.length ? (
+              <div className="ongoing-action-list">
+                {ongoingFollowUpItems.map((item) => {
+                  const clioLinks = problemClioLinks(item.row.matterId, item.row.stepCode);
+                  const proofHref = evidencePath(item.row as DashboardItem, true);
+                  return (
+                    <article className={`ongoing-action-card status-row-${statusClass(item.row.status)}`} key={`${item.row.matterId}-${item.row.stepCode}`}>
+                      <div className="ongoing-action-main">
+                        <div>
+                          <span className="label">{workflowLabel(item.row.stepCode)}</span>
+                          <h4>{item.row.clientName}</h4>
+                          <p>{item.row.matterNumber}</p>
+                        </div>
+                        <span className={`badge ${statusClass(item.row.status)}`}>{displayAuditStatus(item.row.status, item.row.reasonCode)}</span>
+                      </div>
+                      <p className="ongoing-action-reminder">{ongoingReminderText(item.row.stepCode)}</p>
+                      <div className="ongoing-action-meta">
+                        <span><b>Case Manager</b>{item.caseManager}</span>
+                        <span><b>Attorney</b>{item.attorney}</span>
+                        <span><b>Due</b>{item.row.deadlineAt ? formatLocal(item.row.deadlineAt) : "No due date"}</span>
+                      </div>
+                      <div className="ongoing-action-buttons">
+                        {clioLinks.map((link) => (
+                          <a className="button compact primary" href={link.href} target="_blank" rel="noreferrer" key={link.label}>{link.label}</a>
+                        ))}
+                        <a className="button compact" href={caseManagerPortalLink(item.caseManager)}>Open CM Task Page</a>
+                        {proofHref ? <a className="button compact" href={proofHref} target="_blank" rel="noreferrer">Open Saved Proof</a> : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="workspace-empty compact">
+                <strong>No client follow-up reminders are open.</strong>
+                <p>There are no missing ongoing case items in this date range.</p>
+              </div>
+            )}
+            <LogicAiReview
+              from={filters.from}
+              to={filters.to}
+              focus="ongoing"
+              title="Review ongoing false positives"
+              description="Manual only. Reviews ongoing-case audit metadata and suggests likely false reports, matcher fixes, and timing-window improvements."
+            />
+          </section>
         </section>
       </section>
       ) : null}
@@ -2343,6 +2437,25 @@ Items Still Needing Action
           <span>{uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left` : "All discovered matters checked"}</span>
           {dashboardData.lastRun?.message ? <span>{dashboardData.lastRun.message}</span> : null}
         </div>
+      </section>
+      ) : null}
+
+      {activeTab === "matters" ? (
+      <section className="panel matter-ai-optimizer-panel">
+        <div className="panel-heading">
+          <div>
+            <span className="label">AI Debug</span>
+            <h2>System Debug & Optimizer</h2>
+            <p className="muted small">Manual only. Reviews all flagged, late, and review items in this selected date range so we can tune the rules without changing Clio.</p>
+          </div>
+        </div>
+        <LogicAiReview
+          from={filters.from}
+          to={filters.to}
+          focus="matters"
+          title="Analyze selected matters"
+          description="Looks across this whole Matters view for false positives, missing keyword patterns, timing-window issues, and proof examples the team should capture."
+        />
       </section>
       ) : null}
 

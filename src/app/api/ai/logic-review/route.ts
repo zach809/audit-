@@ -51,11 +51,19 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const from = cleanText(body?.from, 20);
   const to = cleanText(body?.to, 20);
+  const focus = cleanText(body?.focus, 40);
   const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
   const { workspaceItems } = await getDashboardData({ from, to });
+  const focusSteps =
+    focus === "ongoing"
+      ? new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"])
+      : focus === "onboarding"
+        ? new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"])
+        : null;
 
   const flagged = workspaceItems
     .filter((item) => !item.metric_excluded && isFlagged(item.item_status))
+    .filter((item) => !focusSteps || focusSteps.has(item.step_code))
     .slice(0, 80);
 
   const grouped = flagged.reduce((map, item) => {
@@ -92,6 +100,9 @@ export async function POST(request: NextRequest) {
     "Use only the metadata below. Do not assume communication bodies or legal facts. Do not give legal advice.",
     "The goal is to help the auditor find app-rule bugs, false-positive patterns, timing-window problems, keyword gaps, and Clio-linkage issues.",
     "Focus on practical optimization. Keep the answer short and useful for the developer/auditor.",
+    "Do not merely say 'review the rule' or 'check configuration.' Name the exact workflow, reasonCode, due/found timing, and sample clients/matter numbers from the examples when available.",
+    "For the matters focus, analyze the whole selected Matters date range. Prioritize repeated patterns across clients, attorneys, and workflow steps over one-off explanations.",
+    "For ongoing cases, separate true missing proof from likely false positives. Tell the auditor what Clio proof to capture: communication subject/title, calendar title, date/time, and direct Clio tab.",
     "Reason-code rules:",
     "- FOUND_AFTER_DEADLINE means proof exists, but CWCA scored it as a timing issue. Do not call it missing work.",
     "- CALL_FOUND_NEARBY_DATE means a weekly check-in call exists near the expected date. Suggest timing-window review, not a missing-call bug.",
@@ -106,6 +117,7 @@ export async function POST(request: NextRequest) {
     "5. What to check next",
     "Do not recommend write actions in Clio from CWCA. Keep it read-only.",
     "",
+    `Focus: ${focus || "all"}`,
     `Date filters: ${from || "all"} to ${to || "all"}`,
     `Grouped issue summary JSON: ${JSON.stringify(summary)}`,
     `Example flagged rows JSON: ${JSON.stringify(examples)}`,
