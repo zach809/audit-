@@ -1,4 +1,4 @@
-import { APP_TZ } from "./config";
+﻿import { APP_TZ } from "./config";
 import { initDb, db } from "./db";
 import { workflowLabel } from "./workflow-rules";
 import { actionFor, displayAuditStatus, priorityFor, timingGoalFor, whyFlagged } from "./audit-display";
@@ -957,6 +957,8 @@ type StandardsReportRow = {
   attorneyCall: number;
   welcome: number;
   courtDate: number;
+  weeklyCheckIns: number;
+  courtReminderCalls: number;
   completion: string;
   date: string;
   sortDate: string;
@@ -969,6 +971,8 @@ const STANDARDS_HEADERS = [
   "Initial Meeting set - Phone call",
   "Welcome letters sent",
   "Court date event made",
+  "Weekly check-ins completed",
+  "Court reminder calls completed",
   "Worflow completion %",
 ];
 
@@ -1007,6 +1011,10 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     welcomeLate: number;
     courtDate: number;
     courtDateLate: number;
+    weeklyCheckIns: number;
+    weeklyCheckInsLate: number;
+    courtReminderCalls: number;
+    courtReminderCallsLate: number;
   }>();
   const getRow = (owner: string, date: string) => {
     const key = `${owner}__${date}`;
@@ -1027,6 +1035,10 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
       welcomeLate: 0,
       courtDate: 0,
       courtDateLate: 0,
+      weeklyCheckIns: 0,
+      weeklyCheckInsLate: 0,
+      courtReminderCalls: 0,
+      courtReminderCallsLate: 0,
     };
     rowsByOwnerDate.set(key, current);
     return current;
@@ -1038,30 +1050,43 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     const createdKey = csvDateKey(item.matter_created_at);
     return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
   });
-  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor))).sort(standardsOwnerSort);
+  const ongoingStandardsItems = workspaceItems.filter((item) => {
+    if (item.metric_excluded) return false;
+    if (item.step_code !== "WEEKLY_CLIENT_CHECKIN" && item.step_code !== "COURT_REMINDER_CALL") return false;
+    const dueKey = csvDateKey(item.deadline_at);
+    return Boolean(dueKey) && (!dateSet.size || dateSet.has(dueKey));
+  });
+  const owners = Array.from(new Set([...standardsItems, ...ongoingStandardsItems].map(standardsCaseManagerFor))).sort(standardsOwnerSort);
   for (const owner of owners) {
     for (const date of dates) getRow(owner, date);
   }
 
-  for (const item of standardsItems) {
-    const owner = standardsCaseManagerFor(item);
-    const createdKey = csvDateKey(item.matter_created_at);
-    if (!createdKey) continue;
-    const row = getRow(owner, createdKey);
+  const countCompletedStandard = (item: WorkspaceAuditItem, row: ReturnType<typeof getRow>) => {
     row.assignedAttorneys.add(item.responsible_attorney_name || "Unassigned");
     row.assignmentNotes.add(standardsAssignmentNote(item));
-    row.newMatters.add(String(item.matter_id));
     row.expectedStandards += 1;
     const approvedException = isApprovedException(item.review_decision);
     const late = item.item_status === "Late" && !approvedException;
     const complete = isStandardComplete(item.item_status, item.evidence_ref_id, item.review_decision);
     if (!complete) {
       row.needsFollowUp += 1;
-      continue;
+      return false;
     }
     row.completedStandards += 1;
     if (late) row.lateStandards += 1;
     else row.onTimeStandards += 1;
+    return true;
+  };
+
+  for (const item of standardsItems) {
+    const owner = standardsCaseManagerFor(item);
+    const createdKey = csvDateKey(item.matter_created_at);
+    if (!createdKey) continue;
+    const row = getRow(owner, createdKey);
+    row.newMatters.add(String(item.matter_id));
+    const complete = countCompletedStandard(item, row);
+    if (!complete) continue;
+    const late = item.item_status === "Late" && !isApprovedException(item.review_decision);
     if (item.step_code === "SETUP_WELCOME") {
       row.welcome += 1;
       if (late) row.welcomeLate += 1;
@@ -1076,12 +1101,30 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     }
   }
 
+  for (const item of ongoingStandardsItems) {
+    const owner = standardsCaseManagerFor(item);
+    const dueKey = csvDateKey(item.deadline_at);
+    if (!dueKey) continue;
+    const row = getRow(owner, dueKey);
+    const complete = countCompletedStandard(item, row);
+    if (!complete) continue;
+    const late = item.item_status === "Late" && !isApprovedException(item.review_decision);
+    if (item.step_code === "WEEKLY_CLIENT_CHECKIN") {
+      row.weeklyCheckIns += 1;
+      if (late) row.weeklyCheckInsLate += 1;
+    }
+    if (item.step_code === "COURT_REMINDER_CALL") {
+      row.courtReminderCalls += 1;
+      if (late) row.courtReminderCallsLate += 1;
+    }
+  }
+
   return Array.from(rowsByOwnerDate.values())
-    .filter((row) => row.newMatters.size > 0)
+    .filter((row) => row.newMatters.size > 0 || row.weeklyCheckIns > 0 || row.courtReminderCalls > 0 || row.expectedStandards > 0)
     .sort((a, b) => standardsOwnerSort(a.owner, b.owner) || a.date.localeCompare(b.date))
     .map((row) => {
-      const expected = row.newMatters.size * 3;
-      const completed = row.attorneyCall + row.welcome + row.courtDate;
+      const expected = row.expectedStandards;
+      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderCalls;
       const score = expected ? `${Math.round((completed / expected) * 100)}%` : "0%";
       return {
         owner: row.owner,
@@ -1089,6 +1132,8 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
         attorneyCall: row.attorneyCall,
         welcome: row.welcome,
         courtDate: row.courtDate,
+        weeklyCheckIns: row.weeklyCheckIns,
+        courtReminderCalls: row.courtReminderCalls,
         completion: score,
         date: csvDisplayDate(row.date),
         sortDate: row.date,
@@ -1105,6 +1150,8 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     row.attorneyCall,
     row.welcome,
     row.courtDate,
+    row.weeklyCheckIns,
+    row.courtReminderCalls,
     row.completion,
   ]);
 
@@ -1144,6 +1191,8 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
           xmlCell(row.attorneyCall, "Number"),
           xmlCell(row.welcome, "Number"),
           xmlCell(row.courtDate, "Number"),
+          xmlCell(row.weeklyCheckIns, "Number"),
+          xmlCell(row.courtReminderCalls, "Number"),
           xmlCell(row.completion),
         ].join("")}</Row>`,
       ),
@@ -1157,6 +1206,8 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
           <Column ss:Width="165"/>
           <Column ss:Width="150"/>
           <Column ss:Width="165"/>
+          <Column ss:Width="170"/>
+          <Column ss:Width="175"/>
           <Column ss:Width="160"/>
           ${tableRows}
         </Table>
@@ -1544,3 +1595,4 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
 
   return lines.join("\r\n");
 }
+

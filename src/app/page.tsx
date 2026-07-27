@@ -557,7 +557,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "case-manager" | "onboarding" | "ongoing" | "post-closure" | "reports" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "case-manager" | "onboarding" | "ongoing" | "post-closure" | "reports" | "debug" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 
@@ -566,7 +566,8 @@ const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: stri
   { id: "onboarding", label: "Onboarding", description: "New matter setup report" },
   { id: "ongoing", label: "Ongoing", description: "Active case maintenance" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
-  { id: "reports", label: "Reports", description: "Case manager and audit exports" },
+  { id: "reports", label: "Reports", description: "Exports, spreadsheets, and weekly summaries" },
+  { id: "debug", label: "Audit Debug", description: "AI logic review and rule tuning" },
   { id: "guide", label: "Guide", description: "How to read the results" },
   { id: "compliance", label: "Compliance", description: "Read-only and data-handling rules" },
 ];
@@ -716,7 +717,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const today = dateInput(new Date());
   const weekStart = weekStartInput(new Date());
   const monthStart = monthStartInput(new Date());
-  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "onboarding" || activeTab === "ongoing";
+  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "onboarding" || activeTab === "ongoing" || activeTab === "debug";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -1150,9 +1151,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   };
   const standardsSheetPreviewRows = Array.from(
     allWorkspaceRows
-      .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
+      .filter((item) => (KPI_WORKFLOW_CODES.has(item.row.stepCode) || item.row.stepCode === "WEEKLY_CLIENT_CHECKIN" || item.row.stepCode === "COURT_REMINDER_CALL") && !item.row.metricExcluded)
       .reduce((map, item) => {
-        const date = item.row.matterCreatedAt ? dateInput(new Date(item.row.matterCreatedAt)) : "";
+        const dateSource = KPI_WORKFLOW_CODES.has(item.row.stepCode) ? item.row.matterCreatedAt : item.row.deadlineAt;
+        const date = dateSource ? dateInput(new Date(dateSource)) : "";
         if (!date) return map;
         const key = `${item.caseManager}__${date}`;
         const current = map.get(key) ?? {
@@ -1163,21 +1165,27 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           welcome: 0,
           attorneyCall: 0,
           courtDate: 0,
+          weeklyCheckIns: 0,
+          courtReminderCalls: 0,
+          expectedStandards: 0,
         };
-        current.matters.add(item.row.matterId);
+        current.expectedStandards += 1;
+        if (KPI_WORKFLOW_CODES.has(item.row.stepCode)) current.matters.add(item.row.matterId);
         const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
         if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
         if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
         if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
+        if (complete && item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") current.weeklyCheckIns += 1;
+        if (complete && item.row.stepCode === "COURT_REMINDER_CALL") current.courtReminderCalls += 1;
         map.set(key, current);
         return map;
-      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number }>())
+      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; weeklyCheckIns: number; courtReminderCalls: number; expectedStandards: number }>())
       .values(),
   )
     .map((row) => {
       const newMatters = row.matters.size;
-      const completed = row.attorneyCall + row.welcome + row.courtDate;
-      const expected = newMatters * 3;
+      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderCalls;
+      const expected = row.expectedStandards;
       return {
         caseManager: row.caseManager,
         sortDate: row.sortDate,
@@ -1186,6 +1194,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         attorneyCall: row.attorneyCall,
         welcome: row.welcome,
         courtDate: row.courtDate,
+        weeklyCheckIns: row.weeklyCheckIns,
+        courtReminderCalls: row.courtReminderCalls,
         completion: expected ? `${Math.round((completed / expected) * 100)}%` : "0%",
       };
     })
@@ -1292,8 +1302,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="deployment-proof">
         <div>
           <span className="label">Deployment Proof</span>
-          <strong>Closed-matter follow-up sync is active</strong>
-          <p>Version {APP_VERSION}: Post-Closure refresh now searches Clio by close date and creates the 1, 6, and 12-month internal follow-up queue.</p>
+          <strong>Workspace cleanup pass is active</strong>
+          <p>Version {APP_VERSION}: Reports keeps exports and spreadsheets; Audit Debug now holds AI review and rule-tuning tools.</p>
         </div>
         <a className="button compact" href="/api/health" target="_blank" rel="noreferrer">Check Version</a>
       </section>
@@ -1654,9 +1664,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="playbook-list">
             <div><strong>1. Start with Matters.</strong><span>Use the matter cards to see what needs follow-up and open the proof links.</span></div>
             <div><strong>2. Verify in Clio.</strong><span>Open the Clio link and proof link before deciding whether coaching is needed.</span></div>
-            <div><strong>3. Set the report range.</strong><span>Use Reports to choose the exact dates you want covered before downloading.</span></div>
-            <div><strong>4. Send the case-manager list.</strong><span>Download the flagged-matters review when you need a clean follow-up handoff.</span></div>
-            <div><strong>5. Keep it coaching-focused.</strong><span>Use CWCA as a visibility tool, not as discipline by itself.</span></div>
+            <div><strong>3. Use Onboarding for Standards.</strong><span>Keep the spreadsheet, workbook, and Google Sheet sync here for case-manager scoring.</span></div>
+            <div><strong>4. Use Reports for exports.</strong><span>Download weekly summaries, comparison reports, and audit CSVs from one place.</span></div>
+            <div><strong>5. Use Audit Debug only when logic seems off.</strong><span>Run AI review manually for false positives, stale rows, and matcher improvements.</span></div>
+            <div><strong>6. Keep it coaching-focused.</strong><span>Use CWCA as a visibility tool, not as discipline by itself.</span></div>
           </div>
         </section>
       </section>
@@ -1832,6 +1843,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <th>Initial Meeting set - Phone call</th>
                   <th>Welcome letters sent</th>
                   <th>Court date event made</th>
+                  <th>Weekly check-ins completed</th>
+                  <th>Court reminder calls completed</th>
                   <th>Worflow completion %</th>
                 </tr>
               </thead>
@@ -1844,11 +1857,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     <td>{row.attorneyCall}</td>
                     <td>{row.welcome}</td>
                     <td>{row.courtDate}</td>
+                    <td>{row.weeklyCheckIns}</td>
+                    <td>{row.courtReminderCalls}</td>
                     <td>{row.completion}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={7}>No onboarding rows in this date range yet.</td>
+                    <td colSpan={9}>No standards rows in this date range yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -1990,13 +2005,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 <p>There are no missing ongoing case items in this date range.</p>
               </div>
             )}
-            <LogicAiReview
-              from={filters.from}
-              to={filters.to}
-              focus="ongoing"
-              title="Review ongoing false positives"
-              description="Manual only. Reviews ongoing-case audit metadata and suggests likely false reports, matcher fixes, and timing-window improvements."
-            />
+            <div className="debug-shortcut-panel ongoing-debug-shortcut">
+              <div>
+                <span className="label">Ongoing logic questions?</span>
+                <strong>Use Audit Debug to review false positives and matcher issues.</strong>
+              </div>
+              <a className="button compact" href={tabLink(filters, "debug")}>Open Audit Debug</a>
+            </div>
           </section>
         </section>
       </section>
@@ -2204,38 +2219,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <div className="panel-heading">
           <div>
             <h2>Reports</h2>
+            <p className="muted small">Exports, spreadsheet sync, weekly comparisons, and copy-ready report formats. AI/debug tools now live in Audit Debug.</p>
           </div>
         </div>
-        <section className="ai-tools-overview">
-          <div className="ai-tools-intro">
-            <span className="label">Manual AI</span>
-            <h3>Use AI only when you choose a specific issue</h3>
-            <p>AI does not run during audit batches or page loads. Use it only on a selected flagged matter or inside the weekly review builder, so cost stays controlled.</p>
-          </div>
-          <div className="ai-tools-grid">
-            <div className="ai-tool-card">
-              <span>1</span>
-              <strong>Ask AI about one item</strong>
-              <p>Open a flagged matter, expand Problems, then type a question in the small <b>Ask CWCA AI</b> box.</p>
-            </div>
-            <div className="ai-tool-card">
-              <span>2</span>
-              <strong>Draft report language</strong>
-              <p>Open the weekly review builder, select one reviewed matter, then click <b>Draft with AI</b>.</p>
-            </div>
-          </div>
-        </section>
-        <details className="report-advanced-builder ai-builder-section" id="ai-review-builder">
-          <summary>
-            <div>
-              <span className="label">AI Drafting</span>
-              <h3>AI-assisted weekly review builder</h3>
-              <p className="muted small">Open this to select a flagged matter and use Draft with AI for Results Details, Report Summary, and Teams wording.</p>
-            </div>
-            <span className="summary-action">Open AI Builder</span>
-          </summary>
-          <ReviewBuilder items={reviewBuilderItems} initialFrom={filters.from} initialTo={filters.to} />
-        </details>
         <section className="weekly-compliance-panel">
           <div className="weekly-compliance-head">
             <div>
@@ -2286,7 +2272,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             ))}
           </div>
         </section>
-        <LogicAiReview from={filters.from} to={filters.to} />
         <div className="report-grid">
           <form className="report-card report-card-wide" action="/api/export.csv?type=case-manager-text" method="post">
             <div>
@@ -2379,6 +2364,82 @@ Items Still Needing Action
       </section>
       ) : null}
 
+      {activeTab === "debug" ? (
+      <section className="debug-layout">
+        <section className="panel matter-ai-optimizer-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Admin Only</span>
+              <h2>Audit Debug & Optimizer</h2>
+              <p className="muted small">Manual only. Use this when CWCA appears to be flagging false positives or missing proof patterns. It reviews the selected date range and does not change Clio.</p>
+            </div>
+            <form action="/" method="get" className="debug-range-form">
+              <input type="hidden" name="tab" value="debug" />
+              <label>
+                From
+                <input name="from" type="date" defaultValue={filters.from || weekStart} />
+              </label>
+              <label>
+                To
+                <input name="to" type="date" defaultValue={filters.to || today} />
+              </label>
+              <button type="submit">Update Window</button>
+            </form>
+          </div>
+          <section className="ai-tools-overview debug-overview">
+            <div className="ai-tools-intro">
+              <span className="label">What This Replaces</span>
+              <h3>One home for AI and rule tuning</h3>
+              <p>Use this tab instead of hunting through Reports or Matters for AI help. The spreadsheet, exports, and Google Sheet sync stay in Reports and Onboarding.</p>
+            </div>
+            <div className="ai-tools-grid">
+              <div className="ai-tool-card">
+                <span>1</span>
+                <strong>Analyze this date range</strong>
+                <p>Find repeated false positives, stale rows, missing keyword patterns, and timing windows that need tuning.</p>
+              </div>
+              <div className="ai-tool-card">
+                <span>2</span>
+                <strong>Ask about one item</strong>
+                <p>Open a matter, expand Problems, and use <b>Ask CWCA AI</b> only when you need item-level help.</p>
+              </div>
+              <div className="ai-tool-card">
+                <span>3</span>
+                <strong>Draft review wording</strong>
+                <p>Use the weekly review builder here when you need cleaner report or Teams language.</p>
+              </div>
+            </div>
+          </section>
+          <LogicAiReview
+            from={filters.from}
+            to={filters.to}
+            focus="matters"
+            title="Analyze selected audit window"
+            description="Looks across the selected Matters data for false positives, repeated NOT_FOUND reasons, stale saved rows, missing Clio keyword patterns, and exact proof examples to verify."
+          />
+          <div className="debug-actions-row">
+            <form action={`/api/export.csv?${logicIssueExportParams.toString()}`} method="post">
+              <button className="button" type="submit">Download Logic Issues</button>
+            </form>
+            <a className="button" href={tabLink(filters, "matters")}>Back to Matters</a>
+            <a className="button" href={tabLink(filters, "reports")}>Open Reports</a>
+          </div>
+        </section>
+
+        <details className="report-advanced-builder ai-builder-section" id="ai-review-builder">
+          <summary>
+            <div>
+              <span className="label">AI Drafting</span>
+              <h3>AI-assisted weekly review builder</h3>
+              <p className="muted small">Optional. Select a reviewed matter and draft plain-English Results Details, Report Summary, and Teams wording.</p>
+            </div>
+            <span className="summary-action">Open Builder</span>
+          </summary>
+          <ReviewBuilder items={reviewBuilderItems} initialFrom={filters.from} initialTo={filters.to} />
+        </details>
+      </section>
+      ) : null}
+
       {activeTab === "workspace" || activeTab === "matters" ? (
       <section className="panel filter-panel">
         <div className="panel-heading">
@@ -2441,21 +2502,13 @@ Items Still Needing Action
       ) : null}
 
       {activeTab === "matters" ? (
-      <section className="panel matter-ai-optimizer-panel">
-        <div className="panel-heading">
-          <div>
-            <span className="label">AI Debug</span>
-            <h2>System Debug & Optimizer</h2>
-            <p className="muted small">Manual only. Reviews all flagged, late, and review items in this selected date range so we can tune the rules without changing Clio.</p>
-          </div>
+      <section className="panel debug-shortcut-panel">
+        <div>
+          <span className="label">Need system help?</span>
+          <strong>Use Audit Debug for false positives and rule tuning.</strong>
+          <p className="muted small">Matters stays focused on proof review. The full AI analyzer now lives in one admin-only place.</p>
         </div>
-        <LogicAiReview
-          from={filters.from}
-          to={filters.to}
-          focus="matters"
-          title="Analyze selected matters"
-          description="Looks across this whole Matters view for false positives, missing keyword patterns, timing-window issues, and proof examples the team should capture."
-        />
+        <a className="button compact" href={tabLink(filters, "debug")}>Open Audit Debug</a>
       </section>
       ) : null}
 

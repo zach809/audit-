@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-ai-stale-majority-short-circuit-2026-07-23";
+export const APP_VERSION = "cwca-consolidated-ui-pass-keep-spreadsheets-2026-07-27";

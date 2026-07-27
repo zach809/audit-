@@ -9404,12 +9404,87 @@ body {
   margin: 0;
 }
 
+.debug-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.debug-overview {
+  margin: 0;
+}
+
+.debug-range-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(150px, 1fr)) max-content;
+}
+
+.debug-range-form button {
+  justify-self: start;
+  max-width: max-content;
+  min-height: 38px;
+  padding: 8px 13px;
+  width: auto;
+}
+
+.debug-actions-row,
+.debug-shortcut-panel {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.debug-actions-row {
+  border-top: 1px solid rgba(203, 219, 239, 0.12);
+  padding-top: 12px;
+}
+
+.debug-shortcut-panel {
+  background: linear-gradient(145deg, rgba(18, 32, 50, 0.72), rgba(13, 24, 39, 0.86));
+}
+
+.debug-shortcut-panel strong {
+  color: var(--text);
+  display: block;
+  margin: 2px 0;
+}
+
+.debug-shortcut-panel .button,
+.debug-actions-row .button,
+.debug-actions-row button {
+  flex: 0 0 auto;
+  max-width: max-content;
+  width: auto;
+}
+
 .weekly-compliance-head,
 .logic-ai-review {
   align-items: center;
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+@media (max-width: 760px) {
+  .debug-range-form,
+  .debug-actions-row,
+  .debug-shortcut-panel {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .debug-range-form button,
+  .debug-shortcut-panel .button,
+  .debug-actions-row .button,
+  .debug-actions-row button {
+    justify-self: stretch;
+    max-width: none;
+    width: 100%;
+  }
 }
 
 .weekly-compliance-head h3 {
