@@ -883,6 +883,14 @@ function eachDateKey(from: string, to: string): string[] {
   return result;
 }
 
+function lastCompletedWeekRange(baseDate = new Date()): { from: string; to: string } {
+  const currentStart = weekStartDateKey(baseDate);
+  return {
+    from: addDateKeyDays(currentStart, -7),
+    to: addDateKeyDays(currentStart, -1),
+  };
+}
+
 function normalizeOwnerName(value: string | null | undefined): string {
   return String(value ?? "")
     .toLowerCase()
@@ -995,9 +1003,9 @@ function standardsOwnerSort(a: string, b: string): number {
 
 export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
   const { workspaceItems } = await getDashboardData(filters);
-  const today = csvDateKey(new Date());
-  const from = filters.from || today;
-  const to = filters.to || today;
+  const defaultRange = lastCompletedWeekRange();
+  const from = filters.from || defaultRange.from;
+  const to = filters.to || defaultRange.to;
   const dates = eachDateKey(from, to);
   const dateSet = new Set(dates);
   const rowsByOwnerDate = new Map<string, {
@@ -1429,7 +1437,7 @@ function matterActionItem(stepCode: string): string {
     case "CLIENT_FOLLOWUP":
       return "Review the message thread and respond or coach as needed";
     case "WEEKLY_CLIENT_CHECKIN":
-      return "Verify the weekly check-in calendar event and confirm the same-day client call";
+      return "Verify the weekly check-in event and confirm the client call by the court-based due date";
     default:
       return actionFor(stepCode, "Missing");
   }

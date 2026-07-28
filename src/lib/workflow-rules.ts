@@ -82,9 +82,9 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   WEEKLY_CLIENT_CHECKIN: {
     label: "Weekly Client Check-In",
-    goal: "Verify a weekly client check-in/courtesy call calendar event and a client call communication by 5:00 PM Illinois time on the due day. A nearby call can count as completed with timing review.",
+    goal: "Verify the weekly client check-in/courtesy call one week plus one day after the last court date, due by 5:00 PM Illinois time. If there is no court date yet, use the regular weekly check-in window.",
     missing: "Weekly client check-in still needs calendar and phone-call proof in Clio.",
-    action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists on the same day or nearby date.",
+    action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists by the court-based due date or on a nearby date.",
     late: "Weekly client check-in call proof was found, but not on the expected same-day window.",
     unknown: "Please recheck this matter before coaching. The app could not confirm the weekly check-in call from Clio.",
   },

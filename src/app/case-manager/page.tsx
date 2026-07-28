@@ -75,7 +75,7 @@ function cmOpportunityText(row: WorkspaceAuditItem): string {
     case "SETUP_COURT_DATE":
       return "Add or confirm the client's court-date calendar event.";
     case "WEEKLY_CLIENT_CHECKIN":
-      return "Confirm the weekly client check-in event and call proof by 5:00 PM Illinois time on the due day.";
+      return "Confirm the weekly client check-in event and call proof by 5:00 PM Illinois time one week plus one day after the last court date.";
     case "COURT_REMINDER_CALL":
       return "Confirm the court reminder call by 5:00 PM Illinois time on the business day before court.";
     case "CLIENT_CONTACT":

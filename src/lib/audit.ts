@@ -502,6 +502,32 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   });
   const attorneyCallEvidence = callEvidence ?? attorneyCallCommunicationEvidence;
 
+  const courtEvents = evidence.calendars
+    .map((cal): Evidence<ClioCalendarEntry> | null => {
+      const at = parseDate(cal.start_at);
+      if (!at) return null;
+      const text = calendarSearchText(cal);
+      if (!isCourtEvent(text) && !isPossibleCourtEvent(text)) return null;
+      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
+
+  const pastCourts = courtEvents
+    .filter((ev) => {
+      const endedAt = calendarEnd(ev.item);
+      return Boolean(endedAt && endedAt < now);
+    })
+    .sort((a, b) => {
+      const aEnd = calendarEnd(a.item) ?? a.at;
+      const bEnd = calendarEnd(b.item) ?? b.at;
+      return bEnd.getTime() - aEnd.getTime();
+    });
+  const lastCourt = pastCourts[0] ?? null;
+  const lastCourtEnd = lastCourt ? calendarEnd(lastCourt.item) : null;
+  const nextCourt = lastCourtEnd
+    ? courtEvents.filter((ev) => ev.at > lastCourtEnd && ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null
+    : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
+
   const weeklyCheckInEvents = evidence.calendars
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.start_at);
@@ -518,7 +544,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .filter((event) => event.at > now)
     .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
   const weeklyCheckInEvent = pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
-  const weeklyCheckInDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : firstWeeklyCheckInDeadline;
+  const weeklyCheckInCourtDeadline = lastCourtEnd ? endOfLocalBusinessDay(addDaysRaw(lastCourtEnd, 8)) : null;
+  const weeklyCheckInCalendarDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : null;
+  const weeklyCheckInDeadline = weeklyCheckInCourtDeadline ?? weeklyCheckInCalendarDeadline ?? firstWeeklyCheckInDeadline;
   const weeklyCheckInCall = weeklyCheckInEvent
     ? earliest(
         evidence.communications
@@ -548,7 +576,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         evidence.communications
           .map((comm): Evidence<ClioCommunication> | null => {
             const at = commDate(comm);
-            if (!at || at < addDaysRaw(firstWeeklyCheckInDeadline, -7)) return null;
+            if (!at || at < addDaysRaw(weeklyCheckInDeadline, -8)) return null;
             if (!isFirmPhoneCall(comm, record.client_id)) return null;
             return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
           })
@@ -560,14 +588,14 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
     }
     if (!weeklyCheckInEvent) {
-      if (weeklyCallWithoutCalendar && now > firstWeeklyCheckInDeadline) {
+      if (weeklyCallWithoutCalendar && now > weeklyCheckInDeadline) {
         return withEvidence(
-          base("WEEKLY_CLIENT_CHECKIN", "Late", "Timing Review", firstWeeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
+          base("WEEKLY_CLIENT_CHECKIN", "Late", "Timing Review", weeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
           weeklyCallWithoutCalendar,
         );
       }
-      return classify("WEEKLY_CLIENT_CHECKIN", null, firstWeeklyCheckInDeadline, {
-        operationalState: "Waiting for weekly check-in window",
+      return classify("WEEKLY_CLIENT_CHECKIN", null, weeklyCheckInDeadline, {
+        operationalState: weeklyCheckInCourtDeadline ? "Waiting until one week plus one day after last court date" : "Waiting for weekly check-in window",
         reasonCode: "WEEKLY_CALENDAR_EVENT_NOT_FOUND",
         now,
       });
@@ -587,37 +615,11 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND"), weeklyCheckInEvent);
   })();
 
-  const courtEvents = evidence.calendars
-    .map((cal): Evidence<ClioCalendarEntry> | null => {
-      const at = parseDate(cal.start_at);
-      if (!at) return null;
-      const text = calendarSearchText(cal);
-      if (!isCourtEvent(text) && !isPossibleCourtEvent(text)) return null;
-      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
-    })
-    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
-
   const courtAdded = earliest(
     courtEvents
       .map((ev) => ({ ...ev, at: parseDate(ev.item.created_at ?? ev.item.start_at) ?? ev.at }))
       .filter((ev) => ev.at >= record.effective_intake_at),
   );
-
-  const pastCourts = courtEvents
-    .filter((ev) => {
-      const endedAt = calendarEnd(ev.item);
-      return Boolean(endedAt && endedAt < now);
-    })
-    .sort((a, b) => {
-      const aEnd = calendarEnd(a.item) ?? a.at;
-      const bEnd = calendarEnd(b.item) ?? b.at;
-      return bEnd.getTime() - aEnd.getTime();
-    });
-  const lastCourt = pastCourts[0] ?? null;
-  const lastCourtEnd = lastCourt ? calendarEnd(lastCourt.item) : null;
-  const nextCourt = lastCourtEnd
-    ? courtEvents.filter((ev) => ev.at > lastCourtEnd && ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null
-    : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 
   const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;

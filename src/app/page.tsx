@@ -165,7 +165,7 @@ function ongoingReminderText(stepCode: string): string {
     case "CLIENT_CONTACT":
       return "Please confirm the client was contacted. Proof can be an email, phone-call log, or communication note in Clio.";
     case "WEEKLY_CLIENT_CHECKIN":
-      return "Please confirm the weekly client check-in calendar event and matching client call proof by 5:00 PM Illinois time on the due day.";
+      return "Please confirm the weekly client check-in event and call proof by 5:00 PM Illinois time one week plus one day after the last court date.";
     case "COURT_REMINDER_CALL":
       return "Please confirm the court reminder call by 5:00 PM Illinois time on the business day before court.";
     default:
@@ -723,13 +723,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const closureWindowFilter = searchParams.closure_window ?? "current";
   const today = dateInput(new Date());
   const weekStart = weekStartInput(new Date());
+  const lastWeekStart = addDaysInput(weekStart, -7);
+  const lastWeekEnd = addDaysInput(weekStart, -1);
   const monthStart = monthStartInput(new Date());
-  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "standards" || activeTab === "ongoing" || activeTab === "debug";
+  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "ongoing" || activeTab === "debug";
+  const defaultFrom = activeTab === "standards" ? lastWeekStart : defaultToCurrentWeek ? weekStart : "";
+  const defaultTo = activeTab === "standards" ? lastWeekEnd : defaultToCurrentWeek ? today : "";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
-    from: searchParams.from ?? (defaultToCurrentWeek ? weekStart : ""),
-    to: searchParams.to ?? (defaultToCurrentWeek ? today : ""),
+    from: searchParams.from ?? defaultFrom,
+    to: searchParams.to ?? defaultTo,
   };
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
@@ -1761,6 +1765,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               </select>
             </label>
             <button className="primary" type="submit">Update View</button>
+            <a className="button" href={filterLink({ tab: "standards" }, { from: lastWeekStart, to: lastWeekEnd })}>Last Week</a>
             <a className="button" href={filterLink({ tab: "standards" }, { from: weekStart, to: today })}>This Week</a>
           </form>
           <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">

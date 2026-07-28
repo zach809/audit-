@@ -27,6 +27,20 @@ function currentWeekStart(): string {
   return chicagoDateInput(localNoon);
 }
 
+function addDateKeyDays(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return chicagoDateInput(date);
+}
+
+function lastCompletedWeekRange(): { from: string; to: string } {
+  const currentStart = currentWeekStart();
+  return {
+    from: addDateKeyDays(currentStart, -7),
+    to: addDateKeyDays(currentStart, -1),
+  };
+}
+
 function redirectBack(request: NextRequest, params: Record<string, string>) {
   const search = new URLSearchParams(params);
   return NextResponse.redirect(new URL(`/?${search.toString()}`, request.url), 303);
@@ -37,11 +51,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const url = new URL(request.url);
+  const defaultRange = lastCompletedWeekRange();
   const filters = {
     attorney: url.searchParams.get("attorney") || "",
     overall: url.searchParams.get("overall") || "",
-    from: url.searchParams.get("from") || currentWeekStart(),
-    to: url.searchParams.get("to") || chicagoDateInput(new Date()),
+    from: url.searchParams.get("from") || defaultRange.from,
+    to: url.searchParams.get("to") || defaultRange.to,
   };
   try {
     await initDb();
@@ -58,11 +73,12 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const form = await request.formData().catch(() => null);
+  const defaultRange = lastCompletedWeekRange();
   const filters = {
     attorney: form?.get("attorney")?.toString() ?? "",
     overall: form?.get("overall")?.toString() ?? "",
-    from: form?.get("from")?.toString() || currentWeekStart(),
-    to: form?.get("to")?.toString() || chicagoDateInput(new Date()),
+    from: form?.get("from")?.toString() || defaultRange.from,
+    to: form?.get("to")?.toString() || defaultRange.to,
     tab: "kpi",
   };
   try {
