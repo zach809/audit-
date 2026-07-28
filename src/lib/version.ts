@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-weekly-checkin-court-based-standards-last-week-2026-07-28";
+export const APP_VERSION = "cwca-standards-last-week-no-future-dates-2026-07-28";

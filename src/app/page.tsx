@@ -1176,6 +1176,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     const params = new URLSearchParams({ window: "this-week", cmname: caseManager });
     return `/case-manager?${params.toString()}`;
   };
+  const standardsPreviewFrom = filters.from || lastWeekStart;
+  const standardsPreviewTo = filters.to || lastWeekEnd;
   const standardsSheetPreviewRows = Array.from(
     allWorkspaceRows
       .filter((item) => (KPI_WORKFLOW_CODES.has(item.row.stepCode) || item.row.stepCode === "WEEKLY_CLIENT_CHECKIN" || item.row.stepCode === "COURT_REMINDER_CALL") && !item.row.metricExcluded)
@@ -1183,6 +1185,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         const dateSource = KPI_WORKFLOW_CODES.has(item.row.stepCode) ? item.row.matterCreatedAt : item.row.deadlineAt;
         const date = dateSource ? dateInput(new Date(dateSource)) : "";
         if (!date) return map;
+        if (date < standardsPreviewFrom || date > standardsPreviewTo) return map;
         const key = `${item.caseManager}__${date}`;
         const current = map.get(key) ?? {
           caseManager: item.caseManager,
