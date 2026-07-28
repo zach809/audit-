@@ -557,13 +557,13 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "case-manager" | "onboarding" | "ongoing" | "post-closure" | "reports" | "debug" | "guide" | "compliance";
+type DashboardTab = "workspace" | "matters" | "case-manager" | "standards" | "ongoing" | "post-closure" | "reports" | "debug" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
-  { id: "onboarding", label: "Onboarding", description: "New matter setup report" },
+  { id: "standards", label: "Standards", description: "Graphic and Excel views" },
   { id: "ongoing", label: "Ongoing", description: "Active case maintenance" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Exports, spreadsheets, and weekly summaries" },
@@ -644,7 +644,7 @@ const GUIDE_STATUS_CARDS = [
 ];
 
 function dashboardTab(value?: string): DashboardTab {
-  if (value === "kpi") return "onboarding";
+  if (value === "kpi" || value === "onboarding") return "standards";
   return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "matters";
 }
 
@@ -717,7 +717,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const today = dateInput(new Date());
   const weekStart = weekStartInput(new Date());
   const monthStart = monthStartInput(new Date());
-  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "onboarding" || activeTab === "ongoing" || activeTab === "debug";
+  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "standards" || activeTab === "ongoing" || activeTab === "debug";
   const filters = {
     attorney: searchParams.attorney ?? "",
     overall: searchParams.overall ?? "",
@@ -1215,11 +1215,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   });
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
   const kpiReportLines = [
-    `Weekly CWCA New Matter Onboarding Report`,
+    `Weekly CWCA Standards Report`,
     `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
     `Checked: Welcome Letter Sent, Initial Meeting Set, Court Date Added To Clio`,
     ``,
-    `Overall onboarding score: ${kpiScore}% (${kpiGrade})`,
+    `Overall standards score: ${kpiScore}% (${kpiGrade})`,
     `Checked workflow items: ${kpiTotal}`,
     `Clear items: ${kpiClear}`,
     `Still needs follow-up: ${kpiFollowUp}`,
@@ -1256,8 +1256,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     if (searchParams.postClosure === "synced") return searchParams.message || "Post-closure follow-ups refreshed.";
     if (searchParams.postClosure === "saved") return searchParams.message || "Post-closure follow-up saved.";
     if (searchParams.postClosure === "failed") return searchParams.message || "Post-closure follow-up update failed.";
-    if (searchParams.metrics === "excluded") return searchParams.notice || "Matter excluded from Onboarding metrics.";
-    if (searchParams.metrics === "restored") return searchParams.notice || "Matter restored to Onboarding metrics.";
+    if (searchParams.metrics === "excluded") return searchParams.notice || "Matter excluded from Standards metrics.";
+    if (searchParams.metrics === "restored") return searchParams.notice || "Matter restored to Standards metrics.";
     if (searchParams.metrics === "failed") return searchParams.notice || "Metric update failed.";
     if (searchParams.sheets === "synced") return searchParams.notice || "Google Sheet updated.";
     if (searchParams.sheets === "failed") return searchParams.notice || "Google Sheets sync failed.";
@@ -1664,7 +1664,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="playbook-list">
             <div><strong>1. Start with Matters.</strong><span>Use the matter cards to see what needs follow-up and open the proof links.</span></div>
             <div><strong>2. Verify in Clio.</strong><span>Open the Clio link and proof link before deciding whether coaching is needed.</span></div>
-            <div><strong>3. Use Onboarding for Standards.</strong><span>Keep the spreadsheet, workbook, and Google Sheet sync here for case-manager scoring.</span></div>
+            <div><strong>3. Use Standards for scorecards.</strong><span>Start with the graphic view, then open the Excel view or sync Google Sheets for the team.</span></div>
             <div><strong>4. Use Reports for exports.</strong><span>Download weekly summaries, comparison reports, and audit CSVs from one place.</span></div>
             <div><strong>5. Use Audit Debug only when logic seems off.</strong><span>Run AI review manually for false positives, stale rows, and matcher improvements.</span></div>
             <div><strong>6. Keep it coaching-focused.</strong><span>Use CWCA as a visibility tool, not as discipline by itself.</span></div>
@@ -1707,19 +1707,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
       ) : null}
 
-      {activeTab === "onboarding" ? (
-      <section className="kpi-layout">
+      {activeTab === "standards" ? (
+      <section className="kpi-layout standards-tab">
         <section className="panel kpi-hero">
           <div className="panel-heading">
             <div>
-              <span className="label">Weekly Report</span>
-              <h2>New Matter Onboarding</h2>
-              <p className="muted small">Simple view of the first three setup steps every new matter should have.</p>
+              <span className="label">Standards</span>
+              <h2>Case Manager Standards</h2>
+              <p className="muted small">One weekly place for the graphic score view and the Excel-style standards sheet.</p>
             </div>
             <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
           </div>
           <form className="kpi-range-form" action="/" method="get">
-            <input type="hidden" name="tab" value="onboarding" />
+            <input type="hidden" name="tab" value="standards" />
             <label>
               From
               <input name="from" type="date" defaultValue={filters.from || weekStart} />
@@ -1738,14 +1738,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               </select>
             </label>
             <button className="primary" type="submit">Update View</button>
-            <a className="button" href={filterLink({ tab: "onboarding" }, { from: weekStart, to: today })}>This Week</a>
+            <a className="button" href={filterLink({ tab: "standards" }, { from: weekStart, to: today })}>This Week</a>
           </form>
           <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
             <input type="hidden" name="attorney" value={filters.attorney} />
             <input type="hidden" name="overall" value={filters.overall} />
             <input type="hidden" name="from" value={filters.from} />
             <input type="hidden" name="to" value={filters.to} />
-            <button className="button primary" type="submit">Download Onboarding Workbook</button>
+            <button className="button primary" type="submit">Download Standards Workbook</button>
           </form>
           <div className="standards-online-actions">
             <form action="/api/standards/google-sync" method="post">
@@ -1762,12 +1762,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <summary>Past weeks</summary>
             <div>
               {priorStandardWeeks.map((week) => (
-                <a key={week.from} href={filterLink({ tab: "onboarding" }, { from: week.from, to: week.to })}>
+                <a key={week.from} href={filterLink({ tab: "standards" }, { from: week.from, to: week.to })}>
                   {week.label}
                 </a>
               ))}
             </div>
           </details>
+          <div className="standards-view-switch" aria-label="Standards views">
+            <a href="#standards-graphic-view">Graphic View</a>
+            <a href="#standards-excel-view">Excel View</a>
+          </div>
           <div className="kpi-score-row">
             <div className="kpi-score-ring" style={{ "--score": `${kpiScore * 3.6}deg` } as CSSProperties}>
               <span>{kpiScore}%</span>
@@ -1779,11 +1783,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
         </section>
 
-        <section className="panel kpi-panel standards-graphic">
+        <section className="panel kpi-panel standards-graphic" id="standards-graphic-view">
           <div className="panel-heading">
             <div>
-              <h2>New Matter Onboarding</h2>
-              <p className="muted small">First setup work after a new matter is created.</p>
+              <span className="label">Graphic View</span>
+              <h2>Standards by Case Manager</h2>
+              <p className="muted small">Completion view for Welcome Letter, Initial Meeting, and Court Date setup.</p>
             </div>
           </div>
           {standardRows.length ? (
@@ -1817,20 +1822,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </div>
           ) : (
             <div className="workspace-empty compact">
-              <strong>No onboarding data in this range yet.</strong>
+              <strong>No standards data in this range yet.</strong>
               <p>Run an audit batch or choose a date range with audited matters.</p>
             </div>
           )}
         </section>
 
-        <details className="panel standards-sheet-panel">
+        <details className="panel standards-sheet-panel" id="standards-excel-view" open>
           <summary>
             <div>
-              <span className="label">Optional</span>
-              <h3>Spreadsheet preview</h3>
-              <p className="muted small">Open only when you want to check the Excel or Google Sheet rows.</p>
+              <span className="label">Excel View</span>
+              <h3>Excel-Style Standards Sheet</h3>
+              <p className="muted small">Same rows used by the workbook and Google Sheet sync.</p>
             </div>
-            <span className="summary-action">Show Rows</span>
+            <span className="summary-action">Hide Rows</span>
           </summary>
           {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
           <div className="standards-sheet-scroll">
@@ -1875,13 +1880,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <summary>
             <div>
               <span className="label">Copy-Ready</span>
-              <h3>Weekly onboarding summary for Teams</h3>
+              <h3>Weekly standards summary for Teams</h3>
               <p className="muted small">Open when you want a short note to paste to the team.</p>
             </div>
             <span className="summary-action">Open Summary</span>
           </summary>
           <div className="post-closure-note-toolbar">
-              <CopyTextButton targetId="kpi-weekly-report" label="Copy Onboarding Report" />
+              <CopyTextButton targetId="kpi-weekly-report" label="Copy Standards Report" />
           </div>
           <textarea id="kpi-weekly-report" readOnly rows={Math.min(16, Math.max(8, kpiReportLines.split("\n").length + 1))} defaultValue={kpiReportLines} />
         </details>
@@ -2390,7 +2395,7 @@ Items Still Needing Action
             <div className="ai-tools-intro">
               <span className="label">What This Replaces</span>
               <h3>One home for AI and rule tuning</h3>
-              <p>Use this tab instead of hunting through Reports or Matters for AI help. The spreadsheet, exports, and Google Sheet sync stay in Reports and Onboarding.</p>
+              <p>Use this tab instead of hunting through Reports or Matters for AI help. The spreadsheet, exports, and Google Sheet sync stay in Reports and Standards.</p>
             </div>
             <div className="ai-tools-grid">
               <div className="ai-tool-card">

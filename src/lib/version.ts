@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-consolidated-ui-pass-keep-spreadsheets-2026-07-27";
+export const APP_VERSION = "cwca-standards-graphic-excel-bold-ui-2026-07-28";

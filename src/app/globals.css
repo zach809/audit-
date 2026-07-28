@@ -9640,7 +9640,7 @@ body {
   }
 }
 
-/* Friendly onboarding report: one clear window, simple rows, no extra scorecard clutter. */
+/* Friendly Standards report: one clear window, simple rows, no extra scorecard clutter. */
 .kpi-layout .standards-graphic {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
@@ -9648,6 +9648,228 @@ body {
   border-color: rgba(218, 232, 250, 0.22) !important;
   border-radius: 22px;
   padding: 20px;
+}
+
+/* Bold Standards tab pass: clearer graphic/excel split and stronger readability. */
+.standards-tab {
+  gap: 20px;
+}
+
+.standards-tab .kpi-hero,
+.standards-tab .kpi-panel,
+.standards-tab .standards-sheet-panel,
+.standards-tab .kpi-report-copy {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
+    #1c2d42 !important;
+  border: 2px solid rgba(190, 211, 236, 0.28) !important;
+  box-shadow: 0 18px 42px rgba(4, 12, 24, 0.24);
+}
+
+.standards-tab .kpi-hero h2 {
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.02;
+  margin-bottom: 8px;
+}
+
+.standards-tab .kpi-hero .muted,
+.standards-tab .standards-graphic .muted,
+.standards-tab .standards-sheet-panel .muted {
+  color: #d6e2ef;
+  font-size: 15px;
+}
+
+.standards-view-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+
+.standards-view-switch a {
+  background: #10243a;
+  border: 2px solid rgba(139, 162, 255, 0.5);
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 950;
+  min-height: 42px;
+  padding: 10px 16px;
+  text-decoration: none;
+}
+
+.standards-view-switch a:hover {
+  background: #2563eb;
+  border-color: #9fb2ff;
+}
+
+.standards-tab .kpi-range-form {
+  align-items: end;
+  gap: 12px;
+}
+
+.standards-tab .kpi-range-form label {
+  color: #dbe7f5;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.standards-tab .kpi-range-form input,
+.standards-tab .kpi-range-form select {
+  background: #071321 !important;
+  border: 2px solid rgba(190, 211, 236, 0.26) !important;
+  color: #ffffff !important;
+  font-size: 15px !important;
+  min-height: 42px !important;
+}
+
+.standards-tab .kpi-range-form button,
+.standards-tab .kpi-range-form .button,
+.standards-tab .kpi-download-form button,
+.standards-tab .kpi-download-form .button,
+.standards-tab .standards-online-actions button,
+.standards-tab .standards-online-actions .button {
+  border-radius: 14px !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+  min-height: 42px !important;
+  padding: 9px 15px !important;
+  width: auto !important;
+}
+
+.standards-tab .kpi-range-form button.primary,
+.standards-tab .kpi-download-form .primary {
+  background: #2563eb !important;
+  border: 2px solid #7da2ff !important;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28) !important;
+  color: #ffffff !important;
+}
+
+.standards-tab .standards-attorney-row {
+  background: #132236 !important;
+  border: 2px solid rgba(190, 211, 236, 0.22) !important;
+  border-radius: 16px !important;
+  padding: 16px !important;
+}
+
+.standards-tab .standards-attorney-name strong {
+  color: #ffffff;
+  font-size: 19px !important;
+  line-height: 1.15;
+}
+
+.standards-tab .standards-attorney-name span {
+  color: #d5e0ec !important;
+  font-size: 13px !important;
+  font-weight: 900;
+}
+
+.standards-tab .standards-attorney-name em {
+  background: #144734 !important;
+  border: 2px solid #40d48a !important;
+  color: #d7ffe9 !important;
+  font-size: 13px !important;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.standards-tab .attorney-standard-line span {
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  letter-spacing: 0;
+}
+
+.standards-tab .attorney-standard-line div {
+  background: #314155 !important;
+  border-radius: 999px;
+  height: 14px !important;
+}
+
+.standards-tab .attorney-standard-line b {
+  border-radius: 999px;
+  min-width: 0;
+}
+
+.standards-tab .attorney-standard-line strong {
+  color: #ffffff;
+  font-size: 15px !important;
+}
+
+.standards-tab .standards-sheet-panel {
+  overflow: hidden;
+}
+
+.standards-tab .standards-sheet-panel summary {
+  padding-bottom: 8px;
+}
+
+.standards-tab .standards-sheet-panel .summary-action {
+  background: #e8eef7 !important;
+  border: 0 !important;
+  color: #0b1727 !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+}
+
+.standards-tab .standards-sheet-scroll {
+  background: #f7fbff;
+  border: 2px solid rgba(190, 211, 236, 0.38);
+  border-radius: 14px;
+  max-height: 620px;
+}
+
+.standards-tab .standards-sheet-table {
+  background: #ffffff;
+  color: #0f172a;
+  min-width: 1120px;
+}
+
+.standards-tab .standards-sheet-table th {
+  background: #dbeafe !important;
+  border-color: #b7c7dc !important;
+  color: #0b1b31 !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+  padding: 12px !important;
+}
+
+.standards-tab .standards-sheet-table td {
+  background: #ffffff !important;
+  border-color: #d7e0eb !important;
+  color: #111827 !important;
+  font-size: 15px !important;
+  padding: 11px 12px !important;
+}
+
+.standards-tab .standards-sheet-table tbody tr:nth-child(even) td {
+  background: #f3f8ff !important;
+}
+
+.standards-tab .standards-sheet-table td:nth-child(n+3) {
+  font-weight: 900;
+  text-align: right;
+}
+
+.standards-tab .standards-sheet-table td:first-child,
+.standards-tab .standards-sheet-table td:nth-child(2) {
+  font-weight: 800;
+}
+
+@media (max-width: 900px) {
+  .standards-tab .kpi-range-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  .standards-tab .kpi-range-form button,
+  .standards-tab .kpi-range-form .button,
+  .standards-tab .kpi-download-form button,
+  .standards-tab .kpi-download-form .button,
+  .standards-tab .standards-online-actions button,
+  .standards-tab .standards-online-actions .button {
+    justify-content: center !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
 }
 
 .kpi-layout .standards-graphic .panel-heading {
