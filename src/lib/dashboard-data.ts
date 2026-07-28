@@ -979,7 +979,7 @@ const STANDARDS_HEADERS = [
   "Court date event made",
   "Weekly check-ins completed",
   "Court reminder calls completed",
-  "Worflow completion %",
+  "Workflow completion %",
 ];
 
 export const STANDARDS_SHEET_HEADERS = STANDARDS_HEADERS;

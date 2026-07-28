@@ -119,6 +119,11 @@ function calendarSearchText(cal: ClioCalendarEntry): string {
   return haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name, cal.calendar_owner?.name);
 }
 
+function isFirmPhoneCall(comm: ClioCommunication, clientId: string | null): boolean {
+  if (!isPhoneCallCommunication(communicationSearchText(comm))) return false;
+  return isOutbound(comm, clientId) !== false;
+}
+
 function isPettyTrafficMatter(record: MatterRecord): boolean {
   return haystack(record.matter_number).includes("petty traffic");
 }
@@ -167,6 +172,16 @@ function localDateDistanceDays(a: Date, b: Date): number {
 function endOfLocalBusinessDay(date: Date): Date {
   const parts = localParts(date);
   return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 17, 0, 0);
+}
+
+function startOfLocalDay(date: Date): Date {
+  const parts = localParts(date);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 0, 0, 0);
+}
+
+function endOfLocalDay(date: Date): Date {
+  const parts = localParts(date);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 23, 59, 59);
 }
 
 function withEvidence<T extends { id: number }>(result: AuditItemResult, evidence: Evidence<T>): AuditItemResult {
@@ -510,7 +525,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .map((comm): Evidence<ClioCommunication> | null => {
             const at = commDate(comm);
             if (!at || localDateKey(at) !== localDateKey(weeklyCheckInEvent.at)) return null;
-            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
+            if (!isFirmPhoneCall(comm, record.client_id)) return null;
             return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
           })
           .filter(Boolean) as Evidence<ClioCommunication>[],
@@ -520,7 +535,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     ? (evidence.communications
         .map((comm): (Evidence<ClioCommunication> & { distance: number }) | null => {
           const at = commDate(comm);
-          if (!at || !isPhoneCallCommunication(communicationSearchText(comm))) return null;
+          if (!at || !isFirmPhoneCall(comm, record.client_id)) return null;
           const distance = Math.abs(localDateDistanceDays(at, weeklyCheckInEvent.at));
           if (distance === 0 || distance > 3) return null;
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id), distance };
@@ -534,9 +549,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .map((comm): Evidence<ClioCommunication> | null => {
             const at = commDate(comm);
             if (!at || at < addDaysRaw(firstWeeklyCheckInDeadline, -7)) return null;
-            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
-            const direction = isOutbound(comm, record.client_id);
-            if (direction === false) return null;
+            if (!isFirmPhoneCall(comm, record.client_id)) return null;
             return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
           })
           .filter(Boolean) as Evidence<ClioCommunication>[],
@@ -549,7 +562,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     if (!weeklyCheckInEvent) {
       if (weeklyCallWithoutCalendar && now > firstWeeklyCheckInDeadline) {
         return withEvidence(
-          base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Weekly Calendar Event", firstWeeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
+          base("WEEKLY_CLIENT_CHECKIN", "Late", "Timing Review", firstWeeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
           weeklyCallWithoutCalendar,
         );
       }
@@ -621,13 +634,24 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .map((comm): Evidence<ClioCommunication> | null => {
             const at = commDate(comm);
             if (!at || at < courtReminderCallWindowStart || at > nextCourt.at) return null;
-            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
-            const direction = isOutbound(comm, record.client_id);
-            if (direction === false) return null;
+            if (!isFirmPhoneCall(comm, record.client_id)) return null;
             return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
           })
           .filter(Boolean) as Evidence<ClioCommunication>[],
       )
+    : null;
+  const nearbyCourtReminderCallEvidence = courtReminderCallWindowStart && nextCourt
+    ? (evidence.communications
+        .map((comm): (Evidence<ClioCommunication> & { distance: number }) | null => {
+          const at = commDate(comm);
+          if (!at || !isFirmPhoneCall(comm, record.client_id)) return null;
+          if (at >= courtReminderCallWindowStart && at <= nextCourt.at) return null;
+          if (at < startOfLocalDay(addDaysRaw(courtReminderCallWindowStart, -3)) || at > endOfLocalDay(nextCourt.at)) return null;
+          const distance = Math.abs(localDateDistanceDays(at, courtReminderDeadline ?? nextCourt.at));
+          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id), distance };
+        })
+        .filter(Boolean) as Array<Evidence<ClioCommunication> & { distance: number }>)
+        .sort((a, b) => a.distance - b.distance || b.at.getTime() - a.at.getTime())[0] ?? null
     : null;
   const courtReminderDeadlinePassed = Boolean(courtReminderDeadline && now > courtReminderDeadline);
   const courtReminderMissingReason = courtReminderTemplateEvidence ? "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND" : "CALL_NOT_FOUND_PRE_COURT";
@@ -669,16 +693,29 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         : nextCourt
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
-  const courtReminderItem = nextCourt
-    ? courtReminderCallEvidence || courtReminderDeadlinePassed
-      ? classify("COURT_REMINDER_CALL", courtReminderCallEvidence, courtReminderDeadline, {
-          operationalState: "Waiting until 5:00 PM Illinois time",
-          unknown: Boolean(!courtReminderCallEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
-          reasonCode: commError || courtReminderMissingReason,
-          now,
-        })
-      : base("COURT_REMINDER_CALL", "Pending", "Not Due Yet", courtReminderDeadline, null)
-    : base("COURT_REMINDER_CALL", "N/A", "", null, null);
+  const courtReminderItem = (() => {
+    if (!nextCourt) return base("COURT_REMINDER_CALL", "N/A", "", null, null);
+    if (courtReminderCallEvidence) {
+      return classify("COURT_REMINDER_CALL", courtReminderCallEvidence, courtReminderDeadline, {
+        operationalState: "Waiting until 5:00 PM Illinois time",
+        reasonCode: courtReminderCallEvidence.at > (courtReminderDeadline ?? courtReminderCallEvidence.at) ? "CALL_FOUND_AFTER_REMINDER_GOAL" : null,
+        now,
+      });
+    }
+    if (nearbyCourtReminderCallEvidence) {
+      return withEvidence(
+        base("COURT_REMINDER_CALL", "Late", "Timing Review", courtReminderDeadline, null, "CALL_FOUND_NEARBY_PRE_COURT"),
+        nearbyCourtReminderCallEvidence,
+      );
+    }
+    if (!courtReminderDeadlinePassed) return base("COURT_REMINDER_CALL", "Pending", "Not Due Yet", courtReminderDeadline, null);
+    return classify("COURT_REMINDER_CALL", null, courtReminderDeadline, {
+      operationalState: "Waiting until 5:00 PM Illinois time",
+      unknown: Boolean(commError),
+      reasonCode: commError || courtReminderMissingReason,
+      now,
+    });
+  })();
 
   const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
   const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart);
