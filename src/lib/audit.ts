@@ -629,7 +629,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           .filter(Boolean) as Evidence<ClioCommunication>[],
       )
     : null;
-  const courtReminderWindowIsOpen = Boolean(courtReminderCallWindowStart && now >= courtReminderCallWindowStart);
+  const courtReminderDeadlinePassed = Boolean(courtReminderDeadline && now > courtReminderDeadline);
   const courtReminderMissingReason = courtReminderTemplateEvidence ? "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND" : "CALL_NOT_FOUND_PRE_COURT";
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
@@ -670,9 +670,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
   const courtReminderItem = nextCourt
-    ? courtReminderWindowIsOpen
+    ? courtReminderCallEvidence || courtReminderDeadlinePassed
       ? classify("COURT_REMINDER_CALL", courtReminderCallEvidence, courtReminderDeadline, {
-          operationalState: "Waiting for court reminder call window",
+          operationalState: "Waiting until 5:00 PM Illinois time",
           unknown: Boolean(!courtReminderCallEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
           reasonCode: commError || courtReminderMissingReason,
           now,

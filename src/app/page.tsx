@@ -167,7 +167,7 @@ function ongoingReminderText(stepCode: string): string {
     case "WEEKLY_CLIENT_CHECKIN":
       return "Please confirm the weekly client check-in calendar event and the matching client call communication in Clio.";
     case "COURT_REMINDER_CALL":
-      return "Please confirm the court reminder call or court reminder template was sent before the upcoming court date.";
+      return "Please confirm the court reminder call by 5:00 PM Illinois time on the business day before court.";
     default:
       return "Please open Clio, confirm the proof, and then recheck the task in CWCA.";
   }
