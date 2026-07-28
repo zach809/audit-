@@ -560,6 +560,13 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 type DashboardTab = "workspace" | "matters" | "case-manager" | "standards" | "ongoing" | "post-closure" | "reports" | "debug" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
+const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
+  "SETUP_WELCOME",
+  "SETUP_ATTY_CALL",
+  "SETUP_COURT_DATE",
+  "WEEKLY_CLIENT_CHECKIN",
+  "COURT_REMINDER_CALL",
+]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
@@ -988,49 +995,65 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .sort((a, b) => b.followUp - a.followUp || a.score - b.score || a.attorney.localeCompare(b.attorney));
   const standardRows = Array.from(
     allWorkspaceRows
-      .filter((item) => KPI_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
+      .filter((item) => STANDARDS_GRAPHIC_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
       .reduce((map, item) => {
         const current = map.get(item.caseManager) ?? {
           caseManager: item.caseManager,
           matters: new Set<string>(),
-          welcome: 0,
-          attorneyCall: 0,
-          courtDate: 0,
-          welcomeLate: 0,
-          attorneyCallLate: 0,
-          courtDateLate: 0,
+          steps: {
+            welcome: { completed: 0, expected: 0, late: 0 },
+            attorneyCall: { completed: 0, expected: 0, late: 0 },
+            courtDate: { completed: 0, expected: 0, late: 0 },
+            weeklyCheckIn: { completed: 0, expected: 0, late: 0 },
+            courtReminder: { completed: 0, expected: 0, late: 0 },
+          },
         };
-        current.matters.add(item.row.matterId);
+        const stepKey =
+          item.row.stepCode === "SETUP_WELCOME"
+            ? "welcome"
+            : item.row.stepCode === "SETUP_ATTY_CALL"
+              ? "attorneyCall"
+              : item.row.stepCode === "SETUP_COURT_DATE"
+                ? "courtDate"
+                : item.row.stepCode === "WEEKLY_CLIENT_CHECKIN"
+                  ? "weeklyCheckIn"
+                  : item.row.stepCode === "COURT_REMINDER_CALL"
+                    ? "courtReminder"
+                    : null;
+        if (!stepKey) return map;
+        if (KPI_WORKFLOW_CODES.has(item.row.stepCode)) current.matters.add(item.row.matterId);
+        current.steps[stepKey].expected += 1;
         const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
         const late = item.row.status === "Late";
-        if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
-        if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
-        if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
-        if (late && item.row.stepCode === "SETUP_WELCOME") current.welcomeLate += 1;
-        if (late && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCallLate += 1;
-        if (late && item.row.stepCode === "SETUP_COURT_DATE") current.courtDateLate += 1;
+        if (complete) current.steps[stepKey].completed += 1;
+        if (late) current.steps[stepKey].late += 1;
         map.set(item.caseManager, current);
         return map;
-      }, new Map<string, { caseManager: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; welcomeLate: number; attorneyCallLate: number; courtDateLate: number }>())
+      }, new Map<string, {
+        caseManager: string;
+        matters: Set<string>;
+        steps: Record<"welcome" | "attorneyCall" | "courtDate" | "weeklyCheckIn" | "courtReminder", { completed: number; expected: number; late: number }>;
+      }>())
       .values(),
   )
     .map((item) => {
       const cases = item.matters.size;
-      const completedStandards = item.welcome + item.attorneyCall + item.courtDate;
-      const lateStandards = item.welcomeLate + item.attorneyCallLate + item.courtDateLate;
+      const completedStandards = Object.values(item.steps).reduce((sum, step) => sum + step.completed, 0);
+      const lateStandards = Object.values(item.steps).reduce((sum, step) => sum + step.late, 0);
+      const totalStandards = Object.values(item.steps).reduce((sum, step) => sum + step.expected, 0);
       const onTimeStandards = Math.max(0, completedStandards - lateStandards);
-      const totalStandards = cases * 3;
       const scorePoints = onTimeStandards + lateStandards * 0.5;
       return {
         caseManager: item.caseManager,
         cases,
-        welcome: item.welcome,
-        attorneyCall: item.attorneyCall,
+        steps: item.steps,
+        welcome: item.steps.welcome.completed,
+        attorneyCall: item.steps.attorneyCall.completed,
         newMatters: cases,
-        courtDate: item.courtDate,
-        welcomeLate: item.welcomeLate,
-        attorneyCallLate: item.attorneyCallLate,
-        courtDateLate: item.courtDateLate,
+        courtDate: item.steps.courtDate.completed,
+        welcomeLate: item.steps.welcome.late,
+        attorneyCallLate: item.steps.attorneyCall.late,
+        courtDateLate: item.steps.courtDate.late,
         lateStandards,
         completedStandards,
         completionRate: totalStandards ? Math.round((scorePoints / totalStandards) * 100) : 0,
@@ -1788,7 +1811,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Graphic View</span>
               <h2>Standards by Case Manager</h2>
-              <p className="muted small">Completion view for Welcome Letter, Initial Meeting, and Court Date setup.</p>
+              <p className="muted small">Completion view for setup standards, weekly check-ins, and court reminder calls.</p>
             </div>
           </div>
           {standardRows.length ? (
@@ -1801,21 +1824,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     <em>{item.completionRate}% complete</em>
                   </div>
                   <div className="standards-attorney-bars">
-                    <div className="attorney-standard-line welcome">
-                      <span>Welcome Letter{item.welcomeLate ? ` - ${item.welcomeLate} late` : ""}</span>
-                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.welcome / item.cases) * 100))) : 0}%` }} /></div>
-                      <strong>{item.welcome}/{item.cases}</strong>
-                    </div>
-                    <div className="attorney-standard-line meeting">
-                      <span>Initial Meeting{item.attorneyCallLate ? ` - ${item.attorneyCallLate} late` : ""}</span>
-                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.attorneyCall / item.cases) * 100))) : 0}%` }} /></div>
-                      <strong>{item.attorneyCall}/{item.cases}</strong>
-                    </div>
-                    <div className="attorney-standard-line court-date">
-                      <span>Court Date{item.courtDateLate ? ` - ${item.courtDateLate} late` : ""}</span>
-                      <div><b style={{ width: `${item.cases ? Math.max(4, Math.min(100, Math.round((item.courtDate / item.cases) * 100))) : 0}%` }} /></div>
-                      <strong>{item.courtDate}/{item.cases}</strong>
-                    </div>
+                    {[
+                      { className: "welcome", label: "Welcome Letter", step: item.steps.welcome },
+                      { className: "meeting", label: "Initial Meeting", step: item.steps.attorneyCall },
+                      { className: "court-date", label: "Court Date", step: item.steps.courtDate },
+                      { className: "weekly-checkin", label: "Weekly Check-In", step: item.steps.weeklyCheckIn },
+                      { className: "court-reminder", label: "Court Reminder Call", step: item.steps.courtReminder },
+                    ].map((line) => (
+                      <div className={`attorney-standard-line ${line.className}`} key={line.className}>
+                        <span>{line.label}{line.step.late ? ` - ${line.step.late} late` : ""}</span>
+                        <div><b style={{ width: `${line.step.expected ? Math.max(4, Math.min(100, Math.round((line.step.completed / line.step.expected) * 100))) : 0}%` }} /></div>
+                        <strong>{line.step.expected ? `${line.step.completed}/${line.step.expected}` : "None due"}</strong>
+                      </div>
+                    ))}
                   </div>
                 </article>
               ))}

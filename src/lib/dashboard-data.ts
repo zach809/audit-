@@ -1247,7 +1247,6 @@ type WeeklyComplianceCategory = {
 };
 
 export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
-  { id: "urgent", label: "Urgent matters not cleared daily", uniqueMatters: true },
   { id: "welcome", label: "Welcome letters missing", stepCodes: ["SETUP_WELCOME"] },
   { id: "attorney_call", label: "Attorney phone calls for new Clio matters not scheduled", stepCodes: ["SETUP_ATTY_CALL"] },
   { id: "appearance", label: "Court Appearance Filed template emails missing", stepCodes: ["APPEARANCE_FILING"] },

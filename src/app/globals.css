@@ -6291,6 +6291,14 @@ th,
   --line-rgb: 219, 151, 80;
 }
 
+.attorney-standard-line.weekly-checkin {
+  --line-rgb: 72, 211, 157;
+}
+
+.attorney-standard-line.court-reminder {
+  --line-rgb: 96, 165, 250;
+}
+
 .attorney-standard-line span {
   color: rgba(var(--line-rgb), 0.96);
   font-size: 11px;
@@ -9912,7 +9920,7 @@ body {
 }
 
 .kpi-layout .attorney-standard-line {
-  grid-template-columns: minmax(150px, 0.32fr) minmax(180px, 1fr) 46px;
+  grid-template-columns: minmax(170px, 0.32fr) minmax(180px, 1fr) 74px;
 }
 
 .kpi-layout .attorney-standard-line span {
