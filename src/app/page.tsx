@@ -1871,7 +1871,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <th>Court date event made</th>
                   <th>Weekly check-ins completed</th>
                   <th>Court reminder calls completed</th>
-                  <th>Worflow completion %</th>
+                  <th>Workflow completion %</th>
                 </tr>
               </thead>
               <tbody>

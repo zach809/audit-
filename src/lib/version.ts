@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-ongoing-5pm-deadline-gates-2026-07-28";
+export const APP_VERSION = "cwca-standards-sheet-width-ongoing-logic-2026-07-28";
