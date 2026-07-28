@@ -82,7 +82,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   WEEKLY_CLIENT_CHECKIN: {
     label: "Weekly Client Check-In",
-    goal: "Verify a weekly client check-in/courtesy call calendar event and a same-day client call communication. A nearby call can count as completed with timing review.",
+    goal: "Verify a weekly client check-in/courtesy call calendar event and a client call communication by 5:00 PM Illinois time on the due day. A nearby call can count as completed with timing review.",
     missing: "Weekly client check-in still needs calendar and phone-call proof in Clio.",
     action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists on the same day or nearby date.",
     late: "Weekly client check-in call proof was found, but not on the expected same-day window.",

@@ -247,7 +247,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       : sql`true`;
   const normalizedItemStatus = sql`
     case
-      when i.step_code = 'COURT_REMINDER_CALL'
+      when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else i.status end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
@@ -260,7 +260,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   `;
   const normalizedOperationalState = sql`
     case
-      when i.step_code = 'COURT_REMINDER_CALL'
+      when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Not Due Yet' else i.operational_state end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Needs Court Results' else 'Overdue' end
@@ -273,7 +273,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   `;
   const normalizedReasonCode = sql`
     case
-      when i.step_code = 'COURT_REMINDER_CALL'
+      when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
         then case when i.deadline_at is not null and now() <= i.deadline_at then null else i.reason_code end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
@@ -1292,7 +1292,7 @@ function isClearedByHumanReview(item: WorkspaceAuditItem): boolean {
 
 function isIncompleteForWeeklyComparison(item: WorkspaceAuditItem): boolean {
   if (item.metric_excluded || isClearedByHumanReview(item)) return false;
-  if (item.step_code === "COURT_REMINDER_CALL" && item.deadline_at) {
+  if (["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"].includes(item.step_code) && item.deadline_at) {
     const deadline = item.deadline_at instanceof Date ? item.deadline_at : new Date(item.deadline_at);
     if (Number.isFinite(deadline.getTime()) && deadline >= new Date()) return false;
   }

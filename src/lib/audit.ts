@@ -164,9 +164,9 @@ function localDateDistanceDays(a: Date, b: Date): number {
   return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
 }
 
-function endOfLocalDay(date: Date): Date {
+function endOfLocalBusinessDay(date: Date): Date {
   const parts = localParts(date);
-  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 23, 59, 59);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 17, 0, 0);
 }
 
 function withEvidence<T extends { id: number }>(result: AuditItemResult, evidence: Evidence<T>): AuditItemResult {
@@ -503,7 +503,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .filter((event) => event.at > now)
     .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
   const weeklyCheckInEvent = pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
-  const weeklyCheckInDeadline = weeklyCheckInEvent ? endOfLocalDay(weeklyCheckInEvent.at) : firstWeeklyCheckInDeadline;
+  const weeklyCheckInDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : firstWeeklyCheckInDeadline;
   const weeklyCheckInCall = weeklyCheckInEvent
     ? earliest(
         evidence.communications
@@ -566,7 +566,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
     }
     if (now <= weeklyCheckInDeadline) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Waiting for same-day call proof", weeklyCheckInDeadline, null), weeklyCheckInEvent);
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Not Due Yet", weeklyCheckInDeadline, null), weeklyCheckInEvent);
     }
     if (commError) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError), weeklyCheckInEvent);

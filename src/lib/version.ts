@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-court-reminder-5pm-gate-2026-07-28";
+export const APP_VERSION = "cwca-ongoing-5pm-deadline-gates-2026-07-28";
