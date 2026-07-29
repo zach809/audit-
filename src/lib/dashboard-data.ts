@@ -3,6 +3,7 @@ import { initDb, db } from "./db";
 import { workflowLabel } from "./workflow-rules";
 import { actionFor, displayAuditStatus, priorityFor, timingGoalFor, whyFlagged } from "./audit-display";
 import { reviewResult } from "./review-shared";
+import { APP_VERSION } from "./version";
 
 export type DashboardFilters = {
   attorney?: string;
@@ -1257,6 +1258,8 @@ type WeeklyComplianceCategory = {
   id: string;
   label: string;
   stepCodes?: string[];
+  reasonCodes?: string[];
+  excludeReasonCodes?: string[];
   uniqueMatters?: boolean;
 };
 
@@ -1267,8 +1270,18 @@ export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
   { id: "weekly_checkup", label: "Weekly checkup calls not completed", stepCodes: ["WEEKLY_CLIENT_CHECKIN"] },
   { id: "results_calls", label: "Results calls not completed", stepCodes: ["POST_COURT_CALL"] },
   { id: "court_results", label: "Court Results template emails missing", stepCodes: ["COURT_RESULTS"] },
-  { id: "court_reminder_call", label: "Court reminder calls not completed", stepCodes: ["COURT_REMINDER_CALL"] },
-  { id: "court_reminder_template", label: "Court reminder template emails missing", stepCodes: ["COURT_REMINDER_CALL"] },
+  {
+    id: "court_reminder_call",
+    label: "Court reminder calls not completed",
+    stepCodes: ["COURT_REMINDER_CALL"],
+    reasonCodes: ["REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND", "CALL_NOT_FOUND_PRE_COURT"],
+  },
+  {
+    id: "court_reminder_template",
+    label: "Court reminder template emails missing",
+    stepCodes: ["COURT_REMINDER_CALL"],
+    reasonCodes: ["CALL_NOT_FOUND_PRE_COURT"],
+  },
 ];
 
 function weekStartDateKey(baseDate: Date): string {
@@ -1300,11 +1313,15 @@ function isClearedByHumanReview(item: WorkspaceAuditItem): boolean {
 
 function isIncompleteForWeeklyComparison(item: WorkspaceAuditItem): boolean {
   if (item.metric_excluded || isClearedByHumanReview(item)) return false;
+  if (["WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"].includes(item.step_code)) {
+    if (item.reason_code === "NOT_FOUND") return false;
+    if (item.audit_version && item.audit_version !== APP_VERSION) return false;
+  }
   if (["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"].includes(item.step_code) && item.deadline_at) {
     const deadline = item.deadline_at instanceof Date ? item.deadline_at : new Date(item.deadline_at);
     if (Number.isFinite(deadline.getTime()) && deadline >= new Date()) return false;
   }
-  return ["Missing", "Unknown", "Late", "Needs Review", "Needs Recheck"].includes(item.item_status);
+  return ["Missing", "Unknown", "Needs Review", "Needs Recheck"].includes(item.item_status);
 }
 
 function countWeeklyCategory(
@@ -1319,7 +1336,10 @@ function countWeeklyCategory(
     if (!isIncompleteForWeeklyComparison(item)) return false;
     const dateKey = comparisonDateKey(item);
     if (!dateKey || dateKey < from || dateKey > to) return false;
-    return !category.stepCodes?.length || category.stepCodes.includes(item.step_code);
+    if (category.stepCodes?.length && !category.stepCodes.includes(item.step_code)) return false;
+    if (category.reasonCodes?.length && !category.reasonCodes.includes(item.reason_code ?? "")) return false;
+    if (category.excludeReasonCodes?.length && category.excludeReasonCodes.includes(item.reason_code ?? "")) return false;
+    return true;
   });
 
   if (!category.uniqueMatters) return matching.length;
@@ -1329,8 +1349,10 @@ function countWeeklyCategory(
 export function weeklyComplianceComparisonRows(
   items: WorkspaceAuditItem[],
   baseDate: Date = new Date(),
+  useLastCompletedWeek = true,
 ): WeeklyComplianceComparisonSection[] {
-  const currentStart = weekStartDateKey(baseDate);
+  const anchorStart = weekStartDateKey(baseDate);
+  const currentStart = useLastCompletedWeek ? addDateKeyDays(anchorStart, -7) : anchorStart;
   const currentEnd = addDateKeyDays(currentStart, 6);
   const previousStart = addDateKeyDays(currentStart, -7);
   const previousEnd = addDateKeyDays(currentStart, -1);
@@ -1359,7 +1381,7 @@ export function weeklyComplianceComparisonRows(
 export async function weeklyComplianceComparisonCsv(filters: DashboardFilters = {}): Promise<string> {
   const { workspaceItems } = await getDashboardData({});
   const baseDate = filters.to ? new Date(`${filters.to}T12:00:00`) : new Date();
-  const sections = weeklyComplianceComparisonRows(workspaceItems, baseDate);
+  const sections = weeklyComplianceComparisonRows(workspaceItems, baseDate, !filters.to);
   const rows = sections.flatMap((section) => [
     [section.caseManager, "", "", "", ""],
     ["Compliance Category", `Previous Week (${section.previousWeekLabel})`, `Current Week (${section.currentWeekLabel})`, "Change", "Meaning"],

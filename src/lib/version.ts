@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-standards-last-week-no-future-dates-2026-07-28";
+export const APP_VERSION = "cwca-weekly-reports-completed-week-accurate-counts-2026-07-29";

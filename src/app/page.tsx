@@ -821,6 +821,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const weeklyComplianceSections = weeklyComplianceComparisonRows(
     dashboardData.workspaceItems as WorkspaceAuditItem[],
     filters.to ? new Date(`${filters.to}T12:00:00`) : new Date(),
+    !filters.to,
   );
   const caseManagerWorkspaceRows = allWorkspaceRows.filter(
     (item) => !workspaceCaseManagerFilter || item.caseManager.toLowerCase() === workspaceCaseManagerFilter.toLowerCase(),
