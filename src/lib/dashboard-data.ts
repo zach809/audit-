@@ -1271,12 +1271,6 @@ export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
   { id: "results_calls", label: "Results calls not completed", stepCodes: ["POST_COURT_CALL"] },
   { id: "court_results", label: "Court Results template emails missing", stepCodes: ["COURT_RESULTS"] },
   {
-    id: "court_reminder_call",
-    label: "Court reminder calls not completed",
-    stepCodes: ["COURT_REMINDER_CALL"],
-    reasonCodes: ["REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND", "CALL_NOT_FOUND_PRE_COURT"],
-  },
-  {
     id: "court_reminder_template",
     label: "Court reminder template emails missing",
     stepCodes: ["COURT_REMINDER_CALL"],
