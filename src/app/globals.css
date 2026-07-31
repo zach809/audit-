@@ -10215,6 +10215,19 @@ body {
   padding: 8px 12px !important;
 }
 
+.inline-action-group,
+.ongoing-action-buttons form {
+  align-items: center !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.inline-action-group form,
+.ongoing-action-buttons form {
+  margin: 0 !important;
+}
+
 .cm-portal-shell {
   max-width: 1280px !important;
 }

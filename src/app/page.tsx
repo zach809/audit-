@@ -2015,7 +2015,24 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 <h3>Which Clients Need What</h3>
                 <p className="muted small">Use this list to see the exact client, missing item, due time, and Clio tab to open.</p>
               </div>
-              <CopyTextButton targetId="ongoing-teams-reminder" label="Copy Team Reminder" />
+              <div className="inline-action-group">
+                {ongoingFollowUpItems.length ? (
+                  <form action="/api/audit/recheck-items" method="post">
+                    <input type="hidden" name="attorney" value={filters.attorney} />
+                    <input type="hidden" name="overall" value={filters.overall} />
+                    <input type="hidden" name="from" value={filters.from} />
+                    <input type="hidden" name="to" value={filters.to} />
+                    <input type="hidden" name="tab" value="ongoing" />
+                    <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
+                    <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+                    {ongoingFollowUpItems.map((item) => (
+                      <input type="hidden" name="matter_id" value={item.row.matterId} key={`${item.row.matterId}-${item.row.stepCode}`} />
+                    ))}
+                    <button className="button compact primary" type="submit">Refresh Visible Proofs</button>
+                  </form>
+                ) : null}
+                <CopyTextButton targetId="ongoing-teams-reminder" label="Copy Team Reminder" />
+              </div>
             </div>
             <textarea id="ongoing-teams-reminder" className="sr-copy-source" readOnly defaultValue={ongoingReminderLines} />
             {ongoingFollowUpItems.length ? (
@@ -2043,6 +2060,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                         {clioLinks.map((link) => (
                           <a className="button compact primary" href={link.href} target="_blank" rel="noreferrer" key={link.label}>{link.label}</a>
                         ))}
+                        <form action="/api/audit/recheck-items" method="post">
+                          <input type="hidden" name="matter_id" value={item.row.matterId} />
+                          <input type="hidden" name="attorney" value={filters.attorney} />
+                          <input type="hidden" name="overall" value={filters.overall} />
+                          <input type="hidden" name="from" value={filters.from} />
+                          <input type="hidden" name="to" value={filters.to} />
+                          <input type="hidden" name="tab" value="ongoing" />
+                          <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
+                          <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+                          <button className="button compact" type="submit">{item.row.stepCode === "COURT_REMINDER_CALL" ? "Check Template Now" : "Refresh Proof"}</button>
+                        </form>
                         <a className="button compact" href={caseManagerPortalLink(item.caseManager)}>Open CM Task Page</a>
                         {proofHref ? <a className="button compact" href={proofHref} target="_blank" rel="noreferrer">Open Saved Proof</a> : null}
                       </div>
