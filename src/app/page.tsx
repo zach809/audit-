@@ -256,6 +256,18 @@ function isClosedByReview(item: DashboardItem | WorkspaceRow): boolean {
   return item.reviewDecision === "Resolved" || item.reviewDecision === "No Action Needed" || item.reviewDecision === "Approved Exception";
 }
 
+function isApprovedExceptionReview(item: DashboardItem | WorkspaceRow): boolean {
+  return item.reviewDecision === "Approved Exception";
+}
+
+function isCompleteForScore(item: DashboardItem | WorkspaceRow): boolean {
+  return item.status === "On Track" || item.status === "Late" || isClosedByReview(item) || Boolean(item.evidenceRefId);
+}
+
+function isLateForScore(item: DashboardItem | WorkspaceRow): boolean {
+  return item.status === "Late" && !isApprovedExceptionReview(item);
+}
+
 function itemNeedsAttention(item: DashboardItem | WorkspaceRow): boolean {
   if (isClosedByReview(item)) return false;
   return ["Missing", "Late", "Unknown", "Needs Recheck", "Needs Review"].includes(item.status);
@@ -959,6 +971,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     checked: allWorkspaceRows.filter((item) => item.row.stepCode === code).length,
   }));
   const maxWorkflowCount = Math.max(1, ...workflowAreaBreakdown.map((item) => item.followUp));
+  const standardsDefaultFrom = lastWeekStart;
+  const standardsDefaultTo = lastWeekEnd;
+  const standardsActiveFrom = filters.from || standardsDefaultFrom;
+  const standardsActiveTo = filters.to || standardsDefaultTo;
   const kpiRows = allWorkspaceRows.filter(
     (item) =>
       KPI_WORKFLOW_CODES.has(item.row.stepCode) &&
@@ -1028,8 +1044,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         if (!stepKey) return map;
         if (KPI_WORKFLOW_CODES.has(item.row.stepCode)) current.matters.add(item.row.matterId);
         current.steps[stepKey].expected += 1;
-        const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
-        const late = item.row.status === "Late";
+        const complete = isCompleteForScore(item.row);
+        const late = isLateForScore(item.row);
         if (complete) current.steps[stepKey].completed += 1;
         if (late) current.steps[stepKey].late += 1;
         map.set(item.caseManager, current);
@@ -1090,8 +1106,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         };
         current.matters.add(item.row.matterId);
         current.expected += 1;
-        const late = item.row.status === "Late";
-        const complete = item.row.status === "On Track" || late || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        const late = isLateForScore(item.row);
+        const complete = isCompleteForScore(item.row);
         if (complete) {
           current.completed += 1;
           current.scorePoints += late ? 0.5 : 1;
@@ -1177,8 +1193,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     const params = new URLSearchParams({ window: "this-week", cmname: caseManager });
     return `/case-manager?${params.toString()}`;
   };
-  const standardsPreviewFrom = filters.from || lastWeekStart;
-  const standardsPreviewTo = filters.to || lastWeekEnd;
+  const standardsPreviewFrom = standardsActiveFrom;
+  const standardsPreviewTo = standardsActiveTo;
   const standardsSheetPreviewRows = Array.from(
     allWorkspaceRows
       .filter((item) => (KPI_WORKFLOW_CODES.has(item.row.stepCode) || item.row.stepCode === "WEEKLY_CLIENT_CHECKIN" || item.row.stepCode === "COURT_REMINDER_CALL") && !item.row.metricExcluded)
@@ -1202,7 +1218,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         };
         current.expectedStandards += 1;
         if (KPI_WORKFLOW_CODES.has(item.row.stepCode)) current.matters.add(item.row.matterId);
-        const complete = item.row.status === "On Track" || item.row.status === "Late" || isClosedByReview(item.row) || Boolean(item.row.evidenceRefId);
+        const complete = isCompleteForScore(item.row);
         if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
         if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
         if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
@@ -1247,7 +1263,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const kpiTopAttention = kpiAttorneyScores.filter((item) => item.followUp > 0).slice(0, 8);
   const kpiReportLines = [
     `Weekly CWCA Standards Report`,
-    `Date range: ${filters.from || weekStart} to ${filters.to || today}`,
+    `Date range: ${standardsActiveFrom} to ${standardsActiveTo}`,
     `Checked: Welcome Letter Sent, Initial Meeting Set, Court Date Added To Clio`,
     ``,
     `Overall standards score: ${kpiScore}% (${kpiGrade})`,
@@ -1753,11 +1769,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <input type="hidden" name="tab" value="standards" />
             <label>
               From
-              <input name="from" type="date" defaultValue={filters.from || weekStart} />
+              <input name="from" type="date" defaultValue={standardsActiveFrom} />
             </label>
             <label>
               To
-              <input name="to" type="date" defaultValue={filters.to || today} />
+              <input name="to" type="date" defaultValue={standardsActiveTo} />
             </label>
             <label>
               Attorney
@@ -1775,16 +1791,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
             <input type="hidden" name="attorney" value={filters.attorney} />
             <input type="hidden" name="overall" value={filters.overall} />
-            <input type="hidden" name="from" value={filters.from} />
-            <input type="hidden" name="to" value={filters.to} />
+            <input type="hidden" name="from" value={standardsActiveFrom} />
+            <input type="hidden" name="to" value={standardsActiveTo} />
             <button className="button primary" type="submit">Download Standards Workbook</button>
           </form>
           <div className="standards-online-actions">
             <form action="/api/standards/google-sync" method="post">
               <input type="hidden" name="attorney" value={filters.attorney} />
               <input type="hidden" name="overall" value={filters.overall} />
-              <input type="hidden" name="from" value={filters.from || weekStart} />
-              <input type="hidden" name="to" value={filters.to || today} />
+              <input type="hidden" name="from" value={standardsActiveFrom} />
+              <input type="hidden" name="to" value={standardsActiveTo} />
               <button className="button" type="submit" disabled={!googleSyncReady}>Sync Google Sheet</button>
             </form>
             {googleSheetUrl ? <a className="button" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Google Sheet</a> : null}

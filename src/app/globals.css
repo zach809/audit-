@@ -10031,3 +10031,247 @@ body {
     flex-direction: column;
   }
 }
+
+/* Consolidated UI pass: cleaner, bolder, and easier to scan without adding duplicate screens. */
+.shell {
+  max-width: 1640px !important;
+  padding-left: clamp(16px, 3vw, 36px) !important;
+  padding-right: clamp(16px, 3vw, 36px) !important;
+}
+
+.shell > .app-header.topbar {
+  border-radius: 28px !important;
+  gap: 22px !important;
+  min-height: 210px !important;
+}
+
+.shell > .app-header.topbar::after {
+  display: none !important;
+}
+
+.shell > .app-header.topbar .header-actions {
+  background: rgba(8, 18, 32, 0.42) !important;
+  border: 1px solid rgba(203, 219, 239, 0.16) !important;
+  border-radius: 22px !important;
+  gap: 10px !important;
+  padding: 10px !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type .primary {
+  font-size: 15px !important;
+  min-height: 46px !important;
+  min-width: 156px !important;
+  overflow: hidden !important;
+  padding: 10px 16px !important;
+  text-overflow: ellipsis !important;
+}
+
+.shell > .app-header.topbar .header-actions form:first-of-type .primary::before {
+  display: none !important;
+}
+
+.shell > .app-header.topbar .header-actions .badge,
+.shell > .app-header.topbar .header-actions form:last-of-type button,
+.shell > .app-header.topbar .header-actions > a.button {
+  font-size: 13px !important;
+  min-height: 46px !important;
+  padding: 9px 14px !important;
+}
+
+.dashboard-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+  padding: 8px !important;
+}
+
+.dashboard-tab {
+  border-radius: 14px !important;
+  min-height: 62px !important;
+  padding: 12px 14px !important;
+}
+
+.dashboard-tab strong {
+  font-size: 15px !important;
+}
+
+.dashboard-tab span {
+  color: #d5dfeb !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+}
+
+.standards-tab .kpi-hero {
+  display: grid !important;
+  gap: 14px !important;
+}
+
+.standards-tab .kpi-range-form {
+  grid-template-columns: minmax(150px, 180px) minmax(150px, 180px) minmax(220px, 1fr) repeat(3, max-content) !important;
+}
+
+.standards-tab .kpi-download-form button,
+.standards-tab .kpi-download-form .button {
+  min-width: 0 !important;
+}
+
+.standards-tab .standards-attorney-row {
+  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr) !important;
+}
+
+.standards-tab .standards-attorney-name strong,
+.ongoing-cm-person strong,
+.cm-clear-first-card h3,
+.cm-task-card h2 {
+  font-size: clamp(18px, 1.6vw, 22px) !important;
+}
+
+.standards-tab .attorney-standard-line {
+  grid-template-columns: minmax(190px, 260px) minmax(240px, 1fr) 86px !important;
+  min-height: 26px !important;
+}
+
+.standards-tab .attorney-standard-line div {
+  background: rgba(219, 231, 245, 0.22) !important;
+  height: 14px !important;
+}
+
+.standards-tab .attorney-standard-line b {
+  box-shadow: none !important;
+}
+
+.standards-tab .attorney-standard-line.welcome b {
+  background: #5ee39d !important;
+}
+
+.standards-tab .attorney-standard-line.meeting b {
+  background: #8ea2ff !important;
+}
+
+.standards-tab .attorney-standard-line.court-date b {
+  background: #f5b865 !important;
+}
+
+.standards-tab .attorney-standard-line.weekly-checkin b {
+  background: #a9d6cf !important;
+}
+
+.standards-tab .attorney-standard-line.court-reminder b {
+  background: #76a7ff !important;
+}
+
+.standards-tab .standards-sheet-scroll {
+  max-width: 100% !important;
+}
+
+.standards-tab .standards-sheet-table {
+  min-width: 1600px !important;
+}
+
+.ongoing-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+}
+
+.ongoing-cm-table {
+  display: grid !important;
+  gap: 10px !important;
+}
+
+.ongoing-cm-header,
+.ongoing-cm-row {
+  grid-template-columns: minmax(180px, 1.2fr) minmax(160px, 1fr) repeat(3, minmax(150px, 0.9fr)) minmax(120px, 0.7fr) !important;
+}
+
+.ongoing-cm-row {
+  border-radius: 16px !important;
+  padding: 14px 16px !important;
+}
+
+.ongoing-status,
+.ongoing-followup {
+  border-radius: 999px !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+  min-height: 34px !important;
+}
+
+.ongoing-action-panel {
+  margin-top: 18px !important;
+}
+
+.ongoing-action-list {
+  display: grid !important;
+  gap: 10px !important;
+}
+
+.ongoing-action-card {
+  border-radius: 16px !important;
+  padding: 14px !important;
+}
+
+.ongoing-action-buttons .button,
+.cm-task-buttons .button,
+.cm-clear-first-card .button {
+  min-height: 38px !important;
+  min-width: 0 !important;
+  padding: 8px 12px !important;
+}
+
+.cm-portal-shell {
+  max-width: 1280px !important;
+}
+
+.cm-notification-strip {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+}
+
+.cm-notification-strip > div {
+  border-radius: 14px !important;
+  min-height: 112px !important;
+  padding: 14px !important;
+}
+
+.cm-clear-first-list,
+.cm-task-list {
+  gap: 12px !important;
+}
+
+.cm-clear-first-card {
+  grid-template-columns: minmax(200px, 1.1fr) minmax(180px, 0.9fr) minmax(160px, 0.8fr) !important;
+  padding: 12px !important;
+}
+
+.cm-task-card {
+  border-radius: 18px !important;
+  padding: 18px !important;
+}
+
+.cm-task-meta {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+}
+
+.cm-next-step,
+.cm-client-reminder,
+.cm-task-opportunity {
+  border-radius: 12px !important;
+  padding: 12px !important;
+}
+
+@media (max-width: 1100px) {
+  .standards-tab .kpi-range-form,
+  .ongoing-cm-header,
+  .ongoing-cm-row,
+  .cm-clear-first-card {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ongoing-cm-header {
+    display: none !important;
+  }
+
+  .standards-tab .kpi-range-form button,
+  .standards-tab .kpi-range-form .button,
+  .standards-tab .standards-online-actions button,
+  .standards-tab .standards-online-actions .button {
+    max-width: none !important;
+    width: 100% !important;
+  }
+}

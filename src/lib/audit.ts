@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, isBusinessDay, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
+import { addBusinessDaysDeadline, addWeekdayHours, businessDayEnd, effectiveIntake, isBusinessDay, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -167,6 +167,13 @@ function localDateDistanceDays(a: Date, b: Date): number {
   const aUtc = Date.UTC(ay, am - 1, ad);
   const bUtc = Date.UTC(by, bm - 1, bd);
   return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
+}
+
+function nearestByLocalDate<T>(items: Evidence<T>[], anchor: Date, maxDistanceDays: number): (Evidence<T> & { distance: number }) | null {
+  return (items
+    .map((item) => ({ ...item, distance: Math.abs(localDateDistanceDays(item.at, anchor)) }))
+    .filter((item) => item.distance <= maxDistanceDays)
+    .sort((a, b) => a.distance - b.distance || a.at.getTime() - b.at.getTime())[0] ?? null);
 }
 
 function endOfLocalBusinessDay(date: Date): Date {
@@ -537,50 +544,33 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     })
     .filter(Boolean) as Evidence<ClioCalendarEntry>[];
 
+  const weeklyCheckInCourtDeadline = lastCourtEnd ? businessDayEnd(addDaysRaw(lastCourtEnd, 8)) : null;
+  const weeklyCheckInDueAnchor = weeklyCheckInCourtDeadline ?? firstWeeklyCheckInDeadline;
+  const nearestWeeklyCheckInEvent = nearestByLocalDate(weeklyCheckInEvents, weeklyCheckInDueAnchor, weeklyCheckInCourtDeadline ? 3 : 7);
   const pastOrTodayWeeklyCheckIn = weeklyCheckInEvents
     .filter((event) => event.at <= now)
     .sort((a, b) => b.at.getTime() - a.at.getTime())[0] ?? null;
   const nextWeeklyCheckIn = weeklyCheckInEvents
     .filter((event) => event.at > now)
     .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
-  const weeklyCheckInEvent = pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
-  const weeklyCheckInCourtDeadline = lastCourtEnd ? endOfLocalBusinessDay(addDaysRaw(lastCourtEnd, 8)) : null;
+  const weeklyCheckInEvent = nearestWeeklyCheckInEvent ?? pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
   const weeklyCheckInCalendarDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : null;
   const weeklyCheckInDeadline = weeklyCheckInCourtDeadline ?? weeklyCheckInCalendarDeadline ?? firstWeeklyCheckInDeadline;
-  const weeklyCheckInCall = weeklyCheckInEvent
-    ? earliest(
-        evidence.communications
-          .map((comm): Evidence<ClioCommunication> | null => {
-            const at = commDate(comm);
-            if (!at || localDateKey(at) !== localDateKey(weeklyCheckInEvent.at)) return null;
-            if (!isFirmPhoneCall(comm, record.client_id)) return null;
-            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
-          })
-          .filter(Boolean) as Evidence<ClioCommunication>[],
-      )
-    : null;
-  const nearbyWeeklyCheckInCall = weeklyCheckInEvent
-    ? (evidence.communications
-        .map((comm): (Evidence<ClioCommunication> & { distance: number }) | null => {
-          const at = commDate(comm);
-          if (!at || !isFirmPhoneCall(comm, record.client_id)) return null;
-          const distance = Math.abs(localDateDistanceDays(at, weeklyCheckInEvent.at));
-          if (distance === 0 || distance > 3) return null;
-          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id), distance };
-        })
-        .filter(Boolean) as Array<Evidence<ClioCommunication> & { distance: number }>)
-        .sort((a, b) => a.distance - b.distance || a.at.getTime() - b.at.getTime())[0] ?? null
-    : null;
+  const weeklyCheckInCallAnchor = weeklyCheckInCourtDeadline ?? weeklyCheckInEvent?.at ?? weeklyCheckInDeadline;
+  const weeklyPhoneCalls = evidence.communications
+    .map((comm): Evidence<ClioCommunication> | null => {
+      const at = commDate(comm);
+      if (!at || !isFirmPhoneCall(comm, record.client_id)) return null;
+      return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCommunication>[];
+  const weeklyCheckInCall = earliest(
+    weeklyPhoneCalls.filter((call) => localDateKey(call.at) === localDateKey(weeklyCheckInCallAnchor)),
+  );
+  const nearbyWeeklyCheckInCall = nearestByLocalDate(weeklyPhoneCalls, weeklyCheckInCallAnchor, 3);
   const weeklyCallWithoutCalendar = !weeklyCheckInEvent
     ? earliest(
-        evidence.communications
-          .map((comm): Evidence<ClioCommunication> | null => {
-            const at = commDate(comm);
-            if (!at || at < addDaysRaw(weeklyCheckInDeadline, -8)) return null;
-            if (!isFirmPhoneCall(comm, record.client_id)) return null;
-            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
-          })
-          .filter(Boolean) as Evidence<ClioCommunication>[],
+        weeklyPhoneCalls.filter((call) => call.at >= addDaysRaw(weeklyCheckInDeadline, -8)),
       )
     : null;
   const weeklyCheckInItem = (() => {
@@ -601,9 +591,12 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       });
     }
     if (weeklyCheckInCall) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null), weeklyCheckInCall);
+      return classify("WEEKLY_CLIENT_CHECKIN", weeklyCheckInCall, weeklyCheckInDeadline, {
+        reasonCode: weeklyCheckInCall.at > weeklyCheckInDeadline ? "CALL_FOUND_NEARBY_DATE" : null,
+        now,
+      });
     }
-    if (nearbyWeeklyCheckInCall) {
+    if (nearbyWeeklyCheckInCall && nearbyWeeklyCheckInCall.distance > 0 && now > weeklyCheckInDeadline) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
     }
     if (now <= weeklyCheckInDeadline) {
