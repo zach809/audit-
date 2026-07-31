@@ -154,7 +154,7 @@ function problemClioLinks(matterId: string, stepCode: string): Array<{ href: str
   }
 
   if (stepCode === "COURT_REMINDER_CALL") {
-    return [calendar, communications];
+    return [communications];
   }
 
   return [{ href: clioMatterPath(matterId), label: "Open Matter" }];
@@ -167,7 +167,7 @@ function ongoingReminderText(stepCode: string): string {
     case "WEEKLY_CLIENT_CHECKIN":
       return "Please confirm the weekly client check-in event and call proof by 5:00 PM Illinois time one week plus one day after the last court date.";
     case "COURT_REMINDER_CALL":
-      return "Please confirm the court reminder call by 5:00 PM Illinois time on the business day before court.";
+      return "Please confirm the court reminder email template was sent by 5:00 PM Illinois time on the business day before court.";
     default:
       return "Please open Clio, confirm the proof, and then recheck the task in CWCA.";
   }
@@ -1197,7 +1197,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           attorneyCall: 0,
           courtDate: 0,
           weeklyCheckIns: 0,
-          courtReminderCalls: 0,
+          courtReminderTemplates: 0,
           expectedStandards: 0,
         };
         current.expectedStandards += 1;
@@ -1207,15 +1207,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
         if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
         if (complete && item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") current.weeklyCheckIns += 1;
-        if (complete && item.row.stepCode === "COURT_REMINDER_CALL") current.courtReminderCalls += 1;
+        if (complete && item.row.stepCode === "COURT_REMINDER_CALL") current.courtReminderTemplates += 1;
         map.set(key, current);
         return map;
-      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; weeklyCheckIns: number; courtReminderCalls: number; expectedStandards: number }>())
+      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; weeklyCheckIns: number; courtReminderTemplates: number; expectedStandards: number }>())
       .values(),
   )
     .map((row) => {
       const newMatters = row.matters.size;
-      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderCalls;
+      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderTemplates;
       const expected = row.expectedStandards;
       return {
         caseManager: row.caseManager,
@@ -1226,7 +1226,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         welcome: row.welcome,
         courtDate: row.courtDate,
         weeklyCheckIns: row.weeklyCheckIns,
-        courtReminderCalls: row.courtReminderCalls,
+        courtReminderTemplates: row.courtReminderTemplates,
         completion: expected ? `${Math.round((completed / expected) * 100)}%` : "0%",
       };
     })
@@ -1820,7 +1820,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Graphic View</span>
               <h2>Standards by Case Manager</h2>
-              <p className="muted small">Completion view for setup standards, weekly check-ins, and court reminder calls.</p>
+              <p className="muted small">Completion view for setup standards, weekly check-ins, and court reminder template emails.</p>
             </div>
           </div>
           {standardRows.length ? (
@@ -1838,7 +1838,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                       { className: "meeting", label: "Initial Meeting", step: item.steps.attorneyCall },
                       { className: "court-date", label: "Court Date", step: item.steps.courtDate },
                       { className: "weekly-checkin", label: "Weekly Check-In", step: item.steps.weeklyCheckIn },
-                      { className: "court-reminder", label: "Court Reminder Call", step: item.steps.courtReminder },
+                      { className: "court-reminder", label: "Court Reminder Email", step: item.steps.courtReminder },
                     ].map((line) => (
                       <div className={`attorney-standard-line ${line.className}`} key={line.className}>
                         <span>{line.label}{line.step.late ? ` - ${line.step.late} late` : ""}</span>
@@ -1879,7 +1879,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <th>Welcome letters sent</th>
                   <th>Court date event made</th>
                   <th>Weekly check-ins completed</th>
-                  <th>Court reminder calls completed</th>
+                  <th>Court reminder template emails sent</th>
                   <th>Workflow completion %</th>
                 </tr>
               </thead>
@@ -1893,7 +1893,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     <td>{row.welcome}</td>
                     <td>{row.courtDate}</td>
                     <td>{row.weeklyCheckIns}</td>
-                    <td>{row.courtReminderCalls}</td>
+                    <td>{row.courtReminderTemplates}</td>
                     <td>{row.completion}</td>
                   </tr>
                 )) : (

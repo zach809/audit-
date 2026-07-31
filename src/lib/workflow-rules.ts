@@ -65,12 +65,12 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
     unknown: "Please recheck this matter before coaching. The app could not confirm the post-court call from Clio.",
   },
   COURT_REMINDER_CALL: {
-    label: "Court Reminder Call",
-    goal: "Complete or log the court reminder call on the prior business day before court, by 5:00 PM.",
-    missing: "Court reminder call still needs phone-call proof in Clio.",
-    action: "Check the Communications tab for a phone-call log from the business day before court. The reminder email template is helpful, but it does not clear the call by itself.",
-    late: "Court reminder call proof was found, but it was completed after the reminder goal.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm the court reminder call from Clio.",
+    label: "Court Reminder Email",
+    goal: "Send the court reminder email template before court, due by 5:00 PM Illinois time on the prior business day.",
+    missing: "Court reminder email still needs template proof in Clio.",
+    action: "Check or send the court reminder email template in the matter Communications tab.",
+    late: "Court reminder email proof was found, but it was completed after the reminder goal.",
+    unknown: "Please recheck this matter before coaching. The app could not confirm the court reminder email from Clio.",
   },
   CLIENT_FOLLOWUP: {
     label: "Client Follow-Up",

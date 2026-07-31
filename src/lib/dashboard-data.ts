@@ -526,7 +526,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     "Appearance Filed",
     "Court Results",
     "Post-Court Call",
-    "Court Reminder Call",
+    "Court Reminder Email",
     "Client Follow-Up",
     "Weekly Client Check-In",
     "Matter Created Date",
@@ -973,7 +973,7 @@ type StandardsReportRow = {
   welcome: number;
   courtDate: number;
   weeklyCheckIns: number;
-  courtReminderCalls: number;
+  courtReminderTemplates: number;
   completion: string;
   date: string;
   sortDate: string;
@@ -987,7 +987,7 @@ const STANDARDS_HEADERS = [
   "Welcome letters sent",
   "Court date event made",
   "Weekly check-ins completed",
-  "Court reminder calls completed",
+  "Court reminder template emails sent",
   "Workflow completion %",
 ];
 
@@ -1028,8 +1028,8 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     courtDateLate: number;
     weeklyCheckIns: number;
     weeklyCheckInsLate: number;
-    courtReminderCalls: number;
-    courtReminderCallsLate: number;
+    courtReminderTemplates: number;
+    courtReminderTemplatesLate: number;
   }>();
   const getRow = (owner: string, date: string) => {
     const key = `${owner}__${date}`;
@@ -1052,8 +1052,8 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
       courtDateLate: 0,
       weeklyCheckIns: 0,
       weeklyCheckInsLate: 0,
-      courtReminderCalls: 0,
-      courtReminderCallsLate: 0,
+      courtReminderTemplates: 0,
+      courtReminderTemplatesLate: 0,
     };
     rowsByOwnerDate.set(key, current);
     return current;
@@ -1129,17 +1129,17 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
       if (late) row.weeklyCheckInsLate += 1;
     }
     if (item.step_code === "COURT_REMINDER_CALL") {
-      row.courtReminderCalls += 1;
-      if (late) row.courtReminderCallsLate += 1;
+      row.courtReminderTemplates += 1;
+      if (late) row.courtReminderTemplatesLate += 1;
     }
   }
 
   return Array.from(rowsByOwnerDate.values())
-    .filter((row) => row.newMatters.size > 0 || row.weeklyCheckIns > 0 || row.courtReminderCalls > 0 || row.expectedStandards > 0)
+    .filter((row) => row.newMatters.size > 0 || row.weeklyCheckIns > 0 || row.courtReminderTemplates > 0 || row.expectedStandards > 0)
     .sort((a, b) => standardsOwnerSort(a.owner, b.owner) || a.date.localeCompare(b.date))
     .map((row) => {
       const expected = row.expectedStandards;
-      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderCalls;
+      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderTemplates;
       const score = expected ? `${Math.round((completed / expected) * 100)}%` : "0%";
       return {
         owner: row.owner,
@@ -1148,7 +1148,7 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
         welcome: row.welcome,
         courtDate: row.courtDate,
         weeklyCheckIns: row.weeklyCheckIns,
-        courtReminderCalls: row.courtReminderCalls,
+        courtReminderTemplates: row.courtReminderTemplates,
         completion: score,
         date: csvDisplayDate(row.date),
         sortDate: row.date,
@@ -1166,7 +1166,7 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     row.welcome,
     row.courtDate,
     row.weeklyCheckIns,
-    row.courtReminderCalls,
+    row.courtReminderTemplates,
     row.completion,
   ]);
 
@@ -1207,7 +1207,7 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
           xmlCell(row.welcome, "Number"),
           xmlCell(row.courtDate, "Number"),
           xmlCell(row.weeklyCheckIns, "Number"),
-          xmlCell(row.courtReminderCalls, "Number"),
+          xmlCell(row.courtReminderTemplates, "Number"),
           xmlCell(row.completion),
         ].join("")}</Row>`,
       ),
@@ -1274,7 +1274,7 @@ export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
     id: "court_reminder_template",
     label: "Court reminder template emails missing",
     stepCodes: ["COURT_REMINDER_CALL"],
-    reasonCodes: ["CALL_NOT_FOUND_PRE_COURT"],
+    reasonCodes: ["REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT"],
   },
 ];
 

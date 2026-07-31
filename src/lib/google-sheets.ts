@@ -129,7 +129,7 @@ function rowValues(row: Awaited<ReturnType<typeof standardsReportRows>>[number])
     row.welcome,
     row.courtDate,
     row.weeklyCheckIns,
-    row.courtReminderCalls,
+    row.courtReminderTemplates,
     row.completion,
   ];
 }

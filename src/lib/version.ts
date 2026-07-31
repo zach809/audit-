@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-weekly-report-court-template-row-2026-07-29";
+export const APP_VERSION = "cwca-standards-debug-cleanup-template-reminders-2026-07-31";

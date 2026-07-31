@@ -625,38 +625,11 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
   const courtReminderDeadline = nextCourt ? previousBusinessDayEnd(nextCourt.at) : null;
-  const courtReminderCallWindowStart = nextCourt ? previousBusinessDayStart(nextCourt.at) : null;
   const courtReminderWindowStart = nextCourt ? new Date(nextCourt.at.getTime() - 14 * 24 * 60 * 60 * 1000) : null;
   const courtReminderTemplateEvidence = courtReminderWindowStart
     ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true })
     : null;
-  const courtReminderCallEvidence = courtReminderCallWindowStart && nextCourt
-    ? earliest(
-        evidence.communications
-          .map((comm): Evidence<ClioCommunication> | null => {
-            const at = commDate(comm);
-            if (!at || at < courtReminderCallWindowStart || at > nextCourt.at) return null;
-            if (!isFirmPhoneCall(comm, record.client_id)) return null;
-            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
-          })
-          .filter(Boolean) as Evidence<ClioCommunication>[],
-      )
-    : null;
-  const nearbyCourtReminderCallEvidence = courtReminderCallWindowStart && nextCourt
-    ? (evidence.communications
-        .map((comm): (Evidence<ClioCommunication> & { distance: number }) | null => {
-          const at = commDate(comm);
-          if (!at || !isFirmPhoneCall(comm, record.client_id)) return null;
-          if (at >= courtReminderCallWindowStart && at <= nextCourt.at) return null;
-          if (at < startOfLocalDay(addDaysRaw(courtReminderCallWindowStart, -3)) || at > endOfLocalDay(nextCourt.at)) return null;
-          const distance = Math.abs(localDateDistanceDays(at, courtReminderDeadline ?? nextCourt.at));
-          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id), distance };
-        })
-        .filter(Boolean) as Array<Evidence<ClioCommunication> & { distance: number }>)
-        .sort((a, b) => a.distance - b.distance || b.at.getTime() - a.at.getTime())[0] ?? null
-    : null;
   const courtReminderDeadlinePassed = Boolean(courtReminderDeadline && now > courtReminderDeadline);
-  const courtReminderMissingReason = courtReminderTemplateEvidence ? "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND" : "CALL_NOT_FOUND_PRE_COURT";
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
   const postCourtCall = courtResult?.at
@@ -697,24 +670,18 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
           : base("POST_COURT_CALL", "N/A", "", null, null);
   const courtReminderItem = (() => {
     if (!nextCourt) return base("COURT_REMINDER_CALL", "N/A", "", null, null);
-    if (courtReminderCallEvidence) {
-      return classify("COURT_REMINDER_CALL", courtReminderCallEvidence, courtReminderDeadline, {
+    if (courtReminderTemplateEvidence) {
+      return classify("COURT_REMINDER_CALL", courtReminderTemplateEvidence, courtReminderDeadline, {
         operationalState: "Waiting until 5:00 PM Illinois time",
-        reasonCode: courtReminderCallEvidence.at > (courtReminderDeadline ?? courtReminderCallEvidence.at) ? "CALL_FOUND_AFTER_REMINDER_GOAL" : null,
+        reasonCode: courtReminderTemplateEvidence.at > (courtReminderDeadline ?? courtReminderTemplateEvidence.at) ? "REMINDER_TEMPLATE_FOUND_AFTER_GOAL" : null,
         now,
       });
-    }
-    if (nearbyCourtReminderCallEvidence) {
-      return withEvidence(
-        base("COURT_REMINDER_CALL", "Late", "Timing Review", courtReminderDeadline, null, "CALL_FOUND_NEARBY_PRE_COURT"),
-        nearbyCourtReminderCallEvidence,
-      );
     }
     if (!courtReminderDeadlinePassed) return base("COURT_REMINDER_CALL", "Pending", "Not Due Yet", courtReminderDeadline, null);
     return classify("COURT_REMINDER_CALL", null, courtReminderDeadline, {
       operationalState: "Waiting until 5:00 PM Illinois time",
       unknown: Boolean(commError),
-      reasonCode: commError || courtReminderMissingReason,
+      reasonCode: commError || "REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT",
       now,
     });
   })();
