@@ -10247,6 +10247,49 @@ body {
   gap: 12px !important;
 }
 
+.cm-score-helper,
+.cm-protected-notice {
+  background: rgba(96, 211, 148, 0.09) !important;
+  border: 1px solid rgba(96, 211, 148, 0.28) !important;
+  border-radius: 14px !important;
+  color: #dfffee !important;
+  display: flex !important;
+  gap: 12px !important;
+  justify-content: space-between !important;
+  margin-top: 12px !important;
+  padding: 12px 14px !important;
+}
+
+.cm-score-helper strong,
+.cm-protected-notice strong {
+  display: block !important;
+  font-size: 15px !important;
+  margin-bottom: 3px !important;
+}
+
+.cm-score-helper span,
+.cm-protected-notice span {
+  color: rgba(241, 247, 255, 0.82) !important;
+}
+
+.cm-protected-pill {
+  align-self: center !important;
+  background: rgba(96, 211, 148, 0.16) !important;
+  border: 1px solid rgba(96, 211, 148, 0.34) !important;
+  border-radius: 999px !important;
+  color: #9ff0c3 !important;
+  flex: 0 0 auto !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  padding: 8px 10px !important;
+}
+
+.cm-protected-notice {
+  background: rgba(142, 162, 255, 0.1) !important;
+  border-color: rgba(142, 162, 255, 0.28) !important;
+  margin: 8px 0 12px !important;
+}
+
 .cm-clear-first-card {
   grid-template-columns: minmax(200px, 1.1fr) minmax(180px, 0.9fr) minmax(160px, 0.8fr) !important;
   padding: 12px !important;

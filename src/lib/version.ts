@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-ongoing-template-proof-refresh-2026-07-31";
+export const APP_VERSION = "cwca-cm-score-helper-protected-review-2026-07-31";

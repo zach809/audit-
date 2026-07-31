@@ -62,8 +62,17 @@ function isStandardsTask(row: WorkspaceAuditItem): boolean {
 }
 
 function isCompletedForScore(row: WorkspaceAuditItem): boolean {
+  if (isPendingAdminReview(row)) return true;
   if (row.review_decision === "Approved Exception") return true;
   return row.item_status === "On Track" || row.item_status === "Late" || Boolean(row.evidence_ref_id);
+}
+
+function isPendingAdminReview(row: WorkspaceAuditItem): boolean {
+  return Boolean(row.metric_exclusion_requested_by && !row.metric_excluded);
+}
+
+function isLateForScore(row: WorkspaceAuditItem): boolean {
+  return row.item_status === "Late" && row.review_decision !== "Approved Exception" && !isPendingAdminReview(row) && isCompletedForScore(row);
 }
 
 function cmOpportunityText(row: WorkspaceAuditItem): string {
@@ -269,7 +278,8 @@ export default async function CaseManagerPortalPage({
   const standardsMatterIds = new Set(filteredStandardsRows.map((row) => String(row.matter_id)));
   const standardsExpected = standardsMatterIds.size * 3;
   const standardsCompleted = filteredStandardsRows.filter(isCompletedForScore).length;
-  const standardsLate = filteredStandardsRows.filter((row) => row.item_status === "Late" && row.review_decision !== "Approved Exception" && isCompletedForScore(row)).length;
+  const standardsLate = filteredStandardsRows.filter(isLateForScore).length;
+  const standardsPendingAdminReview = filteredStandardsRows.filter(isPendingAdminReview).length;
   const standardsScorePoints = standardsCompleted - standardsLate * 0.5;
   const standardsScore = standardsExpected ? Math.max(0, Math.round((standardsScorePoints / standardsExpected) * 100)) : 100;
   const standardsWelcome = filteredStandardsRows.filter((row) => row.step_code === "SETUP_WELCOME" && isCompletedForScore(row)).length;
@@ -299,6 +309,10 @@ export default async function CaseManagerPortalPage({
   const courtReminderTasks = tasks.filter((row) => row.step_code === "COURT_REMINDER_CALL");
   const onboardingTasks = tasks.filter((row) => ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].includes(row.step_code));
   const reviewOpportunityTasks = tasks.filter((row) => ["Unknown", "Needs Review"].includes(workspaceStatus(row.item_status, row.reason_code)));
+  const pendingAdminReviewTasks = tasks.filter(isPendingAdminReview);
+  const scoreRescueTasks = tasks
+    .filter((row) => isStandardsTask(row) && !isPendingAdminReview(row))
+    .slice(0, 5);
   const clearFirstTasks = [...tasks]
     .sort((a, b) => {
       const overdueA = a.deadline_at && new Date(String(a.deadline_at)).getTime() < Date.now() ? 0 : 1;
@@ -454,6 +468,7 @@ export default async function CaseManagerPortalPage({
           <span><b>{standardsMatterIds.size}</b> new matter{standardsMatterIds.size === 1 ? "" : "s"}</span>
           <span><b>{standardsCompleted}/{standardsExpected}</b> standards complete</span>
           <span><b>{standardsLate}</b> timing item{standardsLate === 1 ? "" : "s"}</span>
+          <span><b>{standardsPendingAdminReview}</b> protected review{standardsPendingAdminReview === 1 ? "" : "s"}</span>
           <span><b>{weakestStandardsArea ? weakestStandardsArea.label : "No area"}</b> focus area</span>
         </div>
         <div className="cm-score-bars">
@@ -470,6 +485,21 @@ export default async function CaseManagerPortalPage({
             ? "Complete the open tasks below, then verify with CWCA so the score can update from Clio proof."
             : "No new matters are showing for this standards window."}
         </p>
+        {scoreRescueTasks.length || pendingAdminReviewTasks.length ? (
+          <div className="cm-score-helper">
+            <div>
+              <strong>Best way to improve your score</strong>
+              <span>
+                {scoreRescueTasks.length
+                  ? `Fix ${scoreRescueTasks.length} Standards item${scoreRescueTasks.length === 1 ? "" : "s"} first, then click Verify With CWCA.`
+                  : "Your open Standards items are already waiting for admin review."}
+              </span>
+            </div>
+            {pendingAdminReviewTasks.length ? (
+              <span className="cm-protected-pill">{pendingAdminReviewTasks.length} item{pendingAdminReviewTasks.length === 1 ? "" : "s"} waiting for admin review</span>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <form className="cm-task-filters" action="/case-manager" method="get">
@@ -494,6 +524,7 @@ export default async function CaseManagerPortalPage({
         {tasks.length ? tasks.map((row) => {
           const status = workspaceStatus(row.item_status, row.reason_code);
           const assignedOwner = standardsCaseManagerFor(row);
+          const pendingAdminReview = isPendingAdminReview(row);
           return (
             <article className={`cm-task-card status-row-${statusClass(status)}`} key={`${row.matter_id}-${row.step_code}`}>
               <div className="cm-task-main">
@@ -502,8 +533,17 @@ export default async function CaseManagerPortalPage({
                   <h2>{clientName(row)}</h2>
                   <p>{row.matter_number}</p>
                 </div>
-                <span className={`badge ${statusClass(status)}`}>{displayAuditStatus(status, row.reason_code)}</span>
+                <span className={`badge ${pendingAdminReview ? "Pending" : statusClass(status)}`}>
+                  {pendingAdminReview ? "Admin Review Pending" : displayAuditStatus(status, row.reason_code)}
+                </span>
               </div>
+
+              {pendingAdminReview ? (
+                <div className="cm-protected-notice">
+                  <strong>This item is protected while admin reviews it.</strong>
+                  <span>It stays visible so you can still fix it in Clio, but it is treated as neutral in the score until admin decides.</span>
+                </div>
+              ) : null}
 
               <div className="cm-next-step">
                 <span>What to do</span>
@@ -560,18 +600,22 @@ export default async function CaseManagerPortalPage({
 
               <details className="cm-complete-details cm-admin-request">
                 <summary>
-                  <span>This should not count in Standards</span>
-                  <b>Ask Admin</b>
+                  <span>This looks wrong or should not count</span>
+                  <b>{pendingAdminReview ? "Sent to Admin" : "Ask Admin"}</b>
                 </summary>
                 <form className="cm-complete-form" action="/api/metrics/exclusion" method="post">
                   <input type="hidden" name="action" value="request" />
                   <input type="hidden" name="matter_id" value={row.matter_id} />
+                  <input type="hidden" name="window" value={activeWindow} />
+                  <input type="hidden" name="q" value={query} />
+                  <input type="hidden" name="cmname" value={cmNameFilter} />
+                  <input type="hidden" name="attorney" value={attorneyFilter} />
                   <label>
                     Why should admin review this?
-                    <textarea name="reason" rows={3} placeholder="Example: Duplicate matter, wrong assignment, not a Standards case, or special exception." />
+                    <textarea name="reason" rows={3} placeholder="Example: Proof exists in Clio, wrong case manager, duplicate matter, not a Standards case, or special exception." />
                   </label>
-                  <button className="button" type="submit">Send Admin Request</button>
-                  <small>This only asks admin to review it. It does not remove the task or change the score by itself.</small>
+                  <button className="button" type="submit" disabled={pendingAdminReview}>Send Admin Request</button>
+                  <small>{pendingAdminReview ? "Admin already has this request." : "This sends it to admin review and protects the item from the CM score while it is pending."}</small>
                 </form>
               </details>
             </article>

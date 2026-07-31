@@ -260,12 +260,17 @@ function isApprovedExceptionReview(item: DashboardItem | WorkspaceRow): boolean 
   return item.reviewDecision === "Approved Exception";
 }
 
+function isPendingAdminReview(item: DashboardItem | WorkspaceRow): boolean {
+  return Boolean(item.metricExclusionRequestedBy && !item.metricExcluded);
+}
+
 function isCompleteForScore(item: DashboardItem | WorkspaceRow): boolean {
+  if (isPendingAdminReview(item)) return true;
   return item.status === "On Track" || item.status === "Late" || isClosedByReview(item) || Boolean(item.evidenceRefId);
 }
 
 function isLateForScore(item: DashboardItem | WorkspaceRow): boolean {
-  return item.status === "Late" && !isApprovedExceptionReview(item);
+  return item.status === "Late" && !isApprovedExceptionReview(item) && !isPendingAdminReview(item);
 }
 
 function itemNeedsAttention(item: DashboardItem | WorkspaceRow): boolean {

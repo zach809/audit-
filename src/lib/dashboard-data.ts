@@ -847,8 +847,19 @@ function isApprovedException(reviewDecision?: string | null): boolean {
   return reviewDecision === "Approved Exception";
 }
 
-function isStandardComplete(status: string | null | undefined, evidenceRefId?: string | null, reviewDecision?: string | null): boolean {
+function isPendingAdminReview(requestedBy?: string | null, metricExcluded?: boolean | null): boolean {
+  return Boolean(requestedBy && !metricExcluded);
+}
+
+function isStandardComplete(
+  status: string | null | undefined,
+  evidenceRefId?: string | null,
+  reviewDecision?: string | null,
+  metricReviewRequestedBy?: string | null,
+  metricExcluded?: boolean | null,
+): boolean {
   if (isApprovedException(reviewDecision)) return true;
+  if (isPendingAdminReview(metricReviewRequestedBy, metricExcluded)) return true;
   return status === "On Track" || status === "Late" || Boolean(evidenceRefId);
 }
 
@@ -1081,8 +1092,9 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     row.assignmentNotes.add(standardsAssignmentNote(item));
     row.expectedStandards += 1;
     const approvedException = isApprovedException(item.review_decision);
-    const late = item.item_status === "Late" && !approvedException;
-    const complete = isStandardComplete(item.item_status, item.evidence_ref_id, item.review_decision);
+    const pendingAdminReview = isPendingAdminReview(item.metric_exclusion_requested_by, item.metric_excluded);
+    const late = item.item_status === "Late" && !approvedException && !pendingAdminReview;
+    const complete = isStandardComplete(item.item_status, item.evidence_ref_id, item.review_decision, item.metric_exclusion_requested_by, item.metric_excluded);
     if (!complete) {
       row.needsFollowUp += 1;
       return false;
@@ -1101,7 +1113,7 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     row.newMatters.add(String(item.matter_id));
     const complete = countCompletedStandard(item, row);
     if (!complete) continue;
-    const late = item.item_status === "Late" && !isApprovedException(item.review_decision);
+    const late = item.item_status === "Late" && !isApprovedException(item.review_decision) && !isPendingAdminReview(item.metric_exclusion_requested_by, item.metric_excluded);
     if (item.step_code === "SETUP_WELCOME") {
       row.welcome += 1;
       if (late) row.welcomeLate += 1;
@@ -1123,7 +1135,7 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     const row = getRow(owner, dueKey);
     const complete = countCompletedStandard(item, row);
     if (!complete) continue;
-    const late = item.item_status === "Late" && !isApprovedException(item.review_decision);
+    const late = item.item_status === "Late" && !isApprovedException(item.review_decision) && !isPendingAdminReview(item.metric_exclusion_requested_by, item.metric_excluded);
     if (item.step_code === "WEEKLY_CLIENT_CHECKIN") {
       row.weeklyCheckIns += 1;
       if (late) row.weeklyCheckInsLate += 1;
