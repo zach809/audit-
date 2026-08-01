@@ -48,10 +48,6 @@ export type ClioMatter = {
     id?: number;
     name?: string | null;
   } | null;
-  originating_attorney?: {
-    id?: number;
-    name?: string | null;
-  } | null;
 };
 
 export type ClioCommunication = {

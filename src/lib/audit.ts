@@ -479,19 +479,14 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         .map((comm): Evidence<ClioCommunication> | null => {
           const at = commDate(comm);
           if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
+          const direction = isOutbound(comm, record.client_id);
+          if (direction === false) return null;
+          if (direction !== true && isReplySubject(comm.subject)) return null;
 
           const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
-          const subjectText = haystack(comm.subject, comm.type, ...externalValues);
+          const subjectText = haystack(comm.subject, ...externalValues);
           const fullText = communicationSearchText(comm, true);
-          const subjectMatched = matcher(subjectText);
-          const fullTextMatched = matcher(fullText);
-          if (!subjectMatched && !fullTextMatched) return null;
-
-          const direction = isOutbound(comm, record.client_id);
-          const directionText = communicationDirectionText(comm);
-          if (isReplySubject(comm.subject)) return null;
-          if (directionText.includes("inbound")) return null;
-          if (!subjectMatched && direction === false) return null;
+          if (!matcher(subjectText) && !matcher(fullText)) return null;
 
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
         })

@@ -58,24 +58,7 @@ export function workspaceFilterMatches(status: string, filter: string): boolean 
 
 export function actionFor(stepCode: string, status: string, reasonCode?: string | null): string {
   const info = WORKFLOW_RULES[stepCode];
-  if (status === "Missing") {
-    if (reasonCode === "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND") {
-      return "Phone-call proof exists, but CWCA did not find the weekly check-in calendar event. Add or verify the weekly check-in event linked to the matter.";
-    }
-    if (reasonCode === "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND") {
-      return "Weekly check-in calendar event exists, but CWCA did not find matching phone-call proof. Check Communications for the client call.";
-    }
-    if (reasonCode === "REMINDER_TEMPLATE_FOUND_AFTER_GOAL") {
-      return "Court reminder email proof exists, but it was sent after the 5:00 PM prior-business-day goal. Review timing only.";
-    }
-    if (reasonCode === "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND") {
-      return "Court reminder email proof exists. Recheck this matter with the current CWCA version so the older call-based flag can clear.";
-    }
-    if (reasonCode === "REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT" || reasonCode === "CALL_NOT_FOUND_PRE_COURT") {
-      return "CWCA did not find the court reminder email template before court. Check or send the reminder template in Communications.";
-    }
-    return info ? `${info.missing} ${info.action}` : "Complete or verify this workflow step in Clio.";
-  }
+  if (status === "Missing") return info ? `${info.missing} ${info.action}` : "Complete or verify this workflow step in Clio.";
   if (status === "Late") return info?.late ?? "Proof was found, but after the target time. Review timing only.";
   if (status === "Unknown" || status === "Needs Recheck") {
     if (isGenericApiError(reasonCode)) {
@@ -97,14 +80,7 @@ export function priorityFor(status: string): string {
 }
 
 export function whyFlagged(stepCode: string, status: string, reasonCode?: string | null): string {
-  if (status === "Missing") {
-    if (reasonCode === "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND") return "CWCA found phone-call proof, but not the matching weekly check-in calendar event.";
-    if (reasonCode === "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND") return "CWCA found the weekly check-in calendar event, but not the matching phone-call communication.";
-    if (reasonCode === "REMINDER_TEMPLATE_FOUND_AFTER_GOAL") return "CWCA found the court reminder email/template, but it was sent after the reminder goal.";
-    if (reasonCode === "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND") return "This is an older call-based flag. The reminder email/template exists, so recheck the matter with the current rule.";
-    if (reasonCode === "REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT" || reasonCode === "CALL_NOT_FOUND_PRE_COURT") return "CWCA did not find the court reminder email/template before court.";
-    return `${workflowLabel(stepCode)} needs follow-up because CWCA did not find matching proof in Clio.`;
-  }
+  if (status === "Missing") return `${workflowLabel(stepCode)} needs follow-up because CWCA did not find matching proof in Clio.`;
   if (status === "Late") return `${workflowLabel(stepCode)} was found, but after the expected timeliness goal.`;
   if (status === "Unknown" || status === "Needs Recheck") {
     if (reasonCode === "EVIDENCE_NOT_CONFIRMED") return "CWCA could not confidently confirm this proof from the matter's Communications tab.";

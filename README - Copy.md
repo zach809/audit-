@@ -151,13 +151,13 @@ Do not enable write permissions.
 
 ## Standards Google Sheet
 
-The Standards tab can now update a live Google Sheet. CWCA writes one tab per case manager for the weekly standards report and uses this exact order:
+The Standards tab can now update a live Google Sheet. CWCA writes one tab per case manager for New Matter Onboarding and uses this exact order:
 
 `Case Manager`, `Date`, `ATC / new matters #`, `Initial Meeting set - Phone call`, `Welcome letters sent`, `Court date event made`, `Worflow completion %`.
 
 This is one-way from CWCA to Google Sheets. It does not write to Clio.
 
-The CWCA Standards page also separates Ongoing Cases from the new-matter setup score so case managers can see client contact, weekly check-ins, court results, and appearance filing email follow-up without mixing those items into the weekly standards score.
+The CWCA Standards page also separates Ongoing Cases from onboarding so case managers can see client contact, weekly check-ins, court results, and appearance filing email follow-up without mixing those items into the new-matter score.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.

@@ -10,9 +10,8 @@ import { workflowLabel } from "@/lib/workflow-rules";
 export const dynamic = "force-dynamic";
 
 const CLEARING_DECISIONS = new Set(["Resolved", "No Action Needed", "Approved Exception"]);
-const CLIENT_FOLLOW_UP_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP"]);
+const CLIENT_COMMUNICATION_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 const STANDARDS_STEPS = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
-const REVIEW_PAGE_URL = "https://reviewracer-dashboard.vercel.app";
 const DATE_PART_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Chicago",
   year: "numeric",
@@ -51,11 +50,11 @@ function clientName(row: WorkspaceAuditItem): string {
 
 function isOpenTask(row: WorkspaceAuditItem): boolean {
   const status = workspaceStatus(row.item_status, row.reason_code);
-  return (isFollowUpStatus(status) || status === "Late") && !CLEARING_DECISIONS.has(row.review_decision ?? "");
+  return isFollowUpStatus(status) && !CLEARING_DECISIONS.has(row.review_decision ?? "");
 }
 
 function isClientCommunicationTask(row: WorkspaceAuditItem): boolean {
-  return CLIENT_FOLLOW_UP_STEPS.has(row.step_code);
+  return CLIENT_COMMUNICATION_STEPS.has(row.step_code);
 }
 
 function isStandardsTask(row: WorkspaceAuditItem): boolean {
@@ -63,17 +62,7 @@ function isStandardsTask(row: WorkspaceAuditItem): boolean {
 }
 
 function isCompletedForScore(row: WorkspaceAuditItem): boolean {
-  if (isPendingAdminReview(row)) return true;
-  if (row.review_decision === "Approved Exception") return true;
   return row.item_status === "On Track" || row.item_status === "Late" || Boolean(row.evidence_ref_id);
-}
-
-function isPendingAdminReview(row: WorkspaceAuditItem): boolean {
-  return Boolean(row.metric_exclusion_requested_by && !row.metric_excluded);
-}
-
-function isLateForScore(row: WorkspaceAuditItem): boolean {
-  return row.item_status === "Late" && row.review_decision !== "Approved Exception" && !isPendingAdminReview(row) && isCompletedForScore(row);
 }
 
 function cmOpportunityText(row: WorkspaceAuditItem): string {
@@ -85,9 +74,9 @@ function cmOpportunityText(row: WorkspaceAuditItem): string {
     case "SETUP_COURT_DATE":
       return "Add or confirm the client's court-date calendar event.";
     case "WEEKLY_CLIENT_CHECKIN":
-      return "Confirm the weekly client check-in event and call proof by 5:00 PM Illinois time one week plus one day after the last court date.";
+      return "Confirm the weekly client check-in event and same-day call proof.";
     case "COURT_REMINDER_CALL":
-      return "Confirm the court reminder email template by 5:00 PM Illinois time on the business day before court.";
+      return "Confirm the court reminder call before the upcoming court date.";
     case "CLIENT_CONTACT":
     case "CLIENT_FOLLOWUP":
       return "Confirm the client received a firm response or outreach.";
@@ -197,16 +186,15 @@ function inTaskWindow(row: WorkspaceAuditItem, window: CaseManagerWindow): boole
   return key >= bounds.start && key <= bounds.end;
 }
 
-function windowHref(window: CaseManagerWindow, query: string, caseManager: string, attorney: string): string {
+function windowHref(window: CaseManagerWindow, query: string, caseManager: string): string {
   const params = new URLSearchParams();
   params.set("window", window);
   if (query) params.set("q", query);
   if (caseManager) params.set("cmname", caseManager);
-  if (attorney) params.set("attorney", attorney);
   return `/case-manager?${params.toString()}`;
 }
 
-function taskMatches(row: WorkspaceAuditItem, query: string, caseManager: string, attorney: string): boolean {
+function taskMatches(row: WorkspaceAuditItem, query: string, caseManager: string): boolean {
   const status = workspaceStatus(row.item_status, row.reason_code);
   const assignedOwner = standardsCaseManagerFor(row);
   const searchableFields = [
@@ -231,10 +219,7 @@ function taskMatches(row: WorkspaceAuditItem, query: string, caseManager: string
   const cmHaystack = normalizeSearch([assignedOwner, row.case_manager_name].join(" "));
   const cmTerms = normalizeSearch(caseManager).split(" ").filter(Boolean);
   const cmMatch = !cmTerms.length || cmTerms.every((term) => cmHaystack.includes(term));
-  const attorneyHaystack = normalizeSearch(row.responsible_attorney_name || "Unassigned");
-  const attorneyTerms = normalizeSearch(attorney).split(" ").filter(Boolean);
-  const attorneyMatch = !attorneyTerms.length || attorneyTerms.every((term) => attorneyHaystack.includes(term));
-  return queryMatch && cmMatch && attorneyMatch;
+  return queryMatch && cmMatch;
 }
 
 function pct(completed: number, expected: number): number {
@@ -244,7 +229,7 @@ function pct(completed: number, expected: number): number {
 export default async function CaseManagerPortalPage({
   searchParams,
 }: {
-  searchParams: { q?: string; cmname?: string; attorney?: string; cm?: string; message?: string; window?: string };
+  searchParams: { q?: string; cmname?: string; cm?: string; message?: string; window?: string };
 }) {
   const caseManagerName = currentCaseManagerName();
   if (!caseManagerName) redirect("/case-manager/login");
@@ -252,7 +237,6 @@ export default async function CaseManagerPortalPage({
   const dashboardData = await getDashboardData({});
   const query = String(searchParams.q ?? "");
   const cmNameFilter = String(searchParams.cmname ?? "");
-  const attorneyFilter = String(searchParams.attorney ?? "");
   const activeWindow = taskWindow(searchParams.window);
   const activeWindowBounds = taskWindowBounds(activeWindow);
   const portalOwner = portalOwnerName(caseManagerName);
@@ -260,11 +244,7 @@ export default async function CaseManagerPortalPage({
   const visibleBaseTasks = dashboardData.workspaceItems
     .filter(isOpenTask)
     .filter((row) => showAllAssignments || ownerMatches(row, portalOwner))
-    .filter((row) => taskMatches(row, query, cmNameFilter, attorneyFilter));
-  const unfilteredOwnerTasks = dashboardData.workspaceItems
-    .filter(isOpenTask)
-    .filter((row) => showAllAssignments || ownerMatches(row, portalOwner));
-  const hasActiveFilters = Boolean(query.trim() || cmNameFilter.trim() || attorneyFilter.trim());
+    .filter((row) => taskMatches(row, query, cmNameFilter));
   const scoreOwnerFilter = showAllAssignments ? cmNameFilter : portalOwner;
   const standardsRows = dashboardData.workspaceItems
     .filter(isStandardsTask)
@@ -274,22 +254,15 @@ export default async function CaseManagerPortalPage({
       return key >= activeWindowBounds.start && key <= activeWindowBounds.end;
     })
     .filter((row) => !scoreOwnerFilter || normalizeName(standardsCaseManagerFor(row)) === normalizeName(scoreOwnerFilter));
-  const filteredStandardsRows = standardsRows.filter((row) => {
-    const attorneyTerms = normalizeSearch(attorneyFilter).split(" ").filter(Boolean);
-    if (!attorneyTerms.length) return true;
-    const attorneyHaystack = normalizeSearch(row.responsible_attorney_name || "Unassigned");
-    return attorneyTerms.every((term) => attorneyHaystack.includes(term));
-  });
-  const standardsMatterIds = new Set(filteredStandardsRows.map((row) => String(row.matter_id)));
+  const standardsMatterIds = new Set(standardsRows.map((row) => String(row.matter_id)));
   const standardsExpected = standardsMatterIds.size * 3;
-  const standardsCompleted = filteredStandardsRows.filter(isCompletedForScore).length;
-  const standardsLate = filteredStandardsRows.filter(isLateForScore).length;
-  const standardsPendingAdminReview = filteredStandardsRows.filter(isPendingAdminReview).length;
+  const standardsCompleted = standardsRows.filter(isCompletedForScore).length;
+  const standardsLate = standardsRows.filter((row) => row.item_status === "Late" && isCompletedForScore(row)).length;
   const standardsScorePoints = standardsCompleted - standardsLate * 0.5;
   const standardsScore = standardsExpected ? Math.max(0, Math.round((standardsScorePoints / standardsExpected) * 100)) : 100;
-  const standardsWelcome = filteredStandardsRows.filter((row) => row.step_code === "SETUP_WELCOME" && isCompletedForScore(row)).length;
-  const standardsAttorneyCall = filteredStandardsRows.filter((row) => row.step_code === "SETUP_ATTY_CALL" && isCompletedForScore(row)).length;
-  const standardsCourtDate = filteredStandardsRows.filter((row) => row.step_code === "SETUP_COURT_DATE" && isCompletedForScore(row)).length;
+  const standardsWelcome = standardsRows.filter((row) => row.step_code === "SETUP_WELCOME" && isCompletedForScore(row)).length;
+  const standardsAttorneyCall = standardsRows.filter((row) => row.step_code === "SETUP_ATTY_CALL" && isCompletedForScore(row)).length;
+  const standardsCourtDate = standardsRows.filter((row) => row.step_code === "SETUP_COURT_DATE" && isCompletedForScore(row)).length;
   const standardsAreas = [
     { label: "Welcome Letter", completed: standardsWelcome, expected: standardsMatterIds.size },
     { label: "Initial Meeting", completed: standardsAttorneyCall, expected: standardsMatterIds.size },
@@ -298,7 +271,7 @@ export default async function CaseManagerPortalPage({
   const weakestStandardsArea = standardsAreas
     .filter((area) => area.expected > 0)
     .sort((a, b) => pct(a.completed, a.expected) - pct(b.completed, b.expected))[0];
-  const standardsOwnerLabel = `${scoreOwnerFilter || "All case managers"}${attorneyFilter ? ` / ${attorneyFilter}` : ""}`;
+  const standardsOwnerLabel = scoreOwnerFilter || "All case managers";
   const thisWeekCount = visibleBaseTasks.filter((row) => inTaskWindow(row, "this-week")).length;
   const pastWeekCount = visibleBaseTasks.filter((row) => inTaskWindow(row, "past-week")).length;
   const tasks = visibleBaseTasks
@@ -314,24 +287,11 @@ export default async function CaseManagerPortalPage({
   const courtReminderTasks = tasks.filter((row) => row.step_code === "COURT_REMINDER_CALL");
   const onboardingTasks = tasks.filter((row) => ["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"].includes(row.step_code));
   const reviewOpportunityTasks = tasks.filter((row) => ["Unknown", "Needs Review"].includes(workspaceStatus(row.item_status, row.reason_code)));
-  const pendingAdminReviewTasks = tasks.filter(isPendingAdminReview);
-  const scoreRescueTasks = tasks
-    .filter((row) => isStandardsTask(row) && !isPendingAdminReview(row))
-    .slice(0, 5);
-  const clearFirstTasks = [...tasks]
-    .sort((a, b) => {
-      const overdueA = a.deadline_at && new Date(String(a.deadline_at)).getTime() < Date.now() ? 0 : 1;
-      const overdueB = b.deadline_at && new Date(String(b.deadline_at)).getTime() < Date.now() ? 0 : 1;
-      const dueA = a.deadline_at ? new Date(String(a.deadline_at)).getTime() : Number.MAX_SAFE_INTEGER;
-      const dueB = b.deadline_at ? new Date(String(b.deadline_at)).getTime() : Number.MAX_SAFE_INTEGER;
-      return overdueA - overdueB || dueA - dueB || clientName(a).localeCompare(clientName(b));
-    })
-    .slice(0, 8);
   const reminderCards = [
     {
       label: "Client reminders",
       count: communicationTasks.length,
-      text: "Client contact or response items only.",
+      text: "Open Clio and confirm the client was contacted.",
     },
     {
       label: "Past due",
@@ -339,14 +299,14 @@ export default async function CaseManagerPortalPage({
       text: "Handle these first or ask admin to review if they should not count.",
     },
     {
-      label: "Weekly check-ins",
+      label: "Weekly calls",
       count: weeklyCallTasks.length,
-      text: "Weekly client check-in event and call proof.",
+      text: "Check weekly call events and matching call proof.",
     },
     {
       label: "Court reminders",
       count: courtReminderTasks.length,
-      text: "Confirm court reminder template emails by 5 PM the business day before court.",
+      text: "Confirm court reminder calls before court.",
     },
     {
       label: "New matter setup",
@@ -362,17 +322,14 @@ export default async function CaseManagerPortalPage({
 
   const message = searchParams.message ? decodeURIComponent(String(searchParams.message)) : "";
   const messageClass = searchParams.cm === "cleared" ? "cm-alert success" : searchParams.cm ? "cm-alert warning" : "cm-alert";
-  const hiddenByFiltersCount = hasActiveFilters
-    ? unfilteredOwnerTasks.filter((row) => inTaskWindow(row, activeWindow)).length - tasks.length
-    : 0;
 
   return (
     <main className="cm-portal-shell">
       <header className="cm-portal-header">
         <div>
-          <span className="label">Case Manager Task Center</span>
-          <h1>Clear Your Clio Tasks</h1>
-          <p>Open Clio, complete the work, then verify it here. CWCA only clears a task when matching proof is found in Clio.</p>
+          <span className="label">Case Manager Portal</span>
+          <h1>My Clio Follow-Up Tasks</h1>
+          <p>Fix the item in Clio first. Then ask CWCA to verify it. Tasks only clear when proof is found in Clio.</p>
           <p className="cm-assignment-note">
             {showAllAssignments
               ? `Admin view: showing ${activeWindowBounds.label.toLowerCase()} assigned case-manager tasks.`
@@ -381,7 +338,6 @@ export default async function CaseManagerPortalPage({
         </div>
         <div className="cm-portal-actions">
           <span className="badge On-Track">{caseManagerName}</span>
-          <a className="button" href={REVIEW_PAGE_URL} target="_blank" rel="noreferrer">Open Review Page</a>
           <form action="/logout" method="post">
             <button className="button" type="submit">Log Out</button>
           </form>
@@ -390,41 +346,24 @@ export default async function CaseManagerPortalPage({
 
       {message ? <p className={messageClass}>{message}</p> : null}
 
-      {hasActiveFilters ? (
-        <section className="cm-active-filter-notice">
-          <div>
-            <strong>Filtered view is on.</strong>
-            <span>
-              {[
-                query.trim() ? `Search: ${query.trim()}` : "",
-                cmNameFilter.trim() ? `Case manager: ${cmNameFilter.trim()}` : "",
-                attorneyFilter.trim() ? `Attorney: ${attorneyFilter.trim()}` : "",
-              ].filter(Boolean).join(" | ")}
-              {hiddenByFiltersCount > 0 ? ` | ${hiddenByFiltersCount} more ${activeWindowBounds.label.toLowerCase()} task${hiddenByFiltersCount === 1 ? "" : "s"} hidden by filters.` : ""}
-            </span>
-          </div>
-          <a className="button compact" href="/case-manager">Show All Tasks</a>
-        </section>
-      ) : null}
-
       <section className="cm-queue-summary">
         <div>
-          <span>This Queue</span>
+          <span>Needs Your Review</span>
           <strong>{tasks.length}</strong>
           <small>{activeWindowBounds.label}: {activeWindowBounds.start} to {activeWindowBounds.end}</small>
         </div>
         <nav className="cm-window-tabs" aria-label="Task week">
-          <a className={activeWindow === "this-week" ? "active" : ""} href={windowHref("this-week", query, cmNameFilter, attorneyFilter)}>
+          <a className={activeWindow === "this-week" ? "active" : ""} href={windowHref("this-week", query, cmNameFilter)}>
             This Week <b>{thisWeekCount}</b>
           </a>
-          <a className={activeWindow === "past-week" ? "active" : ""} href={windowHref("past-week", query, cmNameFilter, attorneyFilter)}>
+          <a className={activeWindow === "past-week" ? "active" : ""} href={windowHref("past-week", query, cmNameFilter)}>
             Past Week <b>{pastWeekCount}</b>
           </a>
         </nav>
         <ol className="cm-simple-steps" aria-label="How to clear tasks">
-          <li><b>1</b><span>Open Clio.</span></li>
-          <li><b>2</b><span>Fix or confirm the item.</span></li>
-          <li><b>3</b><span>Verify with CWCA.</span></li>
+          <li><b>1</b><span>Open the right Clio tab.</span></li>
+          <li><b>2</b><span>Complete or confirm the work.</span></li>
+          <li><b>3</b><span>Click verify so CWCA can recheck proof.</span></li>
         </ol>
       </section>
 
@@ -443,48 +382,10 @@ export default async function CaseManagerPortalPage({
         ))}
       </section>
 
-      <section className="cm-clear-first-panel" aria-label="Highest priority tasks">
-        <div className="cm-section-head">
-          <div>
-            <span className="label">Start Here</span>
-            <h2>Fix These First</h2>
-            <p>Start with these items. They are due soon, past due, or tied to your Standards score.</p>
-          </div>
-          <strong>{clearFirstTasks.length ? `${clearFirstTasks.length} shown` : "All clear"}</strong>
-        </div>
-        {clearFirstTasks.length ? (
-          <div className="cm-clear-first-list">
-            {clearFirstTasks.map((row) => {
-              const status = workspaceStatus(row.item_status, row.reason_code);
-              return (
-                <article className={`cm-clear-first-card status-row-${statusClass(status)}`} key={`${row.matter_id}-${row.step_code}`}>
-                  <div>
-                    <span className="label">{workflowLabel(row.step_code)}</span>
-                    <h3>{clientName(row)}</h3>
-                    <p>{row.matter_number}</p>
-                  </div>
-                  <div>
-                    <strong>{displayAuditStatus(status, row.reason_code)}</strong>
-                    <span>Attorney: {row.responsible_attorney_name || "Unassigned"}</span>
-                    <span>{row.deadline_at ? `Due ${formatLocal(row.deadline_at)}` : "No due date"}</span>
-                  </div>
-                  <a className="button compact primary" href={clioTaskPath(row)} target="_blank" rel="noreferrer">Open Clio Tab</a>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="cm-empty compact">
-            <strong>No urgent tasks in this view.</strong>
-            <p>Use Past Week if you need to review older items.</p>
-          </div>
-        )}
-      </section>
-
       <section className="cm-score-card" aria-label="Case manager standards score">
         <div className="cm-score-head">
           <div>
-          <span className="label">Score Preview</span>
+            <span className="label">Standards Score</span>
             <h2>{standardsOwnerLabel}</h2>
             <p>{activeWindowBounds.label}: Welcome Letter, Initial Meeting, and Court Date proof.</p>
           </div>
@@ -494,7 +395,6 @@ export default async function CaseManagerPortalPage({
           <span><b>{standardsMatterIds.size}</b> new matter{standardsMatterIds.size === 1 ? "" : "s"}</span>
           <span><b>{standardsCompleted}/{standardsExpected}</b> standards complete</span>
           <span><b>{standardsLate}</b> timing item{standardsLate === 1 ? "" : "s"}</span>
-          <span><b>{standardsPendingAdminReview}</b> protected review{standardsPendingAdminReview === 1 ? "" : "s"}</span>
           <span><b>{weakestStandardsArea ? weakestStandardsArea.label : "No area"}</b> focus area</span>
         </div>
         <div className="cm-score-bars">
@@ -511,36 +411,17 @@ export default async function CaseManagerPortalPage({
             ? "Complete the open tasks below, then verify with CWCA so the score can update from Clio proof."
             : "No new matters are showing for this standards window."}
         </p>
-        {scoreRescueTasks.length || pendingAdminReviewTasks.length ? (
-          <div className="cm-score-helper">
-            <div>
-              <strong>Best way to improve your score</strong>
-              <span>
-                {scoreRescueTasks.length
-                  ? `Fix ${scoreRescueTasks.length} Standards item${scoreRescueTasks.length === 1 ? "" : "s"} first, then click Verify With CWCA.`
-                  : "Your open Standards items are already waiting for admin review."}
-              </span>
-            </div>
-            {pendingAdminReviewTasks.length ? (
-              <span className="cm-protected-pill">{pendingAdminReviewTasks.length} item{pendingAdminReviewTasks.length === 1 ? "" : "s"} waiting for admin review</span>
-            ) : null}
-          </div>
-        ) : null}
       </section>
 
       <form className="cm-task-filters" action="/case-manager" method="get">
         <input type="hidden" name="window" value={activeWindow} />
         <label>
           Find a task
-          <input name="q" defaultValue={query} placeholder="Client or matter..." />
+          <input name="q" defaultValue={query} placeholder="Client, matter, attorney..." />
         </label>
         <label>
           Case manager
           <input name="cmname" defaultValue={cmNameFilter} placeholder="Type a CM name" />
-        </label>
-        <label>
-          Attorney
-          <input name="attorney" defaultValue={attorneyFilter} placeholder="Type an attorney name" />
         </label>
         <button className="primary" type="submit">Filter</button>
         <a className="button" href="/case-manager">Clear</a>
@@ -550,7 +431,6 @@ export default async function CaseManagerPortalPage({
         {tasks.length ? tasks.map((row) => {
           const status = workspaceStatus(row.item_status, row.reason_code);
           const assignedOwner = standardsCaseManagerFor(row);
-          const pendingAdminReview = isPendingAdminReview(row);
           return (
             <article className={`cm-task-card status-row-${statusClass(status)}`} key={`${row.matter_id}-${row.step_code}`}>
               <div className="cm-task-main">
@@ -559,20 +439,11 @@ export default async function CaseManagerPortalPage({
                   <h2>{clientName(row)}</h2>
                   <p>{row.matter_number}</p>
                 </div>
-                <span className={`badge ${pendingAdminReview ? "Pending" : statusClass(status)}`}>
-                  {pendingAdminReview ? "Admin Review Pending" : displayAuditStatus(status, row.reason_code)}
-                </span>
+                <span className={`badge ${statusClass(status)}`}>{displayAuditStatus(status, row.reason_code)}</span>
               </div>
 
-              {pendingAdminReview ? (
-                <div className="cm-protected-notice">
-                  <strong>This item is protected while admin reviews it.</strong>
-                  <span>It stays visible so you can still fix it in Clio, but it is treated as neutral in the score until admin decides.</span>
-                </div>
-              ) : null}
-
               <div className="cm-next-step">
-            <span>Next step</span>
+                <span>What to do</span>
                 <strong>{actionFor(row.step_code, status, row.reason_code)}</strong>
               </div>
 
@@ -605,7 +476,7 @@ export default async function CaseManagerPortalPage({
 
               <details className="cm-complete-details">
                 <summary>
-                  <span>Ready to verify</span>
+                  <span>I fixed this in Clio</span>
                   <b>Verify Task</b>
                 </summary>
                 <form className="cm-complete-form" action="/api/case-manager/complete" method="post">
@@ -626,22 +497,18 @@ export default async function CaseManagerPortalPage({
 
               <details className="cm-complete-details cm-admin-request">
                 <summary>
-                  <span>This looks wrong or should not count</span>
-                  <b>{pendingAdminReview ? "Sent to Admin" : "Ask Admin"}</b>
+                  <span>This should not count in Standards</span>
+                  <b>Ask Admin</b>
                 </summary>
                 <form className="cm-complete-form" action="/api/metrics/exclusion" method="post">
                   <input type="hidden" name="action" value="request" />
                   <input type="hidden" name="matter_id" value={row.matter_id} />
-                  <input type="hidden" name="window" value={activeWindow} />
-                  <input type="hidden" name="q" value={query} />
-                  <input type="hidden" name="cmname" value={cmNameFilter} />
-                  <input type="hidden" name="attorney" value={attorneyFilter} />
                   <label>
                     Why should admin review this?
-                    <textarea name="reason" rows={3} placeholder="Example: Proof exists in Clio, wrong case manager, duplicate matter, not a Standards case, or special exception." />
+                    <textarea name="reason" rows={3} placeholder="Example: Duplicate matter, wrong assignment, not a Standards case, or special exception." />
                   </label>
-                  <button className="button" type="submit" disabled={pendingAdminReview}>Send Admin Request</button>
-                  <small>{pendingAdminReview ? "Admin already has this request." : "This sends it to admin review and protects the item from the CM score while it is pending."}</small>
+                  <button className="button" type="submit">Send Admin Request</button>
+                  <small>This only asks admin to review it. It does not remove the task or change the score by itself.</small>
                 </form>
               </details>
             </article>
@@ -649,12 +516,7 @@ export default async function CaseManagerPortalPage({
         }) : (
           <section className="cm-empty">
             <strong>No tasks need review right now.</strong>
-            <p>
-              {hasActiveFilters
-                ? "No open tasks match these filters. Clear filters to see the full case-manager queue."
-                : `No open tasks match ${activeWindowBounds.label.toLowerCase()}. Use Past Week if you need to review last week.`}
-            </p>
-            {hasActiveFilters ? <a className="button compact primary" href="/case-manager">Show All Tasks</a> : null}
+            <p>No open tasks match {activeWindowBounds.label.toLowerCase()}. Use Past Week if you need to review last week.</p>
           </section>
         )}
       </section>

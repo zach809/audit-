@@ -1279,7 +1279,7 @@ export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
   { id: "welcome", label: "Welcome letters missing", stepCodes: ["SETUP_WELCOME"] },
   { id: "attorney_call", label: "Attorney phone calls for new Clio matters not scheduled", stepCodes: ["SETUP_ATTY_CALL"] },
   { id: "appearance", label: "Court Appearance Filed template emails missing", stepCodes: ["APPEARANCE_FILING"] },
-  { id: "weekly_checkin", label: "Weekly client check-ins not completed", stepCodes: ["WEEKLY_CLIENT_CHECKIN"] },
+  { id: "weekly_checkup", label: "Weekly checkup calls not completed", stepCodes: ["WEEKLY_CLIENT_CHECKIN"] },
   { id: "results_calls", label: "Results calls not completed", stepCodes: ["POST_COURT_CALL"] },
   { id: "court_results", label: "Court Results template emails missing", stepCodes: ["COURT_RESULTS"] },
   {

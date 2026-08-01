@@ -1,9 +1,8 @@
-﻿import { APP_TZ } from "./config";
+import { APP_TZ } from "./config";
 import { initDb, db } from "./db";
 import { workflowLabel } from "./workflow-rules";
 import { actionFor, displayAuditStatus, priorityFor, timingGoalFor, whyFlagged } from "./audit-display";
 import { reviewResult } from "./review-shared";
-import { APP_VERSION } from "./version";
 
 export type DashboardFilters = {
   attorney?: string;
@@ -248,8 +247,6 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       : sql`true`;
   const normalizedItemStatus = sql`
     case
-      when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
-        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else i.status end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
       when i.step_code = 'APPEARANCE_FILING'
@@ -261,8 +258,6 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   `;
   const normalizedOperationalState = sql`
     case
-      when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
-        then case when i.deadline_at is not null and now() <= i.deadline_at then 'Not Due Yet' else i.operational_state end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Needs Court Results' else 'Overdue' end
       when i.step_code = 'APPEARANCE_FILING'
@@ -274,8 +269,6 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   `;
   const normalizedReasonCode = sql`
     case
-      when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
-        then case when i.deadline_at is not null and now() <= i.deadline_at then null else i.reason_code end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
       when i.step_code = 'APPEARANCE_FILING'
@@ -526,7 +519,7 @@ export async function dashboardCsv(filters: DashboardFilters = {}): Promise<stri
     "Appearance Filed",
     "Court Results",
     "Post-Court Call",
-    "Court Reminder Email",
+    "Court Reminder Call",
     "Client Follow-Up",
     "Weekly Client Check-In",
     "Matter Created Date",
@@ -843,23 +836,7 @@ export async function auditLogicIssuesCsv(filters: DashboardFilters = {}, origin
   return [headers, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 
-function isApprovedException(reviewDecision?: string | null): boolean {
-  return reviewDecision === "Approved Exception";
-}
-
-function isPendingAdminReview(requestedBy?: string | null, metricExcluded?: boolean | null): boolean {
-  return Boolean(requestedBy && !metricExcluded);
-}
-
-function isStandardComplete(
-  status: string | null | undefined,
-  evidenceRefId?: string | null,
-  reviewDecision?: string | null,
-  metricReviewRequestedBy?: string | null,
-  metricExcluded?: boolean | null,
-): boolean {
-  if (isApprovedException(reviewDecision)) return true;
-  if (isPendingAdminReview(metricReviewRequestedBy, metricExcluded)) return true;
+function isStandardComplete(status: string | null | undefined, evidenceRefId?: string | null): boolean {
   return status === "On Track" || status === "Late" || Boolean(evidenceRefId);
 }
 
@@ -893,14 +870,6 @@ function eachDateKey(from: string, to: string): string[] {
     result.push(csvDateKey(cursor));
   }
   return result;
-}
-
-function lastCompletedWeekRange(baseDate = new Date()): { from: string; to: string } {
-  const currentStart = weekStartDateKey(baseDate);
-  return {
-    from: addDateKeyDays(currentStart, -7),
-    to: addDateKeyDays(currentStart, -1),
-  };
 }
 
 function normalizeOwnerName(value: string | null | undefined): string {
@@ -983,8 +952,6 @@ type StandardsReportRow = {
   attorneyCall: number;
   welcome: number;
   courtDate: number;
-  weeklyCheckIns: number;
-  courtReminderTemplates: number;
   completion: string;
   date: string;
   sortDate: string;
@@ -997,9 +964,7 @@ const STANDARDS_HEADERS = [
   "Initial Meeting set - Phone call",
   "Welcome letters sent",
   "Court date event made",
-  "Weekly check-ins completed",
-  "Court reminder template emails sent",
-  "Workflow completion %",
+  "Worflow completion %",
 ];
 
 export const STANDARDS_SHEET_HEADERS = STANDARDS_HEADERS;
@@ -1015,9 +980,9 @@ function standardsOwnerSort(a: string, b: string): number {
 
 export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
   const { workspaceItems } = await getDashboardData(filters);
-  const defaultRange = lastCompletedWeekRange();
-  const from = filters.from || defaultRange.from;
-  const to = filters.to || defaultRange.to;
+  const today = csvDateKey(new Date());
+  const from = filters.from || today;
+  const to = filters.to || today;
   const dates = eachDateKey(from, to);
   const dateSet = new Set(dates);
   const rowsByOwnerDate = new Map<string, {
@@ -1037,10 +1002,6 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     welcomeLate: number;
     courtDate: number;
     courtDateLate: number;
-    weeklyCheckIns: number;
-    weeklyCheckInsLate: number;
-    courtReminderTemplates: number;
-    courtReminderTemplatesLate: number;
   }>();
   const getRow = (owner: string, date: string) => {
     const key = `${owner}__${date}`;
@@ -1061,10 +1022,6 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
       welcomeLate: 0,
       courtDate: 0,
       courtDateLate: 0,
-      weeklyCheckIns: 0,
-      weeklyCheckInsLate: 0,
-      courtReminderTemplates: 0,
-      courtReminderTemplatesLate: 0,
     };
     rowsByOwnerDate.set(key, current);
     return current;
@@ -1076,44 +1033,29 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     const createdKey = csvDateKey(item.matter_created_at);
     return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
   });
-  const ongoingStandardsItems = workspaceItems.filter((item) => {
-    if (item.metric_excluded) return false;
-    if (item.step_code !== "WEEKLY_CLIENT_CHECKIN" && item.step_code !== "COURT_REMINDER_CALL") return false;
-    const dueKey = csvDateKey(item.deadline_at);
-    return Boolean(dueKey) && (!dateSet.size || dateSet.has(dueKey));
-  });
-  const owners = Array.from(new Set([...standardsItems, ...ongoingStandardsItems].map(standardsCaseManagerFor))).sort(standardsOwnerSort);
+  const owners = Array.from(new Set(standardsItems.map(standardsCaseManagerFor))).sort(standardsOwnerSort);
   for (const owner of owners) {
     for (const date of dates) getRow(owner, date);
   }
-
-  const countCompletedStandard = (item: WorkspaceAuditItem, row: ReturnType<typeof getRow>) => {
-    row.assignedAttorneys.add(item.responsible_attorney_name || "Unassigned");
-    row.assignmentNotes.add(standardsAssignmentNote(item));
-    row.expectedStandards += 1;
-    const approvedException = isApprovedException(item.review_decision);
-    const pendingAdminReview = isPendingAdminReview(item.metric_exclusion_requested_by, item.metric_excluded);
-    const late = item.item_status === "Late" && !approvedException && !pendingAdminReview;
-    const complete = isStandardComplete(item.item_status, item.evidence_ref_id, item.review_decision, item.metric_exclusion_requested_by, item.metric_excluded);
-    if (!complete) {
-      row.needsFollowUp += 1;
-      return false;
-    }
-    row.completedStandards += 1;
-    if (late) row.lateStandards += 1;
-    else row.onTimeStandards += 1;
-    return true;
-  };
 
   for (const item of standardsItems) {
     const owner = standardsCaseManagerFor(item);
     const createdKey = csvDateKey(item.matter_created_at);
     if (!createdKey) continue;
     const row = getRow(owner, createdKey);
+    row.assignedAttorneys.add(item.responsible_attorney_name || "Unassigned");
+    row.assignmentNotes.add(standardsAssignmentNote(item));
     row.newMatters.add(String(item.matter_id));
-    const complete = countCompletedStandard(item, row);
-    if (!complete) continue;
-    const late = item.item_status === "Late" && !isApprovedException(item.review_decision) && !isPendingAdminReview(item.metric_exclusion_requested_by, item.metric_excluded);
+    row.expectedStandards += 1;
+    const late = item.item_status === "Late";
+    const complete = isStandardComplete(item.item_status, item.evidence_ref_id);
+    if (!complete) {
+      row.needsFollowUp += 1;
+      continue;
+    }
+    row.completedStandards += 1;
+    if (late) row.lateStandards += 1;
+    else row.onTimeStandards += 1;
     if (item.step_code === "SETUP_WELCOME") {
       row.welcome += 1;
       if (late) row.welcomeLate += 1;
@@ -1128,30 +1070,12 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     }
   }
 
-  for (const item of ongoingStandardsItems) {
-    const owner = standardsCaseManagerFor(item);
-    const dueKey = csvDateKey(item.deadline_at);
-    if (!dueKey) continue;
-    const row = getRow(owner, dueKey);
-    const complete = countCompletedStandard(item, row);
-    if (!complete) continue;
-    const late = item.item_status === "Late" && !isApprovedException(item.review_decision) && !isPendingAdminReview(item.metric_exclusion_requested_by, item.metric_excluded);
-    if (item.step_code === "WEEKLY_CLIENT_CHECKIN") {
-      row.weeklyCheckIns += 1;
-      if (late) row.weeklyCheckInsLate += 1;
-    }
-    if (item.step_code === "COURT_REMINDER_CALL") {
-      row.courtReminderTemplates += 1;
-      if (late) row.courtReminderTemplatesLate += 1;
-    }
-  }
-
   return Array.from(rowsByOwnerDate.values())
-    .filter((row) => row.newMatters.size > 0 || row.weeklyCheckIns > 0 || row.courtReminderTemplates > 0 || row.expectedStandards > 0)
+    .filter((row) => row.newMatters.size > 0)
     .sort((a, b) => standardsOwnerSort(a.owner, b.owner) || a.date.localeCompare(b.date))
     .map((row) => {
-      const expected = row.expectedStandards;
-      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderTemplates;
+      const expected = row.newMatters.size * 3;
+      const completed = row.attorneyCall + row.welcome + row.courtDate;
       const score = expected ? `${Math.round((completed / expected) * 100)}%` : "0%";
       return {
         owner: row.owner,
@@ -1159,8 +1083,6 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
         attorneyCall: row.attorneyCall,
         welcome: row.welcome,
         courtDate: row.courtDate,
-        weeklyCheckIns: row.weeklyCheckIns,
-        courtReminderTemplates: row.courtReminderTemplates,
         completion: score,
         date: csvDisplayDate(row.date),
         sortDate: row.date,
@@ -1177,8 +1099,6 @@ export async function standardsCsv(filters: DashboardFilters = {}): Promise<stri
     row.attorneyCall,
     row.welcome,
     row.courtDate,
-    row.weeklyCheckIns,
-    row.courtReminderTemplates,
     row.completion,
   ]);
 
@@ -1218,8 +1138,6 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
           xmlCell(row.attorneyCall, "Number"),
           xmlCell(row.welcome, "Number"),
           xmlCell(row.courtDate, "Number"),
-          xmlCell(row.weeklyCheckIns, "Number"),
-          xmlCell(row.courtReminderTemplates, "Number"),
           xmlCell(row.completion),
         ].join("")}</Row>`,
       ),
@@ -1233,8 +1151,6 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
           <Column ss:Width="165"/>
           <Column ss:Width="150"/>
           <Column ss:Width="165"/>
-          <Column ss:Width="170"/>
-          <Column ss:Width="175"/>
           <Column ss:Width="160"/>
           ${tableRows}
         </Table>
@@ -1270,24 +1186,19 @@ type WeeklyComplianceCategory = {
   id: string;
   label: string;
   stepCodes?: string[];
-  reasonCodes?: string[];
-  excludeReasonCodes?: string[];
   uniqueMatters?: boolean;
 };
 
 export const WEEKLY_COMPLIANCE_CATEGORIES: WeeklyComplianceCategory[] = [
+  { id: "urgent", label: "Urgent matters not cleared daily", uniqueMatters: true },
   { id: "welcome", label: "Welcome letters missing", stepCodes: ["SETUP_WELCOME"] },
   { id: "attorney_call", label: "Attorney phone calls for new Clio matters not scheduled", stepCodes: ["SETUP_ATTY_CALL"] },
   { id: "appearance", label: "Court Appearance Filed template emails missing", stepCodes: ["APPEARANCE_FILING"] },
-  { id: "weekly_checkin", label: "Weekly client check-ins not completed", stepCodes: ["WEEKLY_CLIENT_CHECKIN"] },
+  { id: "weekly_checkup", label: "Weekly checkup calls not completed", stepCodes: ["WEEKLY_CLIENT_CHECKIN"] },
   { id: "results_calls", label: "Results calls not completed", stepCodes: ["POST_COURT_CALL"] },
   { id: "court_results", label: "Court Results template emails missing", stepCodes: ["COURT_RESULTS"] },
-  {
-    id: "court_reminder_template",
-    label: "Court reminder template emails missing",
-    stepCodes: ["COURT_REMINDER_CALL"],
-    reasonCodes: ["REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT"],
-  },
+  { id: "court_reminder_call", label: "Court reminder calls not completed", stepCodes: ["COURT_REMINDER_CALL"] },
+  { id: "court_reminder_template", label: "Court reminder template emails missing", stepCodes: ["COURT_REMINDER_CALL"] },
 ];
 
 function weekStartDateKey(baseDate: Date): string {
@@ -1319,15 +1230,7 @@ function isClearedByHumanReview(item: WorkspaceAuditItem): boolean {
 
 function isIncompleteForWeeklyComparison(item: WorkspaceAuditItem): boolean {
   if (item.metric_excluded || isClearedByHumanReview(item)) return false;
-  if (["WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"].includes(item.step_code)) {
-    if (item.reason_code === "NOT_FOUND") return false;
-    if (item.audit_version && item.audit_version !== APP_VERSION) return false;
-  }
-  if (["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"].includes(item.step_code) && item.deadline_at) {
-    const deadline = item.deadline_at instanceof Date ? item.deadline_at : new Date(item.deadline_at);
-    if (Number.isFinite(deadline.getTime()) && deadline >= new Date()) return false;
-  }
-  return ["Missing", "Unknown", "Needs Review", "Needs Recheck"].includes(item.item_status);
+  return ["Missing", "Unknown", "Late", "Needs Review", "Needs Recheck"].includes(item.item_status);
 }
 
 function countWeeklyCategory(
@@ -1342,10 +1245,7 @@ function countWeeklyCategory(
     if (!isIncompleteForWeeklyComparison(item)) return false;
     const dateKey = comparisonDateKey(item);
     if (!dateKey || dateKey < from || dateKey > to) return false;
-    if (category.stepCodes?.length && !category.stepCodes.includes(item.step_code)) return false;
-    if (category.reasonCodes?.length && !category.reasonCodes.includes(item.reason_code ?? "")) return false;
-    if (category.excludeReasonCodes?.length && category.excludeReasonCodes.includes(item.reason_code ?? "")) return false;
-    return true;
+    return !category.stepCodes?.length || category.stepCodes.includes(item.step_code);
   });
 
   if (!category.uniqueMatters) return matching.length;
@@ -1355,10 +1255,8 @@ function countWeeklyCategory(
 export function weeklyComplianceComparisonRows(
   items: WorkspaceAuditItem[],
   baseDate: Date = new Date(),
-  useLastCompletedWeek = true,
 ): WeeklyComplianceComparisonSection[] {
-  const anchorStart = weekStartDateKey(baseDate);
-  const currentStart = useLastCompletedWeek ? addDateKeyDays(anchorStart, -7) : anchorStart;
+  const currentStart = weekStartDateKey(baseDate);
   const currentEnd = addDateKeyDays(currentStart, 6);
   const previousStart = addDateKeyDays(currentStart, -7);
   const previousEnd = addDateKeyDays(currentStart, -1);
@@ -1387,7 +1285,7 @@ export function weeklyComplianceComparisonRows(
 export async function weeklyComplianceComparisonCsv(filters: DashboardFilters = {}): Promise<string> {
   const { workspaceItems } = await getDashboardData({});
   const baseDate = filters.to ? new Date(`${filters.to}T12:00:00`) : new Date();
-  const sections = weeklyComplianceComparisonRows(workspaceItems, baseDate, !filters.to);
+  const sections = weeklyComplianceComparisonRows(workspaceItems, baseDate);
   const rows = sections.flatMap((section) => [
     [section.caseManager, "", "", "", ""],
     ["Compliance Category", `Previous Week (${section.previousWeekLabel})`, `Current Week (${section.currentWeekLabel})`, "Change", "Meaning"],
@@ -1465,7 +1363,7 @@ function matterActionItem(stepCode: string): string {
     case "CLIENT_FOLLOWUP":
       return "Review the message thread and respond or coach as needed";
     case "WEEKLY_CLIENT_CHECKIN":
-      return "Verify the weekly check-in event and confirm the client call by the court-based due date";
+      return "Verify the weekly check-in calendar event and confirm the same-day client call";
     default:
       return actionFor(stepCode, "Missing");
   }
@@ -1640,4 +1538,3 @@ export async function caseManagerTodoText(filters: DashboardFilters = {}, origin
 
   return lines.join("\r\n");
 }
-
