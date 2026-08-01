@@ -15,6 +15,7 @@ import {
   POST_CLOSURE_TOUCHPOINTS,
 } from "@/lib/post-closure";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
+import { TEMPLATE_REGISTRY } from "@/lib/template-registry";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
 import { CopyTextButton } from "./copy-text-button";
@@ -574,7 +575,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
   return { area: "Review", action: "Open the flagged matters and verify the proof links." };
 }
 
-type DashboardTab = "workspace" | "matters" | "case-manager" | "standards" | "ongoing" | "post-closure" | "reports" | "debug" | "guide" | "compliance";
+type DashboardTab = "command" | "workspace" | "matters" | "case-manager" | "standards" | "ongoing" | "post-closure" | "reports" | "debug" | "guide" | "compliance";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
@@ -586,6 +587,7 @@ const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
 ]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
+  { id: "command", label: "Command Center", description: "What needs attention first" },
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
   { id: "standards", label: "Standards", description: "Graphic and Excel views" },
   { id: "ongoing", label: "Ongoing", description: "Active case maintenance" },
@@ -669,7 +671,7 @@ const GUIDE_STATUS_CARDS = [
 
 function dashboardTab(value?: string): DashboardTab {
   if (value === "kpi" || value === "onboarding") return "standards";
-  return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "matters";
+  return DASHBOARD_TABS.some((tab) => tab.id === value) ? (value as DashboardTab) : "command";
 }
 
 function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
@@ -743,7 +745,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const lastWeekStart = addDaysInput(weekStart, -7);
   const lastWeekEnd = addDaysInput(weekStart, -1);
   const monthStart = monthStartInput(new Date());
-  const defaultToCurrentWeek = activeTab === "matters" || activeTab === "workspace" || activeTab === "ongoing" || activeTab === "debug";
+  const defaultToCurrentWeek = activeTab === "command" || activeTab === "matters" || activeTab === "workspace" || activeTab === "ongoing" || activeTab === "debug";
   const defaultFrom = activeTab === "standards" ? lastWeekStart : defaultToCurrentWeek ? weekStart : "";
   const defaultTo = activeTab === "standards" ? lastWeekEnd : defaultToCurrentWeek ? today : "";
   const filters = {
@@ -1354,8 +1356,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="deployment-proof">
         <div>
           <span className="label">Deployment Proof</span>
-          <strong>Workspace cleanup pass is active</strong>
-          <p>Version {APP_VERSION}: Reports keeps exports and spreadsheets; Audit Debug now holds AI review and rule-tuning tools.</p>
+          <strong>Command Center and template registry are active</strong>
+          <p>Version {APP_VERSION}: The dashboard now starts with a cleaner action view, accepted template subjects, and direct paths into the right review area.</p>
         </div>
         <a className="button compact" href="/api/health" target="_blank" rel="noreferrer">Check Version</a>
       </section>
@@ -1378,6 +1380,128 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </a>
         ))}
       </nav>
+
+      {activeTab === "command" ? (
+      <section className="command-center-layout">
+        <section className="panel command-hero">
+          <div>
+            <span className="label">Start Here</span>
+            <h2>What Needs Attention This Week</h2>
+            <p className="muted">A clean view for what matters now. Use this first, then drill into Matters, Standards, Ongoing, or the CM portal only when needed.</p>
+          </div>
+          <div className="command-actions">
+            <a className="button primary compact" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>Open Matter Review</a>
+            <a className="button compact" href="/case-manager">Open CM Portal</a>
+            <a className="button compact" href={tabLink(filters, "debug")}>AI Debug</a>
+          </div>
+        </section>
+
+        <section className="command-metric-grid">
+          <a className="command-metric needs" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>
+            <span>Needs follow-up</span>
+            <strong>{needsFollowUpCount}</strong>
+            <small>Open items, timing review, or visibility review.</small>
+          </a>
+          <a className="command-metric" href={tabLink(filters, "standards")}>
+            <span>Standards score</span>
+            <strong>{kpiScore}%</strong>
+            <small>{kpiFollowUp} setup item{kpiFollowUp === 1 ? "" : "s"} still need proof.</small>
+          </a>
+          <a className="command-metric" href={tabLink(filters, "ongoing")}>
+            <span>Ongoing case help</span>
+            <strong>{ongoingTotals.followUp}</strong>
+            <small>Client contact, weekly check-ins, and court reminder templates.</small>
+          </a>
+          <a className="command-metric" href={tabLink(filters, "post-closure")}>
+            <span>Post-closure outreach</span>
+            <strong>{postClosureNeedsOutreach}</strong>
+            <small>Closed-matter follow-ups needing review.</small>
+          </a>
+        </section>
+
+        <section className="command-grid">
+          <div className="panel command-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="label">Proof Queue</span>
+                <h2>Fix These First</h2>
+                <p className="muted small">Highest-priority items in the selected date range.</p>
+              </div>
+              <a className="button compact" href={tabLink(filters, "matters")}>All Matters</a>
+            </div>
+            {todaysPriorities.length ? (
+              <div className="command-task-list">
+                {todaysPriorities.map((item) => {
+                  const href = evidencePath(item.row as DashboardItem, true);
+                  return (
+                    <div className={`command-task status-row-${statusClass(item.row.status)}`} key={`${item.row.matterId}-${item.row.stepCode}`}>
+                      <div>
+                        <span className="label">{workflowLabel(item.row.stepCode)}</span>
+                        <strong>{item.row.clientName}</strong>
+                        <small>{item.row.matterNumber} - {item.attorney}</small>
+                      </div>
+                      <span className={`badge ${statusClass(item.row.status)}`}>{displayItemStatus(item.row)}</span>
+                      <div className="command-task-actions">
+                        <a href={clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Matter</a>
+                        {href ? <a href={href} target="_blank" rel="noreferrer">Proof</a> : <a href={problemClioLinks(item.row.matterId, item.row.stepCode)[0]?.href ?? clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Clio Tab</a>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="chart-empty">
+                <strong>No urgent items found.</strong>
+                <p>Run Audit Batch if this week has not been checked yet.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="panel command-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="label">Template Proof</span>
+                <h2>Accepted Clio Email Subjects</h2>
+                <p className="muted small">CWCA checks Communications for these template subject patterns.</p>
+              </div>
+              <a className="button compact" href={tabLink(filters, "debug")}>Tune Rules</a>
+            </div>
+            <div className="template-registry-list">
+              {TEMPLATE_REGISTRY.map((entry) => (
+                <details className="template-registry-card" key={entry.category}>
+                  <summary>
+                    <strong>{entry.label}</strong>
+                    <span>{entry.subjects.length} subject pattern{entry.subjects.length === 1 ? "" : "s"}</span>
+                  </summary>
+                  <p>{entry.purpose}</p>
+                  <ul>
+                    {entry.subjects.slice(0, 8).map((subject) => <li key={subject}>{subject}</li>)}
+                  </ul>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="panel command-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Product Map</span>
+              <h2>Where To Go Next</h2>
+              <p className="muted small">One job per area so the app does not feel like one endless page.</p>
+            </div>
+          </div>
+          <div className="command-route-grid">
+            <a href={tabLink(filters, "matters")}><strong>Matters</strong><span>Review proof for individual matters.</span></a>
+            <a href={tabLink(filters, "standards")}><strong>Standards</strong><span>Excel and graphic score views.</span></a>
+            <a href={tabLink(filters, "ongoing")}><strong>Ongoing</strong><span>Client contact, weekly check-ins, court reminders.</span></a>
+            <a href={tabLink(filters, "reports")}><strong>Reports</strong><span>Exports, weekly comparisons, Google Sheets.</span></a>
+            <a href={tabLink(filters, "debug")}><strong>Audit Debug</strong><span>AI review, stale rows, matcher issues.</span></a>
+            <a href="/case-manager"><strong>CM Portal</strong><span>Case managers clear their own assigned tasks.</span></a>
+          </div>
+        </section>
+      </section>
+      ) : null}
 
       {false ? (
         <>
@@ -1951,7 +2075,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Active Cases</span>
               <h2>Ongoing Case Maintenance</h2>
-              <p className="muted small">Client contact, weekly calls, and court reminders that are due now. Not-due-yet items are not counted.</p>
+              <p className="muted small">Client contact, weekly client check-ins, and court reminders that are due now. Not-due-yet items are not counted.</p>
             </div>
             <span className={`badge ${ongoingTotals.followUp ? "Late" : "Pass"}`}>{ongoingTotals.followUp ? `${ongoingTotals.followUp} need follow-up` : "All clear"}</span>
           </div>

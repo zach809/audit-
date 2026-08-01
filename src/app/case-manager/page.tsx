@@ -10,7 +10,7 @@ import { workflowLabel } from "@/lib/workflow-rules";
 export const dynamic = "force-dynamic";
 
 const CLEARING_DECISIONS = new Set(["Resolved", "No Action Needed", "Approved Exception"]);
-const CLIENT_COMMUNICATION_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
+const CLIENT_FOLLOW_UP_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP"]);
 const STANDARDS_STEPS = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const DATE_PART_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Chicago",
@@ -54,7 +54,7 @@ function isOpenTask(row: WorkspaceAuditItem): boolean {
 }
 
 function isClientCommunicationTask(row: WorkspaceAuditItem): boolean {
-  return CLIENT_COMMUNICATION_STEPS.has(row.step_code);
+  return CLIENT_FOLLOW_UP_STEPS.has(row.step_code);
 }
 
 function isStandardsTask(row: WorkspaceAuditItem): boolean {
@@ -326,7 +326,7 @@ export default async function CaseManagerPortalPage({
     {
       label: "Client reminders",
       count: communicationTasks.length,
-      text: "Open Clio and confirm the client was contacted.",
+      text: "Client contact or response items only.",
     },
     {
       label: "Past due",
@@ -334,9 +334,9 @@ export default async function CaseManagerPortalPage({
       text: "Handle these first or ask admin to review if they should not count.",
     },
     {
-      label: "Weekly calls",
+      label: "Weekly check-ins",
       count: weeklyCallTasks.length,
-      text: "Check weekly call events and matching call proof.",
+      text: "Weekly client check-in event and call proof.",
     },
     {
       label: "Court reminders",
@@ -362,9 +362,9 @@ export default async function CaseManagerPortalPage({
     <main className="cm-portal-shell">
       <header className="cm-portal-header">
         <div>
-          <span className="label">Case Manager Portal</span>
-          <h1>My Clio Follow-Up Tasks</h1>
-          <p>Fix the item in Clio first. Then ask CWCA to verify it. Tasks only clear when proof is found in Clio.</p>
+          <span className="label">Case Manager Task Center</span>
+          <h1>Clear Your Clio Tasks</h1>
+          <p>Open Clio, complete the work, then verify it here. CWCA only clears a task when matching proof is found in Clio.</p>
           <p className="cm-assignment-note">
             {showAllAssignments
               ? `Admin view: showing ${activeWindowBounds.label.toLowerCase()} assigned case-manager tasks.`
@@ -383,7 +383,7 @@ export default async function CaseManagerPortalPage({
 
       <section className="cm-queue-summary">
         <div>
-          <span>Needs Your Review</span>
+          <span>This Queue</span>
           <strong>{tasks.length}</strong>
           <small>{activeWindowBounds.label}: {activeWindowBounds.start} to {activeWindowBounds.end}</small>
         </div>
@@ -396,9 +396,9 @@ export default async function CaseManagerPortalPage({
           </a>
         </nav>
         <ol className="cm-simple-steps" aria-label="How to clear tasks">
-          <li><b>1</b><span>Open the right Clio tab.</span></li>
-          <li><b>2</b><span>Complete or confirm the work.</span></li>
-          <li><b>3</b><span>Click verify so CWCA can recheck proof.</span></li>
+          <li><b>1</b><span>Open Clio.</span></li>
+          <li><b>2</b><span>Fix or confirm the item.</span></li>
+          <li><b>3</b><span>Verify with CWCA.</span></li>
         </ol>
       </section>
 
@@ -421,8 +421,8 @@ export default async function CaseManagerPortalPage({
         <div className="cm-section-head">
           <div>
             <span className="label">Start Here</span>
-            <h2>Clear These First</h2>
-            <p>These are the most urgent items in your current view. Open Clio, complete the work, then verify the task.</p>
+            <h2>Fix These First</h2>
+            <p>Start with these items. They are due soon, past due, or tied to your Standards score.</p>
           </div>
           <strong>{clearFirstTasks.length ? `${clearFirstTasks.length} shown` : "All clear"}</strong>
         </div>
@@ -458,7 +458,7 @@ export default async function CaseManagerPortalPage({
       <section className="cm-score-card" aria-label="Case manager standards score">
         <div className="cm-score-head">
           <div>
-            <span className="label">Standards Score</span>
+          <span className="label">Score Preview</span>
             <h2>{standardsOwnerLabel}</h2>
             <p>{activeWindowBounds.label}: Welcome Letter, Initial Meeting, and Court Date proof.</p>
           </div>
@@ -546,7 +546,7 @@ export default async function CaseManagerPortalPage({
               ) : null}
 
               <div className="cm-next-step">
-                <span>What to do</span>
+            <span>Next step</span>
                 <strong>{actionFor(row.step_code, status, row.reason_code)}</strong>
               </div>
 
@@ -579,7 +579,7 @@ export default async function CaseManagerPortalPage({
 
               <details className="cm-complete-details">
                 <summary>
-                  <span>I fixed this in Clio</span>
+                  <span>Ready to verify</span>
                   <b>Verify Task</b>
                 </summary>
                 <form className="cm-complete-form" action="/api/case-manager/complete" method="post">
