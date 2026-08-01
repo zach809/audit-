@@ -1,3 +1,5 @@
+import { templateSubjectsFor } from "./template-registry";
+
 const normalizeMap: Array<[RegExp, string]> = [
   [/á/g, "a"],
   [/é/g, "e"],
@@ -31,8 +33,18 @@ export function includesAny(text: string, terms: string[]): boolean {
   });
 }
 
+function templateText(value: string): { normalized: string; compact: string } {
+  const normalized = normalizeText(value)
+    .replace(/[|:/()[\]{}]+/g, " ")
+    .replace(/\s*[-–—]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { normalized, compact: normalized.replace(/[^a-z0-9]+/g, "") };
+}
+
 export const TEMPLATE_PATTERNS = {
   welcome: [
+    ...templateSubjectsFor("welcome"),
     "welcome letter",
     "welcome letter -",
     "welcome letter:",
@@ -67,14 +79,20 @@ export const TEMPLATE_PATTERNS = {
     "bienvenida a hirsch",
   ],
   appearance: [
+    ...templateSubjectsFor("appearance"),
     "court appearance has been filed notification",
+    "court appearance has been filed notification:",
     "court appearance has been filed",
     "court appearance filed notification",
+    "court appearance filed notification:",
     "court appearance filed",
     "appearance has been filed notification",
+    "appearance has been filed notification:",
     "appearance has been filed",
     "appearance filing notification",
+    "appearance filing notification:",
     "appearance filed notification",
+    "appearance filed notification:",
     "appearance notification",
     "notificacion de presentacion en la corte",
     "notificacion de presentacion en corte",
@@ -95,6 +113,7 @@ export const TEMPLATE_PATTERNS = {
     "appearance",
   ],
   courtResults: [
+    ...templateSubjectsFor("courtResults"),
     "court result and next court date",
     "court result mm/dd/yr next court date mm/dd/yr",
     "court result mm/dd/yr || next court date mm/dd/yr",
@@ -119,8 +138,18 @@ export const TEMPLATE_PATTERNS = {
     "proxima corte",
   ],
   courtReminder: [
+    ...templateSubjectsFor("courtReminder"),
     "in-person court reminder",
+    "court reminder",
+    "court reminder call",
+    "court reminder phone call",
+    "hearing reminder",
+    "hearing instructions",
+    "court instructions",
     "recordatorio de audiencia presencial",
+    "recordatorio de audiencia",
+    "recordatorio de corte",
+    "recordatorio para corte",
     "zoom court reminder & instructions",
     "zoom instructions for your court hearing",
     "recordatorio e instrucciones para la audiencia por zoom",
@@ -307,35 +336,69 @@ export const CALENDAR_PATTERNS = {
     "weekly follow up",
     "weekly client check-in",
     "weekly client check in",
+    "weekly client checkup",
+    "weekly client check up",
+    "weekly client touch base",
+    "weekly touch base",
+    "weekly status call",
+    "weekly status update",
+    "weekly update call",
+    "check-in call",
+    "check in call",
+    "checkup call",
+    "touch base call",
+    "client touch base call",
+    "client status call",
+    "client update call",
+    "follow up client",
+    "follow-up client",
     "weekly check-in",
     "weekly check in",
+    "weekly checkup",
+    "weekly check up",
     "weekly courtesy call",
+    "weekly client courtesy call",
     "client weekly call",
+    "client weekly follow up",
+    "client weekly follow-up",
     "weekly call",
     "client courtesy call",
     "courtesy call",
+    "followup call",
+    "follow-up call",
+    "follow up call",
+    "client followup call",
+    "client follow-up call",
+    "client follow up call",
     "llamada semanal",
     "seguimiento semanal",
+    "llamada de seguimiento",
+    "seguimiento con cliente",
   ],
 };
 
 export function isWelcomeTemplate(text: string): boolean {
-  const normalized = normalizeText(text);
-  const compact = normalized.replace(/[^a-z0-9]+/g, "");
-  return normalized.startsWith("welcome letter") ||
-    normalized.startsWith("welcome to hirsch") ||
-    normalized.startsWith("carta de bienvenida") ||
-    compact.startsWith("welcomeletter") ||
-    compact.startsWith("cartadebienvenida") ||
+  const { normalized, compact } = templateText(text);
+  return /\bwelcome\s+letter\b/.test(normalized) ||
+    /\bwelcome\s+to\s+hirsch(?:\s+law(?:\s+group)?)?\b/.test(normalized) ||
+    /\bcarta\s+de\s+bienvenida\b/.test(normalized) ||
+    /\bbienvenid[ao]s?\s+a\s+hirsch(?:\s+law(?:\s+group)?)?\b/.test(normalized) ||
+    compact.includes("welcomeletter") ||
+    compact.includes("welcometohirsch") ||
+    compact.includes("cartadebienvenida") ||
     includesAny(normalized, TEMPLATE_PATTERNS.welcome);
 }
 
 export function isAppearanceTemplate(text: string): boolean {
-  const normalized = normalizeText(text);
-  return normalized.startsWith("court appearance has been filed notification") ||
-    normalized.startsWith("court appearance filed") ||
-    normalized.startsWith("appearance has been filed") ||
-    normalized.startsWith("notificacion de presentacion") ||
+  const { normalized, compact } = templateText(text);
+  return /\bcourt\s+appearance\s+has\s+been\s+filed\s+notification\b/.test(normalized) ||
+    /\bcourt\s+appearance\s+(?:has\s+been\s+)?filed\b/.test(normalized) ||
+    /\bappearance\s+(?:has\s+been\s+)?filed\b/.test(normalized) ||
+    /\bappearance\s+filing\s+(?:email|notification|template)\b/.test(normalized) ||
+    /\bnotificacion\s+de\s+presentacion\s+en\s+la\s+corte\b/.test(normalized) ||
+    /\bpresentacion\s+en\s+la\s+corte\b/.test(normalized) ||
+    compact.includes("courtappearancehasbeenfilednotification") ||
+    compact.includes("notificaciondepresentacionenlacorte") ||
     includesAny(normalized, TEMPLATE_PATTERNS.appearance);
 }
 
@@ -345,8 +408,15 @@ export function isCourtResultTemplate(text: string): boolean {
 }
 
 export function isCourtReminderTemplate(text: string): boolean {
-  const normalized = normalizeText(text);
-  return normalized.startsWith("in-person court reminder") || normalized.startsWith("recordatorio de audiencia presencial") || normalized.startsWith("zoom instructions for your court hearing") || normalized.startsWith("recordatorio e instrucciones para la audiencia por zoom") || includesAny(normalized, TEMPLATE_PATTERNS.courtReminder);
+  const { normalized, compact } = templateText(text);
+  return /\bin\s+person\s+court\s+reminder\b/.test(normalized) ||
+    /\brecordatorio\s+de\s+audiencia\s+presencial\b/.test(normalized) ||
+    /\bzoom\s+instructions\s+for\s+your\s+court\s+hearing\b/.test(normalized) ||
+    /\brecordatorio\s+e\s+instrucciones\s+para\s+la\s+audiencia\s+por\s+zoom\b/.test(normalized) ||
+    compact.includes("inpersoncourtreminder") ||
+    compact.includes("recordatoriodeaudienciapresencial") ||
+    compact.includes("zoominstructionsforyourcourthearing") ||
+    includesAny(normalized, TEMPLATE_PATTERNS.courtReminder);
 }
 
 export function isAttorneyCall(text: string): boolean {
@@ -412,12 +482,19 @@ export function isPhoneCallCommunication(text: string): boolean {
   }
   return includesAny(normalized, [
     "phonecommunication",
+    "phone communication",
     "outbound call",
+    "outgoing call",
     "inbound call",
     "phone call",
     "telephone call",
     "telephonic call",
     "client call",
+    "voice call",
+    "call duration",
+    "dialpad",
+    "completed call",
+    "answered call",
     "call client",
     "call with client",
     "call to client",
