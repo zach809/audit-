@@ -10836,3 +10836,36 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.cm-active-filter-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 190, 120, 0.42);
+  border-radius: 18px;
+  background: rgba(70, 49, 39, 0.46);
+  color: #fff3df;
+}
+
+.cm-active-filter-notice div,
+.cm-active-filter-notice strong,
+.cm-active-filter-notice span {
+  display: block;
+}
+
+.cm-active-filter-notice strong {
+  margin-bottom: 3px;
+}
+
+.cm-active-filter-notice span {
+  color: #ffd7a8;
+}
+
+@media (max-width: 720px) {
+  .cm-active-filter-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

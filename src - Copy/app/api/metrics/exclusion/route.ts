@@ -22,6 +22,9 @@ export async function POST(request: NextRequest) {
   const overall = String(form.get("overall") ?? "").trim();
   const wstatus = String(form.get("wstatus") ?? "").trim();
   const wfocus = String(form.get("wfocus") ?? "").trim();
+  const window = String(form.get("window") ?? "").trim();
+  const q = String(form.get("q") ?? "").trim();
+  const cmname = String(form.get("cmname") ?? "").trim();
 
   if (!matterId) {
     return redirectBack(request, action === "request" ? "/case-manager" : "/", {
@@ -55,8 +58,12 @@ export async function POST(request: NextRequest) {
         updated_at = now()
     `;
     return redirectBack(request, "/case-manager", {
+      window,
+      q,
+      cmname,
+      attorney,
       metrics: "requested",
-      message: "Request sent. An admin can review and remove it from Standards if appropriate.",
+      message: "Request sent. This item is protected while admin reviews whether it should count.",
     });
   }
 

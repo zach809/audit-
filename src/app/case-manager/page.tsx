@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 const CLEARING_DECISIONS = new Set(["Resolved", "No Action Needed", "Approved Exception"]);
 const CLIENT_FOLLOW_UP_STEPS = new Set(["CLIENT_CONTACT", "CLIENT_FOLLOWUP"]);
 const STANDARDS_STEPS = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
+const REVIEW_PAGE_URL = "https://reviewracer-dashboard.vercel.app";
 const DATE_PART_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Chicago",
   year: "numeric",
@@ -50,7 +51,7 @@ function clientName(row: WorkspaceAuditItem): string {
 
 function isOpenTask(row: WorkspaceAuditItem): boolean {
   const status = workspaceStatus(row.item_status, row.reason_code);
-  return isFollowUpStatus(status) && !CLEARING_DECISIONS.has(row.review_decision ?? "");
+  return (isFollowUpStatus(status) || status === "Late") && !CLEARING_DECISIONS.has(row.review_decision ?? "");
 }
 
 function isClientCommunicationTask(row: WorkspaceAuditItem): boolean {
@@ -260,6 +261,10 @@ export default async function CaseManagerPortalPage({
     .filter(isOpenTask)
     .filter((row) => showAllAssignments || ownerMatches(row, portalOwner))
     .filter((row) => taskMatches(row, query, cmNameFilter, attorneyFilter));
+  const unfilteredOwnerTasks = dashboardData.workspaceItems
+    .filter(isOpenTask)
+    .filter((row) => showAllAssignments || ownerMatches(row, portalOwner));
+  const hasActiveFilters = Boolean(query.trim() || cmNameFilter.trim() || attorneyFilter.trim());
   const scoreOwnerFilter = showAllAssignments ? cmNameFilter : portalOwner;
   const standardsRows = dashboardData.workspaceItems
     .filter(isStandardsTask)
@@ -357,6 +362,9 @@ export default async function CaseManagerPortalPage({
 
   const message = searchParams.message ? decodeURIComponent(String(searchParams.message)) : "";
   const messageClass = searchParams.cm === "cleared" ? "cm-alert success" : searchParams.cm ? "cm-alert warning" : "cm-alert";
+  const hiddenByFiltersCount = hasActiveFilters
+    ? unfilteredOwnerTasks.filter((row) => inTaskWindow(row, activeWindow)).length - tasks.length
+    : 0;
 
   return (
     <main className="cm-portal-shell">
@@ -373,6 +381,7 @@ export default async function CaseManagerPortalPage({
         </div>
         <div className="cm-portal-actions">
           <span className="badge On-Track">{caseManagerName}</span>
+          <a className="button" href={REVIEW_PAGE_URL} target="_blank" rel="noreferrer">Open Review Page</a>
           <form action="/logout" method="post">
             <button className="button" type="submit">Log Out</button>
           </form>
@@ -380,6 +389,23 @@ export default async function CaseManagerPortalPage({
       </header>
 
       {message ? <p className={messageClass}>{message}</p> : null}
+
+      {hasActiveFilters ? (
+        <section className="cm-active-filter-notice">
+          <div>
+            <strong>Filtered view is on.</strong>
+            <span>
+              {[
+                query.trim() ? `Search: ${query.trim()}` : "",
+                cmNameFilter.trim() ? `Case manager: ${cmNameFilter.trim()}` : "",
+                attorneyFilter.trim() ? `Attorney: ${attorneyFilter.trim()}` : "",
+              ].filter(Boolean).join(" | ")}
+              {hiddenByFiltersCount > 0 ? ` | ${hiddenByFiltersCount} more ${activeWindowBounds.label.toLowerCase()} task${hiddenByFiltersCount === 1 ? "" : "s"} hidden by filters.` : ""}
+            </span>
+          </div>
+          <a className="button compact" href="/case-manager">Show All Tasks</a>
+        </section>
+      ) : null}
 
       <section className="cm-queue-summary">
         <div>
@@ -623,7 +649,12 @@ export default async function CaseManagerPortalPage({
         }) : (
           <section className="cm-empty">
             <strong>No tasks need review right now.</strong>
-            <p>No open tasks match {activeWindowBounds.label.toLowerCase()}. Use Past Week if you need to review last week.</p>
+            <p>
+              {hasActiveFilters
+                ? "No open tasks match these filters. Clear filters to see the full case-manager queue."
+                : `No open tasks match ${activeWindowBounds.label.toLowerCase()}. Use Past Week if you need to review last week.`}
+            </p>
+            {hasActiveFilters ? <a className="button compact primary" href="/case-manager">Show All Tasks</a> : null}
           </section>
         )}
       </section>

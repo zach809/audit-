@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, addWeekdayHours, effectiveIntake, isBusinessDay, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
+import { addBusinessDaysDeadline, addWeekdayHours, businessDayEnd, effectiveIntake, isBusinessDay, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -119,6 +119,11 @@ function calendarSearchText(cal: ClioCalendarEntry): string {
   return haystack(cal.summary, cal.description, cal.calendar_entry_event_type?.name, cal.calendar_owner?.name);
 }
 
+function isFirmPhoneCall(comm: ClioCommunication, clientId: string | null): boolean {
+  if (!isPhoneCallCommunication(communicationSearchText(comm))) return false;
+  return isOutbound(comm, clientId) !== false;
+}
+
 function isPettyTrafficMatter(record: MatterRecord): boolean {
   return haystack(record.matter_number).includes("petty traffic");
 }
@@ -127,12 +132,26 @@ function addHours(date: Date, hours: number): Date {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }
 
+function addDaysRaw(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
 function previousBusinessDayEnd(date: Date): Date {
   const parts = localParts(date);
   let candidate = zonedDateTimeToUtc(parts.year, parts.month, parts.day - 1, 17, 0, 0);
   while (!isBusinessDay(candidate)) {
     const candidateParts = localParts(candidate);
     candidate = zonedDateTimeToUtc(candidateParts.year, candidateParts.month, candidateParts.day - 1, 17, 0, 0);
+  }
+  return candidate;
+}
+
+function previousBusinessDayStart(date: Date): Date {
+  const parts = localParts(date);
+  let candidate = zonedDateTimeToUtc(parts.year, parts.month, parts.day - 1, 8, 0, 0);
+  while (!isBusinessDay(candidate)) {
+    const candidateParts = localParts(candidate);
+    candidate = zonedDateTimeToUtc(candidateParts.year, candidateParts.month, candidateParts.day - 1, 8, 0, 0);
   }
   return candidate;
 }
@@ -148,6 +167,23 @@ function localDateDistanceDays(a: Date, b: Date): number {
   const aUtc = Date.UTC(ay, am - 1, ad);
   const bUtc = Date.UTC(by, bm - 1, bd);
   return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
+}
+
+function nearestByLocalDate<T>(items: Evidence<T>[], anchor: Date, maxDistanceDays: number): (Evidence<T> & { distance: number }) | null {
+  return (items
+    .map((item) => ({ ...item, distance: Math.abs(localDateDistanceDays(item.at, anchor)) }))
+    .filter((item) => item.distance <= maxDistanceDays)
+    .sort((a, b) => a.distance - b.distance || a.at.getTime() - b.at.getTime())[0] ?? null);
+}
+
+function endOfLocalBusinessDay(date: Date): Date {
+  const parts = localParts(date);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 17, 0, 0);
+}
+
+function startOfLocalDay(date: Date): Date {
+  const parts = localParts(date);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day, 0, 0, 0);
 }
 
 function endOfLocalDay(date: Date): Date {
@@ -204,7 +240,7 @@ function classify(
   }
   const status: AuditStatus = deadlineAt && evidence.at <= deadlineAt ? "On Time" : "Late";
   return {
-    ...base(stepCode, status, status, deadlineAt, options.correctiveDeadlineAt ?? null),
+    ...base(stepCode, status, status, deadlineAt, options.correctiveDeadlineAt ?? null, status === "Late" ? options.reasonCode ?? "FOUND_AFTER_DEADLINE" : null),
     evidenceAt: evidence.at,
     evidenceSource: evidence.source,
     evidenceRefId: String(evidence.item.id),
@@ -246,6 +282,34 @@ function matterNumber(matter: ClioMatter): string {
   return matter.display_number ?? String(matter.number ?? matter.id);
 }
 
+function isFirmPlaceholderAttorney(name?: string | null): boolean {
+  const text = haystack(name);
+  return !text || text === "hirsch law group" || text === "the hirsch law group" || text === "hirsch law" || text === "firm";
+}
+
+function matterAttorney(matter: ClioMatter): { id: string | null; name: string } {
+  const responsible = matter.responsible_attorney;
+  if (responsible?.name && !isFirmPlaceholderAttorney(responsible.name)) {
+    return {
+      id: responsible.id ? String(responsible.id) : null,
+      name: responsible.name,
+    };
+  }
+
+  const originating = matter.originating_attorney;
+  if (originating?.name && !isFirmPlaceholderAttorney(originating.name)) {
+    return {
+      id: originating.id ? String(originating.id) : null,
+      name: originating.name,
+    };
+  }
+
+  return {
+    id: responsible?.id ? String(responsible.id) : originating?.id ? String(originating.id) : null,
+    name: responsible?.name ?? originating?.name ?? "",
+  };
+}
+
 function evidenceUrl(type: "communications" | "calendar_entries", id: number): string {
   return `/evidence/${type}/${id}`;
 }
@@ -274,6 +338,7 @@ async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
   const splitName = clientName.split(" ");
   const first = matter.client?.first_name ?? splitName[0] ?? "";
   const last = matter.client?.last_name ?? splitName.slice(1).join(" ") ?? "";
+  const attorney = matterAttorney(matter);
   const record = {
     matter_id: String(matter.id),
     matter_number: matterNumber(matter),
@@ -281,8 +346,8 @@ async function saveMatter(matter: ClioMatter): Promise<MatterRecord> {
     client_id: matter.client?.id ? String(matter.client.id) : null,
     client_first_name: first,
     client_last_name: last,
-    responsible_attorney_id: matter.responsible_attorney?.id ? String(matter.responsible_attorney.id) : null,
-    responsible_attorney_name: matter.responsible_attorney?.name ?? "",
+    responsible_attorney_id: attorney.id,
+    responsible_attorney_name: attorney.name,
     matter_created_at: created,
     effective_intake_at: effective,
     last_court_date: null,
@@ -347,7 +412,7 @@ async function upsertItems(matterId: string, items: AuditItemResult[], overallSt
 export async function discoverMatters(client = new ClioClient(), lookbackDays = appConfig().initialLookbackDays): Promise<number> {
   await initDb();
   const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
-  const fields = "id,number,display_number,status,created_at,responsible_attorney{id,name},client{id,first_name,last_name,name}";
+  const fields = "id,number,display_number,status,created_at,responsible_attorney{id,name},originating_attorney{id,name},client{id,first_name,last_name,name}";
   const matters = await client.list<ClioMatter>("/matters.json", { fields, created_since: since.toISOString() });
   let count = 0;
   for (const matter of matters) {
@@ -414,14 +479,19 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         .map((comm): Evidence<ClioCommunication> | null => {
           const at = commDate(comm);
           if (!at || (deadlineWindowStart && at < deadlineWindowStart)) return null;
-          const direction = isOutbound(comm, record.client_id);
-          if (direction === false) return null;
-          if (direction !== true && isReplySubject(comm.subject)) return null;
 
           const externalValues = comm.external_properties?.flatMap((prop) => [prop.name, prop.value]) ?? [];
-          const subjectText = haystack(comm.subject, ...externalValues);
+          const subjectText = haystack(comm.subject, comm.type, ...externalValues);
           const fullText = communicationSearchText(comm, true);
-          if (!matcher(subjectText) && !matcher(fullText)) return null;
+          const subjectMatched = matcher(subjectText);
+          const fullTextMatched = matcher(fullText);
+          if (!subjectMatched && !fullTextMatched) return null;
+
+          const direction = isOutbound(comm, record.client_id);
+          const directionText = communicationDirectionText(comm);
+          if (isReplySubject(comm.subject)) return null;
+          if (directionText.includes("inbound")) return null;
+          if (!subjectMatched && direction === false) return null;
 
           return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
         })
@@ -444,72 +514,6 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   });
   const attorneyCallEvidence = callEvidence ?? attorneyCallCommunicationEvidence;
 
-  const weeklyCheckInEvents = evidence.calendars
-    .map((cal): Evidence<ClioCalendarEntry> | null => {
-      const at = parseDate(cal.start_at);
-      if (!at) return null;
-      if (!isWeeklyClientCheckIn(calendarSearchText(cal))) return null;
-      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
-    })
-    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
-
-  const pastOrTodayWeeklyCheckIn = weeklyCheckInEvents
-    .filter((event) => event.at <= now)
-    .sort((a, b) => b.at.getTime() - a.at.getTime())[0] ?? null;
-  const nextWeeklyCheckIn = weeklyCheckInEvents
-    .filter((event) => event.at > now)
-    .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
-  const weeklyCheckInEvent = pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
-  const weeklyCheckInDeadline = weeklyCheckInEvent ? endOfLocalDay(weeklyCheckInEvent.at) : firstWeeklyCheckInDeadline;
-  const weeklyCheckInCall = weeklyCheckInEvent
-    ? earliest(
-        evidence.communications
-          .map((comm): Evidence<ClioCommunication> | null => {
-            const at = commDate(comm);
-            if (!at || localDateKey(at) !== localDateKey(weeklyCheckInEvent.at)) return null;
-            if (!isPhoneCallCommunication(communicationSearchText(comm))) return null;
-            return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
-          })
-          .filter(Boolean) as Evidence<ClioCommunication>[],
-      )
-    : null;
-  const nearbyWeeklyCheckInCall = weeklyCheckInEvent
-    ? (evidence.communications
-        .map((comm): (Evidence<ClioCommunication> & { distance: number }) | null => {
-          const at = commDate(comm);
-          if (!at || !isPhoneCallCommunication(communicationSearchText(comm))) return null;
-          const distance = Math.abs(localDateDistanceDays(at, weeklyCheckInEvent.at));
-          if (distance === 0 || distance > 3) return null;
-          return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id), distance };
-        })
-        .filter(Boolean) as Array<Evidence<ClioCommunication> & { distance: number }>)
-        .sort((a, b) => a.distance - b.distance || a.at.getTime() - b.at.getTime())[0] ?? null
-    : null;
-  const weeklyCheckInItem = (() => {
-    if (calendarError) {
-      return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
-    }
-    if (!weeklyCheckInEvent) {
-      return classify("WEEKLY_CLIENT_CHECKIN", null, firstWeeklyCheckInDeadline, {
-        operationalState: "Waiting for weekly check-in window",
-        now,
-      });
-    }
-    if (weeklyCheckInCall) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null), weeklyCheckInCall);
-    }
-    if (nearbyWeeklyCheckInCall && now > weeklyCheckInDeadline) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
-    }
-    if (now <= weeklyCheckInDeadline) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Waiting for same-day call proof", weeklyCheckInDeadline, null), weeklyCheckInEvent);
-    }
-    if (commError) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError), weeklyCheckInEvent);
-    }
-    return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "CALL_NOT_FOUND_SAME_DAY"), weeklyCheckInEvent);
-  })();
-
   const courtEvents = evidence.calendars
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.start_at);
@@ -519,12 +523,6 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
     })
     .filter(Boolean) as Evidence<ClioCalendarEntry>[];
-
-  const courtAdded = earliest(
-    courtEvents
-      .map((ev) => ({ ...ev, at: parseDate(ev.item.created_at ?? ev.item.start_at) ?? ev.at }))
-      .filter((ev) => ev.at >= record.effective_intake_at),
-  );
 
   const pastCourts = courtEvents
     .filter((ev) => {
@@ -542,12 +540,94 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     ? courtEvents.filter((ev) => ev.at > lastCourtEnd && ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null
     : courtEvents.filter((ev) => ev.at > now).sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
 
+  const weeklyCheckInEvents = evidence.calendars
+    .map((cal): Evidence<ClioCalendarEntry> | null => {
+      const at = parseDate(cal.start_at);
+      if (!at) return null;
+      if (!isWeeklyClientCheckIn(calendarSearchText(cal))) return null;
+      return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
+
+  const weeklyCheckInCourtDeadline = lastCourtEnd ? businessDayEnd(addDaysRaw(lastCourtEnd, 8)) : null;
+  const weeklyCheckInDueAnchor = weeklyCheckInCourtDeadline ?? firstWeeklyCheckInDeadline;
+  const nearestWeeklyCheckInEvent = nearestByLocalDate(weeklyCheckInEvents, weeklyCheckInDueAnchor, weeklyCheckInCourtDeadline ? 3 : 7);
+  const pastOrTodayWeeklyCheckIn = weeklyCheckInEvents
+    .filter((event) => event.at <= now)
+    .sort((a, b) => b.at.getTime() - a.at.getTime())[0] ?? null;
+  const nextWeeklyCheckIn = weeklyCheckInEvents
+    .filter((event) => event.at > now)
+    .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
+  const weeklyCheckInEvent = nearestWeeklyCheckInEvent ?? pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
+  const weeklyCheckInCalendarDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : null;
+  const weeklyCheckInDeadline = weeklyCheckInCourtDeadline ?? weeklyCheckInCalendarDeadline ?? firstWeeklyCheckInDeadline;
+  const weeklyCheckInCallAnchor = weeklyCheckInCourtDeadline ?? weeklyCheckInEvent?.at ?? weeklyCheckInDeadline;
+  const weeklyPhoneCalls = evidence.communications
+    .map((comm): Evidence<ClioCommunication> | null => {
+      const at = commDate(comm);
+      if (!at || !isFirmPhoneCall(comm, record.client_id)) return null;
+      return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+    })
+    .filter(Boolean) as Evidence<ClioCommunication>[];
+  const weeklyCheckInCall = earliest(
+    weeklyPhoneCalls.filter((call) => localDateKey(call.at) === localDateKey(weeklyCheckInCallAnchor)),
+  );
+  const nearbyWeeklyCheckInCall = nearestByLocalDate(weeklyPhoneCalls, weeklyCheckInCallAnchor, 3);
+  const weeklyCallWithoutCalendar = !weeklyCheckInEvent
+    ? earliest(
+        weeklyPhoneCalls.filter((call) => call.at >= addDaysRaw(weeklyCheckInDeadline, -8)),
+      )
+    : null;
+  const weeklyCheckInItem = (() => {
+    if (calendarError) {
+      return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
+    }
+    if (!weeklyCheckInEvent) {
+      if (weeklyCallWithoutCalendar && now > weeklyCheckInDeadline) {
+        return withEvidence(
+          base("WEEKLY_CLIENT_CHECKIN", "Late", "Timing Review", weeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
+          weeklyCallWithoutCalendar,
+        );
+      }
+      return classify("WEEKLY_CLIENT_CHECKIN", null, weeklyCheckInDeadline, {
+        operationalState: weeklyCheckInCourtDeadline ? "Waiting until one week plus one day after last court date" : "Waiting for weekly check-in window",
+        reasonCode: "WEEKLY_CALENDAR_EVENT_NOT_FOUND",
+        now,
+      });
+    }
+    if (weeklyCheckInCall) {
+      return classify("WEEKLY_CLIENT_CHECKIN", weeklyCheckInCall, weeklyCheckInDeadline, {
+        reasonCode: weeklyCheckInCall.at > weeklyCheckInDeadline ? "CALL_FOUND_NEARBY_DATE" : null,
+        now,
+      });
+    }
+    if (nearbyWeeklyCheckInCall && nearbyWeeklyCheckInCall.distance > 0 && now > weeklyCheckInDeadline) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
+    }
+    if (now <= weeklyCheckInDeadline) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Not Due Yet", weeklyCheckInDeadline, null), weeklyCheckInEvent);
+    }
+    if (commError) {
+      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError), weeklyCheckInEvent);
+    }
+    return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND"), weeklyCheckInEvent);
+  })();
+
+  const courtAdded = earliest(
+    courtEvents
+      .map((ev) => ({ ...ev, at: parseDate(ev.item.created_at ?? ev.item.start_at) ?? ev.at }))
+      .filter((ev) => ev.at >= record.effective_intake_at),
+  );
+
   const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
   const courtReminderDeadline = nextCourt ? previousBusinessDayEnd(nextCourt.at) : null;
   const courtReminderWindowStart = nextCourt ? new Date(nextCourt.at.getTime() - 14 * 24 * 60 * 60 * 1000) : null;
-  const courtReminderEvidence = courtReminderWindowStart ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true }) : null;
+  const courtReminderTemplateEvidence = courtReminderWindowStart
+    ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true })
+    : null;
+  const courtReminderDeadlinePassed = Boolean(courtReminderDeadline && now > courtReminderDeadline);
   const courtResultWindowOpen = Boolean(courtResultDeadline && now <= courtResultDeadline);
   const postCourtCallWindowOpen = Boolean(postCourtCallDeadline && now <= postCourtCallDeadline);
   const postCourtCall = courtResult?.at
@@ -586,14 +666,23 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
         : nextCourt
           ? base("POST_COURT_CALL", "Pending", "Not Due Yet", calendarEnd(nextCourt.item), null)
           : base("POST_COURT_CALL", "N/A", "", null, null);
-  const courtReminderItem = nextCourt
-    ? classify("COURT_REMINDER_CALL", courtReminderEvidence, courtReminderDeadline, {
-        operationalState: "Waiting for court reminder window",
-        unknown: Boolean(!courtReminderEvidence && courtReminderDeadline && now > courtReminderDeadline && commError),
-        reasonCode: commError,
+  const courtReminderItem = (() => {
+    if (!nextCourt) return base("COURT_REMINDER_CALL", "N/A", "", null, null);
+    if (courtReminderTemplateEvidence) {
+      return classify("COURT_REMINDER_CALL", courtReminderTemplateEvidence, courtReminderDeadline, {
+        operationalState: "Waiting until 5:00 PM Illinois time",
+        reasonCode: courtReminderTemplateEvidence.at > (courtReminderDeadline ?? courtReminderTemplateEvidence.at) ? "REMINDER_TEMPLATE_FOUND_AFTER_GOAL" : null,
         now,
-      })
-    : base("COURT_REMINDER_CALL", "N/A", "", null, null);
+      });
+    }
+    if (!courtReminderDeadlinePassed) return base("COURT_REMINDER_CALL", "Pending", "Not Due Yet", courtReminderDeadline, null);
+    return classify("COURT_REMINDER_CALL", null, courtReminderDeadline, {
+      operationalState: "Waiting until 5:00 PM Illinois time",
+      unknown: Boolean(commError),
+      reasonCode: commError || "REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT",
+      now,
+    });
+  })();
 
   const welcomeWindowStart = new Date(record.matter_created_at.getTime() - 60 * 60 * 1000);
   const welcomeEvidence = templateCommunicationEvidence(isWelcomeTemplate, welcomeWindowStart) ?? communicationEvidence(isWelcomeTemplate, welcomeWindowStart);
