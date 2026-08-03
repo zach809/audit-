@@ -1079,6 +1079,7 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
   const ongoingStandardsItems = workspaceItems.filter((item) => {
     if (item.metric_excluded) return false;
     if (item.step_code !== "WEEKLY_CLIENT_CHECKIN" && item.step_code !== "COURT_REMINDER_CALL") return false;
+    if (item.audit_version && item.audit_version !== APP_VERSION) return false;
     const dueKey = csvDateKey(item.deadline_at);
     return Boolean(dueKey) && (!dateSet.size || dateSet.has(dueKey));
   });

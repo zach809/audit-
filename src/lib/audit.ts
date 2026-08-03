@@ -860,11 +860,39 @@ export async function auditNextBatch(
     const batchSize = options.batchSize ?? config.auditBatchSize;
     const fromDate = parseDate(options.filters?.from);
     const toDate = parseDate(options.filters?.to ? `${options.filters.to}T23:59:59` : undefined);
+    const fromCondition = fromDate
+      ? sql`
+          (
+            m.matter_created_at >= ${fromDate}
+            or exists (
+              select 1
+              from audit_item date_item
+              where date_item.matter_id = m.matter_id
+                and date_item.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
+                and coalesce(date_item.deadline_at, date_item.evidence_at, m.matter_created_at) >= ${fromDate}
+            )
+          )
+        `
+      : sql`true`;
+    const toCondition = toDate
+      ? sql`
+          (
+            m.matter_created_at < ${toDate}
+            or exists (
+              select 1
+              from audit_item date_item
+              where date_item.matter_id = m.matter_id
+                and date_item.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
+                and coalesce(date_item.deadline_at, date_item.evidence_at, m.matter_created_at) < ${toDate}
+            )
+          )
+        `
+      : sql`true`;
     const batchConditions = [
       sql`lower(coalesce(m.matter_status, '')) <> 'closed'`,
       options.filters?.attorney ? sql`m.responsible_attorney_id = ${options.filters.attorney}` : sql`true`,
-      fromDate ? sql`m.matter_created_at >= ${fromDate}` : sql`true`,
-      toDate ? sql`m.matter_created_at < ${toDate}` : sql`true`,
+      fromCondition,
+      toCondition,
     ];
     const matters =
       options.selection === "recent"
@@ -884,6 +912,13 @@ export async function auditNextBatch(
                   from audit_item ai_missing_weekly
                   where ai_missing_weekly.matter_id = m.matter_id
                     and ai_missing_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
+                ) then 0
+                when exists (
+                  select 1
+                  from audit_item ai_stale_weekly
+                  where ai_stale_weekly.matter_id = m.matter_id
+                    and ai_stale_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
+                    and coalesce(ai_stale_weekly.audit_version, '') <> ${APP_VERSION}
                 ) then 0
                 when exists (
                   select 1
@@ -924,6 +959,13 @@ export async function auditNextBatch(
                   from audit_item ai_missing_weekly
                   where ai_missing_weekly.matter_id = m.matter_id
                     and ai_missing_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
+                ) then 0
+                when exists (
+                  select 1
+                  from audit_item ai_stale_weekly
+                  where ai_stale_weekly.matter_id = m.matter_id
+                    and ai_stale_weekly.step_code = 'WEEKLY_CLIENT_CHECKIN'
+                    and coalesce(ai_stale_weekly.audit_version, '') <> ${APP_VERSION}
                 ) then 0
                 when exists (
                   select 1
@@ -982,6 +1024,13 @@ export async function auditNextBatch(
             from audit_item weekly_item
             where weekly_item.matter_id = m.matter_id
               and weekly_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
+          )
+          or exists (
+            select 1
+            from audit_item weekly_stale
+            where weekly_stale.matter_id = m.matter_id
+              and weekly_stale.step_code = 'WEEKLY_CLIENT_CHECKIN'
+              and coalesce(weekly_stale.audit_version, '') <> ${APP_VERSION}
           )
         )
     `;
@@ -1043,6 +1092,13 @@ export async function auditOneMatterById(client = new ClioClient(), matterId: st
           from audit_item weekly_item
           where weekly_item.matter_id = m.matter_id
             and weekly_item.step_code = 'WEEKLY_CLIENT_CHECKIN'
+        )
+        or exists (
+          select 1
+          from audit_item weekly_stale
+          where weekly_stale.matter_id = m.matter_id
+            and weekly_stale.step_code = 'WEEKLY_CLIENT_CHECKIN'
+            and coalesce(weekly_stale.audit_version, '') <> ${APP_VERSION}
         )
       )
   `;
