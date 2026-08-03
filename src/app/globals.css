@@ -9820,85 +9820,134 @@ body {
 }
 
 .standards-tab .standards-sheet-scroll {
-  background: #f7fbff;
-  border: 2px solid rgba(190, 211, 236, 0.38);
-  border-radius: 14px;
-  max-height: 620px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-color: #5f7fb0 #dbe7f6;
+  background:
+    linear-gradient(180deg, rgba(238, 246, 255, 0.98), rgba(226, 236, 249, 0.98));
+  border: 1px solid rgba(207, 223, 242, 0.95);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 18px 46px rgba(4, 12, 24, 0.22);
+  max-height: 640px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  scrollbar-color: #5d7ca7 #d9e6f5;
   scrollbar-width: thin;
 }
 
 .standards-tab .standards-sheet-table {
   background: #ffffff;
+  border-collapse: separate;
+  border-spacing: 0;
   color: #0f172a;
-  min-width: 1480px;
-  table-layout: auto;
-  width: max-content;
+  min-width: 1560px;
+  table-layout: fixed;
+  width: 100%;
 }
 
 .standards-tab .standards-sheet-table th {
-  background: #dbeafe !important;
-  border-color: #b7c7dc !important;
-  color: #0b1b31 !important;
-  font-size: 14px !important;
+  background: linear-gradient(180deg, #dceaff 0%, #cbdcf5 100%) !important;
+  border-bottom: 1px solid #adc2df !important;
+  border-right: 1px solid #b9cbe4 !important;
+  color: #101d31 !important;
+  font-size: 13px !important;
   font-weight: 950 !important;
-  padding: 12px !important;
-  white-space: nowrap;
+  line-height: 1.15;
+  padding: 13px 14px !important;
+  position: sticky;
+  text-align: left;
+  top: 0;
+  white-space: normal;
+  z-index: 2;
 }
 
 .standards-tab .standards-sheet-table td {
-  background: #ffffff !important;
-  border-color: #d7e0eb !important;
+  background: #fbfdff !important;
+  border-bottom: 1px solid #d5e0ee !important;
+  border-right: 1px solid #dce6f2 !important;
   color: #111827 !important;
   font-size: 15px !important;
-  padding: 11px 12px !important;
+  line-height: 1.2;
+  padding: 12px 14px !important;
   white-space: nowrap;
 }
 
-.standards-tab .standards-sheet-table th:nth-child(1),
-.standards-tab .standards-sheet-table td:nth-child(1) {
+.standards-tab .standards-sheet-table th:first-child,
+.standards-tab .standards-sheet-table td:first-child {
+  border-left: 0 !important;
   min-width: 150px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+}
+
+.standards-tab .standards-sheet-table th:first-child {
+  border-top-left-radius: 10px;
+}
+
+.standards-tab .standards-sheet-table th:last-child {
+  border-top-right-radius: 10px;
+}
+
+.standards-tab .standards-sheet-table td:first-child {
+  background: #f4f8fd !important;
+  box-shadow: 8px 0 16px rgba(15, 23, 42, 0.08);
+  font-weight: 950;
 }
 
 .standards-tab .standards-sheet-table th:nth-child(2),
 .standards-tab .standards-sheet-table td:nth-child(2) {
-  min-width: 105px;
+  min-width: 104px;
+  width: 104px;
 }
 
 .standards-tab .standards-sheet-table th:nth-child(3),
-.standards-tab .standards-sheet-table td:nth-child(3),
-.standards-tab .standards-sheet-table th:nth-child(6),
-.standards-tab .standards-sheet-table td:nth-child(6),
-.standards-tab .standards-sheet-table th:nth-child(7),
-.standards-tab .standards-sheet-table td:nth-child(7),
-.standards-tab .standards-sheet-table th:nth-child(8),
-.standards-tab .standards-sheet-table td:nth-child(8) {
-  min-width: 190px;
+.standards-tab .standards-sheet-table td:nth-child(3) {
+  min-width: 170px;
+  width: 170px;
 }
 
 .standards-tab .standards-sheet-table th:nth-child(4),
 .standards-tab .standards-sheet-table td:nth-child(4),
 .standards-tab .standards-sheet-table th:nth-child(5),
 .standards-tab .standards-sheet-table td:nth-child(5),
+.standards-tab .standards-sheet-table th:nth-child(6),
+.standards-tab .standards-sheet-table td:nth-child(6),
+.standards-tab .standards-sheet-table th:nth-child(7),
+.standards-tab .standards-sheet-table td:nth-child(7),
+.standards-tab .standards-sheet-table th:nth-child(8),
+.standards-tab .standards-sheet-table td:nth-child(8) {
+  min-width: 205px;
+  width: 205px;
+}
+
 .standards-tab .standards-sheet-table th:nth-child(9),
 .standards-tab .standards-sheet-table td:nth-child(9) {
-  min-width: 210px;
+  min-width: 180px;
+  width: 180px;
 }
 
 .standards-tab .standards-sheet-table tbody tr:nth-child(even) td {
-  background: #f3f8ff !important;
+  background: #eef5ff !important;
+}
+
+.standards-tab .standards-sheet-table tbody tr:hover td {
+  background: #e4f0ff !important;
 }
 
 .standards-tab .standards-sheet-table td:nth-child(n+3) {
-  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
   text-align: right;
 }
 
-.standards-tab .standards-sheet-table td:first-child,
 .standards-tab .standards-sheet-table td:nth-child(2) {
-  font-weight: 800;
+  color: #1f3554 !important;
+  font-weight: 900;
+}
+
+.standards-tab .standards-sheet-table td:nth-child(9) {
+  color: #0f6a43 !important;
 }
 
 @media (max-width: 900px) {

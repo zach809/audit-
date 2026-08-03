@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-weekly-checkin-current-week-window-2026-08-03";
+export const APP_VERSION = "cwca-standards-excel-polish-2026-08-03";
