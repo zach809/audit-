@@ -169,6 +169,25 @@ function localDateDistanceDays(a: Date, b: Date): number {
   return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
 }
 
+function startOfLocalWeek(date: Date): Date {
+  const parts = localParts(date);
+  const weekdayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday);
+  const daysSinceMonday = weekdayIndex === -1 ? 0 : (weekdayIndex + 6) % 7;
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day - daysSinceMonday, 0, 0, 0);
+}
+
+function endOfLocalWeek(date: Date): Date {
+  const start = startOfLocalWeek(date);
+  const parts = localParts(start);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day + 6, 23, 59, 59);
+}
+
+function isInLocalWeek(date: Date, anchor: Date): boolean {
+  const start = startOfLocalWeek(anchor);
+  const end = endOfLocalWeek(anchor);
+  return date >= start && date <= end;
+}
+
 function nearestByLocalDate<T>(items: Evidence<T>[], anchor: Date, maxDistanceDays: number): (Evidence<T> & { distance: number }) | null {
   return (items
     .map((item) => ({ ...item, distance: Math.abs(localDateDistanceDays(item.at, anchor)) }))
@@ -550,18 +569,21 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .filter(Boolean) as Evidence<ClioCalendarEntry>[];
 
   const weeklyCheckInCourtDeadline = lastCourtEnd ? businessDayEnd(addDaysRaw(lastCourtEnd, 8)) : null;
-  const weeklyCheckInDueAnchor = weeklyCheckInCourtDeadline ?? firstWeeklyCheckInDeadline;
-  const nearestWeeklyCheckInEvent = nearestByLocalDate(weeklyCheckInEvents, weeklyCheckInDueAnchor, weeklyCheckInCourtDeadline ? 3 : 7);
-  const pastOrTodayWeeklyCheckIn = weeklyCheckInEvents
-    .filter((event) => event.at <= now)
-    .sort((a, b) => b.at.getTime() - a.at.getTime())[0] ?? null;
-  const nextWeeklyCheckIn = weeklyCheckInEvents
-    .filter((event) => event.at > now)
-    .sort((a, b) => a.at.getTime() - b.at.getTime())[0] ?? null;
-  const weeklyCheckInEvent = nearestWeeklyCheckInEvent ?? pastOrTodayWeeklyCheckIn ?? nextWeeklyCheckIn;
+  const weeklyCheckInDueAnchor = weeklyCheckInCourtDeadline ?? now;
+  const weeklyCheckInCycleEvents = weeklyCheckInEvents
+    .filter((event) => isInLocalWeek(event.at, weeklyCheckInDueAnchor))
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+  const dueWeeklyCheckInEvents = weeklyCheckInCycleEvents.filter((event) => endOfLocalBusinessDay(event.at) <= now);
+  const futureWeeklyCheckInEvents = weeklyCheckInCycleEvents.filter((event) => endOfLocalBusinessDay(event.at) > now);
+  const nearestDueWeeklyCheckInEvent = nearestByLocalDate(dueWeeklyCheckInEvents, weeklyCheckInDueAnchor, weeklyCheckInCourtDeadline ? 3 : 7);
+  const nextWeeklyCheckIn = futureWeeklyCheckInEvents[0] ?? null;
+  const weeklyCheckInEvent =
+    nearestDueWeeklyCheckInEvent ??
+    dueWeeklyCheckInEvents[dueWeeklyCheckInEvents.length - 1] ??
+    nextWeeklyCheckIn;
   const weeklyCheckInCalendarDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : null;
   const weeklyCheckInDeadline = weeklyCheckInCourtDeadline ?? weeklyCheckInCalendarDeadline ?? firstWeeklyCheckInDeadline;
-  const weeklyCheckInCallAnchor = weeklyCheckInCourtDeadline ?? weeklyCheckInEvent?.at ?? weeklyCheckInDeadline;
+  const weeklyCheckInCallAnchor = weeklyCheckInEvent?.at ?? weeklyCheckInDeadline;
   const weeklyPhoneCalls = evidence.communications
     .map((comm): Evidence<ClioCommunication> | null => {
       const at = commDate(comm);
@@ -569,14 +591,13 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
     })
     .filter(Boolean) as Evidence<ClioCommunication>[];
+  const weeklyCheckInWeekCalls = weeklyPhoneCalls.filter((call) => isInLocalWeek(call.at, weeklyCheckInCallAnchor));
   const weeklyCheckInCall = earliest(
-    weeklyPhoneCalls.filter((call) => localDateKey(call.at) === localDateKey(weeklyCheckInCallAnchor)),
+    weeklyCheckInWeekCalls.filter((call) => localDateKey(call.at) === localDateKey(weeklyCheckInCallAnchor)),
   );
-  const nearbyWeeklyCheckInCall = nearestByLocalDate(weeklyPhoneCalls, weeklyCheckInCallAnchor, 3);
+  const nearbyWeeklyCheckInCall = nearestByLocalDate(weeklyCheckInWeekCalls, weeklyCheckInCallAnchor, 3);
   const weeklyCallWithoutCalendar = !weeklyCheckInEvent
-    ? earliest(
-        weeklyPhoneCalls.filter((call) => call.at >= addDaysRaw(weeklyCheckInDeadline, -8)),
-      )
+    ? earliest(weeklyCheckInWeekCalls.filter((call) => call.at <= now))
     : null;
   const weeklyCheckInItem = (() => {
     if (calendarError) {

@@ -25,10 +25,11 @@ export async function GET(request: NextRequest) {
   const isManualDashboardRun = Boolean(request.cookies.get("cwca_session"));
   try {
     await initDb();
+    const config = appConfig();
     result = await auditNextBatch(undefined, {
       discover: true,
-      discoverLookbackDays: isManualDashboardRun ? 7 : undefined,
-      batchSize: appConfig().auditBatchSize,
+      discoverLookbackDays: config.initialLookbackDays,
+      batchSize: config.auditBatchSize,
       selection: isManualDashboardRun ? "recent" : "priority",
     });
   } catch (error) {
@@ -67,8 +68,11 @@ export async function POST(request: NextRequest) {
       }
     }
     try {
+      const config = appConfig();
       const result = await auditNextBatch(undefined, {
-        batchSize: appConfig().auditBatchSize,
+        discover: true,
+        discoverLookbackDays: config.initialLookbackDays,
+        batchSize: config.auditBatchSize,
         maxRunMs: 25000,
         selection: "recent",
         filters,
