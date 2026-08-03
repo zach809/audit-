@@ -74,7 +74,7 @@ async function googleAccessToken(): Promise<string> {
   return json.access_token;
 }
 
-function sheetRange(sheetName: string, range = "A:I"): string {
+function sheetRange(sheetName: string, range = "A:H"): string {
   return `'${sheetName.replace(/'/g, "''")}'!${range}`;
 }
 
@@ -129,7 +129,6 @@ function rowValues(row: Awaited<ReturnType<typeof standardsReportRows>>[number])
     row.welcome,
     row.courtDate,
     row.weeklyCheckIns,
-    row.courtReminderTemplates,
     row.completion,
   ];
 }
@@ -141,14 +140,14 @@ export async function syncStandardsToGoogleSheets(filters: DashboardFilters = {}
   const updates = STANDARD_CASE_MANAGERS.map((owner) => {
     const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
     return {
-      range: sheetRange(owner, "A1:I200"),
+      range: sheetRange(owner, "A1:H200"),
       values: [STANDARDS_SHEET_HEADERS, ...ownerRows.map(rowValues)],
     };
   });
   await googleRequest("/values:batchClear", {
     method: "POST",
     body: JSON.stringify({
-      ranges: STANDARD_CASE_MANAGERS.map((owner) => sheetRange(owner, "A:I")),
+      ranges: STANDARD_CASE_MANAGERS.map((owner) => sheetRange(owner, "A:H")),
     }),
   });
   await googleRequest("/values:batchUpdate?valueInputOption=USER_ENTERED", {

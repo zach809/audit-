@@ -62,6 +62,8 @@ export const TEMPLATE_REGISTRY: TemplateRegistryEntry[] = [
       "In-Person Court Reminder",
       "Recordatorio de audiencia presencial",
       "Recordatorio e instrucciones para la audiencia por Zoom manana DD/MM/YR",
+      "Recordatorio e instrucciones para la audiencia por Zoom manana",
+      "Recordatorio e instrucciones para la audiencia por Zoom",
       "Recordatorio e instrucciones para la audiencia por Zoom mañana DD/MM/YR",
       "Zoom Instructions for Your Court Hearing",
       "Court reminder",
@@ -73,4 +75,3 @@ export const TEMPLATE_REGISTRY: TemplateRegistryEntry[] = [
 export function templateSubjectsFor(category: TemplateCategory): string[] {
   return TEMPLATE_REGISTRY.filter((entry) => entry.category === category).flatMap((entry) => entry.subjects);
 }
-

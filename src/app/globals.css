@@ -9914,15 +9914,13 @@ body {
 .standards-tab .standards-sheet-table th:nth-child(6),
 .standards-tab .standards-sheet-table td:nth-child(6),
 .standards-tab .standards-sheet-table th:nth-child(7),
-.standards-tab .standards-sheet-table td:nth-child(7),
-.standards-tab .standards-sheet-table th:nth-child(8),
-.standards-tab .standards-sheet-table td:nth-child(8) {
+.standards-tab .standards-sheet-table td:nth-child(7) {
   min-width: 205px;
   width: 205px;
 }
 
-.standards-tab .standards-sheet-table th:nth-child(9),
-.standards-tab .standards-sheet-table td:nth-child(9) {
+.standards-tab .standards-sheet-table th:nth-child(8),
+.standards-tab .standards-sheet-table td:nth-child(8) {
   min-width: 180px;
   width: 180px;
 }
@@ -9946,7 +9944,7 @@ body {
   font-weight: 900;
 }
 
-.standards-tab .standards-sheet-table td:nth-child(9) {
+.standards-tab .standards-sheet-table td:nth-child(8) {
   color: #0f6a43 !important;
 }
 
@@ -10916,5 +10914,364 @@ body {
   .cm-active-filter-notice {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+/* Boomer-friendly dashboard polish: clearer contrast, larger controls, consistent status colors. */
+:root {
+  --bg: #24384f;
+  --panel: rgba(32, 48, 67, 0.96);
+  --panel-strong: rgba(24, 38, 56, 0.98);
+  --panel-soft: rgba(44, 62, 84, 0.9);
+  --line: rgba(204, 222, 244, 0.32);
+  --line-soft: rgba(204, 222, 244, 0.2);
+  --text: #f8fbff;
+  --muted: #d3dfed;
+  --blue: #8fb4ff;
+  --blue-soft: rgba(143, 180, 255, 0.2);
+  --green: #62e99b;
+  --green-soft: rgba(98, 233, 155, 0.2);
+  --amber: #ffc36d;
+  --amber-soft: rgba(255, 195, 109, 0.22);
+  --red: #ff9a9a;
+  --red-soft: rgba(255, 154, 154, 0.2);
+  --purple: #d7bcff;
+  --purple-soft: rgba(215, 188, 255, 0.2);
+  --stone: #f3f8ff;
+  --charcoal: #172437;
+  --shadow: 0 26px 70px rgba(3, 12, 25, 0.38);
+  --shadow-soft: 0 14px 34px rgba(3, 12, 25, 0.24);
+}
+
+body {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(143, 180, 255, 0.18), transparent 34rem),
+    linear-gradient(180deg, #304760 0%, #253b54 46%, #1f344b 100%) !important;
+  font-size: 16px;
+}
+
+.shell,
+.cm-portal-shell,
+.cm-login-shell {
+  max-width: 1540px !important;
+}
+
+.panel,
+.app-header,
+.deployment-proof,
+.dashboard-tabs,
+.audit-summary-strip,
+.filter-panel,
+.matter-card,
+.command-hero,
+.kpi-hero,
+.kpi-panel,
+.report-panel,
+.post-closure-panel,
+.case-manager-hero,
+.case-manager-task,
+.cm-portal-header,
+.cm-queue-summary,
+.cm-notification-strip,
+.cm-clear-first-panel,
+.cm-score-card,
+.cm-task-filters,
+.cm-task-card,
+.cm-empty {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
+    var(--panel) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+.app-header.topbar,
+.cm-portal-header {
+  background:
+    linear-gradient(135deg, rgba(71, 93, 124, 0.96), rgba(25, 39, 58, 0.98)) !important;
+  border-radius: 28px !important;
+}
+
+.app-header h1,
+.cm-portal-header h1 {
+  color: #ffffff !important;
+  font-size: clamp(42px, 5vw, 74px) !important;
+  line-height: 0.98 !important;
+  letter-spacing: 0 !important;
+}
+
+.app-header p,
+.cm-portal-header p,
+.panel .muted,
+.cm-task-card p,
+.cm-section-head p {
+  color: var(--muted) !important;
+  font-size: 16px !important;
+  line-height: 1.45 !important;
+}
+
+.label {
+  color: #dce8f7 !important;
+  font-size: 12px !important;
+  letter-spacing: 0.02em !important;
+}
+
+button,
+.button,
+.cm-window-tabs a,
+.dashboard-tab {
+  border-radius: 14px !important;
+  font-size: 15px !important;
+  font-weight: 950 !important;
+  min-height: 42px !important;
+}
+
+button.primary,
+.button.primary,
+.cm-task-buttons .button.primary,
+.cm-complete-form button.primary {
+  background: #2f66e5 !important;
+  border-color: #78a5ff !important;
+  box-shadow: 0 12px 26px rgba(47, 102, 229, 0.28) !important;
+  color: #ffffff !important;
+}
+
+button:not(.primary),
+.button:not(.primary) {
+  background: rgba(15, 27, 43, 0.82) !important;
+  border-color: rgba(212, 228, 247, 0.26) !important;
+  color: #ffffff !important;
+}
+
+.dashboard-tabs {
+  gap: 8px !important;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+  padding: 10px !important;
+}
+
+.dashboard-tab {
+  padding: 16px 18px !important;
+}
+
+.dashboard-tab strong {
+  color: #ffffff !important;
+  font-size: 16px !important;
+}
+
+.dashboard-tab span {
+  color: var(--muted) !important;
+  font-size: 13px !important;
+}
+
+.dashboard-tab.active,
+.cm-window-tabs a.active {
+  background: #2f66e5 !important;
+  border-color: #8fb4ff !important;
+  color: #ffffff !important;
+}
+
+.badge,
+.status-pill,
+.ongoing-status,
+.ongoing-followup,
+.cm-protected-pill {
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  padding: 7px 12px !important;
+}
+
+.Pass,
+.On-Time,
+.Strong,
+.On-Track,
+.Resolved,
+.Completed,
+.Clear,
+.good {
+  background: var(--green-soft) !important;
+  border-color: rgba(98, 233, 155, 0.48) !important;
+  color: #bdfbd5 !important;
+}
+
+.Pending,
+.Not-Due-Yet,
+.Not-Checked,
+.quiet {
+  background: var(--blue-soft) !important;
+  border-color: rgba(143, 180, 255, 0.42) !important;
+  color: #d8e5ff !important;
+}
+
+.Late,
+.Watch,
+.Needs-Follow-Up,
+.needs {
+  background: var(--amber-soft) !important;
+  border-color: rgba(255, 195, 109, 0.5) !important;
+  color: #ffdfaa !important;
+}
+
+.Flag,
+.Missing,
+.Overdue,
+.Needs-Focus {
+  background: var(--red-soft) !important;
+  border-color: rgba(255, 154, 154, 0.5) !important;
+  color: #ffd1d1 !important;
+}
+
+.Review,
+.Unknown,
+.Needs-Review,
+.Needs-Recheck {
+  background: var(--purple-soft) !important;
+  border-color: rgba(215, 188, 255, 0.5) !important;
+  color: #eadcff !important;
+}
+
+.cm-queue-summary,
+.cm-notification-strip {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+}
+
+.cm-queue-summary > div,
+.cm-notification-strip > div,
+.cm-score-metrics span,
+.stat,
+.summary-item,
+.command-metric,
+.cm-simple-steps li {
+  background: rgba(15, 27, 43, 0.76) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 16px !important;
+}
+
+.cm-queue-summary strong,
+.cm-notification-strip strong,
+.cm-score-metrics b,
+.stat strong,
+.command-metric strong {
+  color: #ffffff !important;
+  font-size: clamp(24px, 2.4vw, 34px) !important;
+}
+
+.cm-clear-first-card,
+.cm-task-card,
+.matter-card {
+  border-radius: 20px !important;
+}
+
+.cm-clear-first-card h3,
+.cm-task-card h2,
+.matter-card h2,
+.panel h2,
+.panel h3 {
+  color: #ffffff !important;
+  letter-spacing: 0 !important;
+}
+
+.cm-task-main,
+.cm-task-meta,
+.cm-client-reminder,
+.cm-task-opportunity,
+.cm-next-step,
+.cm-protected-notice {
+  background: rgba(12, 23, 37, 0.62) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 16px !important;
+}
+
+.cm-task-buttons {
+  gap: 10px !important;
+}
+
+.cm-task-buttons .button {
+  min-width: 170px !important;
+  width: auto !important;
+}
+
+.cm-task-filters {
+  align-items: end !important;
+  gap: 12px !important;
+}
+
+.cm-task-filters input,
+.cm-task-filters select,
+.kpi-range-form input,
+.kpi-range-form select,
+.filter-panel input,
+.filter-panel select,
+input,
+select,
+textarea {
+  background: rgba(9, 18, 31, 0.9) !important;
+  border: 1px solid rgba(208, 226, 247, 0.32) !important;
+  border-radius: 13px !important;
+  color: #ffffff !important;
+  font-size: 15px !important;
+}
+
+.cm-task-card.status-row-Missing,
+.cm-task-card.status-row-Needs-Follow-Up,
+.cm-clear-first-card.status-row-Missing,
+.cm-clear-first-card.status-row-Needs-Follow-Up {
+  box-shadow: inset 5px 0 0 #ffc36d, var(--shadow-soft) !important;
+}
+
+.cm-task-card.status-row-On-Track,
+.cm-clear-first-card.status-row-On-Track {
+  box-shadow: inset 5px 0 0 #62e99b, var(--shadow-soft) !important;
+}
+
+.progress-track,
+.standard-track,
+.kpi-track,
+.bar-track,
+.cm-score-bar div,
+.ongoing-progress-track {
+  background: rgba(211, 223, 237, 0.22) !important;
+}
+
+.queue-meter-bar,
+.standard-fill,
+.kpi-fill,
+.bar-fill,
+.cm-score-bar b,
+.ongoing-progress-fill {
+  background: #62e99b !important;
+  box-shadow: none !important;
+}
+
+.standards-tab .attorney-standard-line.welcome b,
+.standards-tab .attorney-standard-line.weekly-checkin b {
+  background: #62e99b !important;
+}
+
+.standards-tab .attorney-standard-line.meeting b {
+  background: #9aa7ff !important;
+}
+
+.standards-tab .attorney-standard-line.court-date b,
+.standards-tab .attorney-standard-line.court-reminder b {
+  background: #ffc36d !important;
+}
+
+@media (max-width: 760px) {
+  .app-header h1,
+  .cm-portal-header h1 {
+    font-size: 42px !important;
+  }
+
+  .dashboard-tabs,
+  .cm-queue-summary,
+  .cm-notification-strip,
+  .cm-task-meta,
+  .cm-task-buttons {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cm-task-buttons .button,
+  .cm-task-buttons .button.primary {
+    width: 100% !important;
   }
 }

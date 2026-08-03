@@ -1204,7 +1204,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const standardsPreviewTo = standardsActiveTo;
   const standardsSheetPreviewRows = Array.from(
     allWorkspaceRows
-      .filter((item) => (KPI_WORKFLOW_CODES.has(item.row.stepCode) || item.row.stepCode === "WEEKLY_CLIENT_CHECKIN" || item.row.stepCode === "COURT_REMINDER_CALL") && !item.row.metricExcluded)
+      .filter((item) => (KPI_WORKFLOW_CODES.has(item.row.stepCode) || item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") && !item.row.metricExcluded)
       .reduce((map, item) => {
         const dateSource = KPI_WORKFLOW_CODES.has(item.row.stepCode) ? item.row.matterCreatedAt : item.row.deadlineAt;
         const date = dateSource ? dateInput(new Date(dateSource)) : "";
@@ -1220,7 +1220,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           attorneyCall: 0,
           courtDate: 0,
           weeklyCheckIns: 0,
-          courtReminderTemplates: 0,
           expectedStandards: 0,
         };
         current.expectedStandards += 1;
@@ -1230,15 +1229,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
         if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
         if (complete && item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") current.weeklyCheckIns += 1;
-        if (complete && item.row.stepCode === "COURT_REMINDER_CALL") current.courtReminderTemplates += 1;
         map.set(key, current);
         return map;
-      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; weeklyCheckIns: number; courtReminderTemplates: number; expectedStandards: number }>())
+      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; weeklyCheckIns: number; expectedStandards: number }>())
       .values(),
   )
     .map((row) => {
       const newMatters = row.matters.size;
-      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns + row.courtReminderTemplates;
+      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns;
       const expected = row.expectedStandards;
       return {
         caseManager: row.caseManager,
@@ -1249,7 +1247,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         welcome: row.welcome,
         courtDate: row.courtDate,
         weeklyCheckIns: row.weeklyCheckIns,
-        courtReminderTemplates: row.courtReminderTemplates,
         completion: expected ? `${Math.round((completed / expected) * 100)}%` : "0%",
       };
     })
@@ -2024,7 +2021,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <th>Welcome letters sent</th>
                   <th>Court date event made</th>
                   <th>Weekly check-ins completed</th>
-                  <th>Court reminder template emails sent</th>
                   <th>Workflow completion %</th>
                 </tr>
               </thead>
@@ -2038,12 +2034,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     <td>{row.welcome}</td>
                     <td>{row.courtDate}</td>
                     <td>{row.weeklyCheckIns}</td>
-                    <td>{row.courtReminderTemplates}</td>
                     <td>{row.completion}</td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={9}>No standards rows in this date range yet.</td>
+                    <td colSpan={8}>No standards rows in this date range yet.</td>
                   </tr>
                 )}
               </tbody>
