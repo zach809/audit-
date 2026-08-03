@@ -576,6 +576,7 @@ function metricFocus(row: MetricRow): { area: string; action: string } {
 }
 
 type DashboardTab = "command" | "workspace" | "matters" | "case-manager" | "standards" | "ongoing" | "post-closure" | "reports" | "debug" | "guide" | "compliance";
+const REVIEW_SITE_URL = "https://reviewracer-dashboard.vercel.app";
 const KPI_WORKFLOW_CODES = new Set(["SETUP_WELCOME", "SETUP_ATTY_CALL", "SETUP_COURT_DATE"]);
 const ONGOING_CASE_WORKFLOW_CODES = new Set(["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"]);
 const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
@@ -1304,6 +1305,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
           <button className="primary" type="submit">Run Audit Batch</button>
           </form>
+          <a className="button" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">Review Site</a>
           <form action="/logout" method="post">
             <button type="submit">Log Out</button>
           </form>
@@ -1349,6 +1351,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="command-actions">
             <a className="button primary compact" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>Open Matter Review</a>
             <a className="button compact" href="/case-manager">Open CM Portal</a>
+            <a className="button compact" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">Open Review Site</a>
             <a className="button compact" href={tabLink(filters, "debug")}>AI Debug</a>
           </div>
         </section>
