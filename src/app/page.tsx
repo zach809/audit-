@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { getDashboardData, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, weeklyComplianceComparisonRows, type WorkspaceAuditItem } from "@/lib/dashboard-data";
+import { getDashboardData, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, standardsReportRows, weeklyComplianceComparisonRows, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
@@ -1200,62 +1200,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     const params = new URLSearchParams({ window: "this-week", cmname: caseManager });
     return `/case-manager?${params.toString()}`;
   };
-  const standardsPreviewFrom = standardsActiveFrom;
-  const standardsPreviewTo = standardsActiveTo;
-  const standardsSheetPreviewRows = Array.from(
-    allWorkspaceRows
-      .filter((item) => (KPI_WORKFLOW_CODES.has(item.row.stepCode) || item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") && !item.row.metricExcluded)
-      .reduce((map, item) => {
-        const dateSource = KPI_WORKFLOW_CODES.has(item.row.stepCode) ? item.row.matterCreatedAt : item.row.deadlineAt;
-        const date = dateSource ? dateInput(new Date(dateSource)) : "";
-        if (!date) return map;
-        if (date < standardsPreviewFrom || date > standardsPreviewTo) return map;
-        const key = `${item.caseManager}__${date}`;
-        const current = map.get(key) ?? {
-          caseManager: item.caseManager,
-          sortDate: date,
-          date: displayShortDate(date),
-          matters: new Set<string>(),
-          welcome: 0,
-          attorneyCall: 0,
-          courtDate: 0,
-          weeklyCheckIns: 0,
-          expectedStandards: 0,
-        };
-        current.expectedStandards += 1;
-        if (KPI_WORKFLOW_CODES.has(item.row.stepCode)) current.matters.add(item.row.matterId);
-        const complete = isCompleteForScore(item.row);
-        if (complete && item.row.stepCode === "SETUP_WELCOME") current.welcome += 1;
-        if (complete && item.row.stepCode === "SETUP_ATTY_CALL") current.attorneyCall += 1;
-        if (complete && item.row.stepCode === "SETUP_COURT_DATE") current.courtDate += 1;
-        if (complete && item.row.stepCode === "WEEKLY_CLIENT_CHECKIN") current.weeklyCheckIns += 1;
-        map.set(key, current);
-        return map;
-      }, new Map<string, { caseManager: string; sortDate: string; date: string; matters: Set<string>; welcome: number; attorneyCall: number; courtDate: number; weeklyCheckIns: number; expectedStandards: number }>())
-      .values(),
-  )
-    .map((row) => {
-      const newMatters = row.matters.size;
-      const completed = row.attorneyCall + row.welcome + row.courtDate + row.weeklyCheckIns;
-      const expected = row.expectedStandards;
-      return {
-        caseManager: row.caseManager,
-        sortDate: row.sortDate,
-        date: row.date,
-        newMatters,
-        attorneyCall: row.attorneyCall,
-        welcome: row.welcome,
-        courtDate: row.courtDate,
-        weeklyCheckIns: row.weeklyCheckIns,
-        completion: expected ? `${Math.round((completed / expected) * 100)}%` : "0%",
-      };
-    })
-    .sort((a, b) => {
-      const aIndex = STANDARD_CASE_MANAGERS.indexOf(a.caseManager as (typeof STANDARD_CASE_MANAGERS)[number]);
-      const bIndex = STANDARD_CASE_MANAGERS.indexOf(b.caseManager as (typeof STANDARD_CASE_MANAGERS)[number]);
-      const ownerSort = (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-      return ownerSort || a.sortDate.localeCompare(b.sortDate) || a.caseManager.localeCompare(b.caseManager);
-    });
+  const standardsSheetPreviewRows = (await standardsReportRows({
+    attorney: filters.attorney,
+    overall: filters.overall,
+    from: standardsActiveFrom,
+    to: standardsActiveTo,
+  })).map((row) => ({
+    caseManager: row.owner,
+    sortDate: row.sortDate,
+    date: row.date,
+    newMatters: row.newMatters,
+    attorneyCall: row.attorneyCall,
+    welcome: row.welcome,
+    courtDate: row.courtDate,
+    weeklyCheckIns: row.weeklyCheckIns,
+    completion: row.completion,
+  }));
   const googleSheetId = optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID");
   const googleSheetUrl = googleSheetId ? `https://docs.google.com/spreadsheets/d/${googleSheetId}/edit` : "";
   const googleSyncReady = googleSheetsConfigured();

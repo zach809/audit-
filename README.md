@@ -151,11 +151,21 @@ Do not enable write permissions.
 
 ## Standards Google Sheet
 
-The Standards tab can now update a live Google Sheet. CWCA writes one tab per case manager for the weekly standards report and uses this exact order:
+The Standards tab can update a live Google Sheet. CWCA writes one tab per case manager for the weekly standards report and uses this exact order:
 
-`Case Manager`, `Date`, `ATC / new matters #`, `Initial Meeting set - Phone call`, `Welcome letters sent`, `Court date event made`, `Worflow completion %`.
+`Case Manager`, `Date`, `ATC / new matters #`, `Initial Meeting set - Phone call`, `Welcome letters sent`, `Court date event made`, `Weekly check-ins completed`, `Workflow completion %`.
 
 This is one-way from CWCA to Google Sheets. It does not write to Clio.
+
+To connect it:
+
+1. Create a Google Cloud service account with Google Sheets API access.
+2. Copy the service account email into `GOOGLE_SERVICE_ACCOUNT_EMAIL`.
+3. Create a JSON key for that service account, then copy the private key into `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`.
+4. Create or open the Google Sheet you want CWCA to update.
+5. Share that Sheet with the service account email as Editor.
+6. Copy the Sheet ID from the Google Sheet URL into `GOOGLE_SHEETS_SPREADSHEET_ID`.
+7. Redeploy Vercel, then use Standards -> Sync Google Sheet.
 
 The CWCA Standards page also separates Ongoing Cases from the new-matter setup score so case managers can see client contact, weekly check-ins, court results, and appearance filing email follow-up without mixing those items into the weekly standards score.
 - `SESSION_SECRET`: long random string for login cookies.

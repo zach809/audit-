@@ -11680,3 +11680,94 @@ textarea {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Standards sheet readability: make the Excel preview feel like a clean workbook. */
+.standards-tab .standards-sheet-panel {
+  overflow: hidden !important;
+}
+
+.standards-tab .standards-sheet-scroll {
+  background: #f7fbff !important;
+  border: 1px solid #c7d7ec !important;
+  border-radius: 16px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  margin-top: 16px !important;
+  max-height: 620px !important;
+  overflow: auto !important;
+  width: 100% !important;
+}
+
+.standards-tab .standards-sheet-table {
+  border-collapse: collapse !important;
+  color: #0d1728 !important;
+  font-size: 14px !important;
+  min-width: 1180px !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+.standards-tab .standards-sheet-table th,
+.standards-tab .standards-sheet-table td {
+  border: 1px solid #c9d7eb !important;
+  color: #0d1728 !important;
+  line-height: 1.2 !important;
+  padding: 12px 14px !important;
+  vertical-align: middle !important;
+}
+
+.standards-tab .standards-sheet-table th {
+  background: #dbe8fb !important;
+  color: #111827 !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  position: sticky !important;
+  text-align: left !important;
+  top: 0 !important;
+  z-index: 2 !important;
+}
+
+.standards-tab .standards-sheet-table td {
+  background: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+.standards-tab .standards-sheet-table tbody tr:nth-child(even) td {
+  background: #eef5ff !important;
+}
+
+.standards-tab .standards-sheet-table th:first-child,
+.standards-tab .standards-sheet-table td:first-child {
+  min-width: 180px !important;
+  width: 180px !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(2),
+.standards-tab .standards-sheet-table td:nth-child(2) {
+  min-width: 110px !important;
+  width: 110px !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(3),
+.standards-tab .standards-sheet-table td:nth-child(3),
+.standards-tab .standards-sheet-table th:nth-child(4),
+.standards-tab .standards-sheet-table td:nth-child(4),
+.standards-tab .standards-sheet-table th:nth-child(5),
+.standards-tab .standards-sheet-table td:nth-child(5),
+.standards-tab .standards-sheet-table th:nth-child(6),
+.standards-tab .standards-sheet-table td:nth-child(6),
+.standards-tab .standards-sheet-table th:nth-child(7),
+.standards-tab .standards-sheet-table td:nth-child(7) {
+  min-width: 160px !important;
+  width: 160px !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(8),
+.standards-tab .standards-sheet-table td:nth-child(8) {
+  min-width: 155px !important;
+  width: 155px !important;
+}
+
+.standards-tab .standards-sheet-table td:nth-child(n+3),
+.standards-tab .standards-sheet-table td:nth-child(8) {
+  text-align: right !important;
+}
