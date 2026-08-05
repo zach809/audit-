@@ -18,6 +18,10 @@ type GraphAddWorksheetResponse = {
   name?: string;
 };
 
+type GraphWorkbookSessionResponse = {
+  id?: string;
+};
+
 function excelPrivateConfig() {
   return {
     tenantId: optionalEnv("MICROSOFT_TENANT_ID").trim(),
@@ -102,13 +106,14 @@ async function workbookGraphBasePathAsync(): Promise<string> {
   return `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}/workbook`;
 }
 
-async function graphRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function graphRequest<T>(path: string, init: RequestInit = {}, workbookSessionId = ""): Promise<T> {
   const token = await graphAccessToken();
   const response = await fetch(`${GRAPH_ROOT}${path}`, {
     ...init,
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
+      ...(workbookSessionId ? { "workbook-session-id": workbookSessionId } : {}),
       ...(init.headers ?? {}),
     },
   });
@@ -118,6 +123,19 @@ async function graphRequest<T>(path: string, init: RequestInit = {}): Promise<T>
   }
   if (response.status === 204) return {} as T;
   return (await response.json()) as T;
+}
+
+async function createWorkbookSession(base: string): Promise<string> {
+  const session = await graphRequest<GraphWorkbookSessionResponse>(`${base}/createSession`, {
+    method: "POST",
+    body: JSON.stringify({ persistChanges: true }),
+  });
+  if (!session.id) throw new Error("Microsoft Graph did not create a persistent Excel workbook session.");
+  return session.id;
+}
+
+async function closeWorkbookSession(base: string, workbookSessionId: string): Promise<void> {
+  await graphRequest(`${base}/closeSession`, { method: "POST" }, workbookSessionId);
 }
 
 function rowValues(row: Awaited<ReturnType<typeof standardsReportRows>>[number]): Array<string | number> {
@@ -146,8 +164,8 @@ function padRows(values: Array<Array<string | number>>, targetRows: number, colu
   return padded;
 }
 
-async function ensureCaseManagerWorksheets(base: string): Promise<Map<string, string>> {
-  const workbook = await graphRequest<GraphWorksheetList>(`${base}/worksheets`);
+async function ensureCaseManagerWorksheets(base: string, workbookSessionId: string): Promise<Map<string, string>> {
+  const workbook = await graphRequest<GraphWorksheetList>(`${base}/worksheets`, {}, workbookSessionId);
   const worksheets = new Map((workbook.value ?? []).map((sheet) => [sheet.name, sheet.id]));
 
   for (const name of STANDARD_CASE_MANAGERS) {
@@ -155,7 +173,7 @@ async function ensureCaseManagerWorksheets(base: string): Promise<Map<string, st
     const created = await graphRequest<GraphAddWorksheetResponse>(`${base}/worksheets/add`, {
       method: "POST",
       body: JSON.stringify({ name }),
-    });
+    }, workbookSessionId);
     if (!created.id) throw new Error(`Microsoft Graph did not return an id for worksheet ${name}.`);
     worksheets.set(name, created.id);
   }
@@ -163,7 +181,7 @@ async function ensureCaseManagerWorksheets(base: string): Promise<Map<string, st
   return worksheets;
 }
 
-async function updateWorksheetRange(base: string, worksheetId: string, values: Array<Array<string | number>>) {
+async function updateWorksheetRange(base: string, worksheetId: string, values: Array<Array<string | number>>, workbookSessionId: string) {
   const columnCount = STANDARDS_SHEET_HEADERS.length;
   const clearRows = Math.max(200, values.length + 10);
   const clearValues = padRows([], clearRows, columnCount);
@@ -171,32 +189,37 @@ async function updateWorksheetRange(base: string, worksheetId: string, values: A
   await graphRequest(`${base}/worksheets/${encodeURIComponent(worksheetId)}/range(address='${rangeAddress(clearRows, columnCount)}')`, {
     method: "PATCH",
     body: JSON.stringify({ values: clearValues }),
-  });
+  }, workbookSessionId);
 
   await graphRequest(`${base}/worksheets/${encodeURIComponent(worksheetId)}/range(address='${rangeAddress(values.length, columnCount)}')`, {
     method: "PATCH",
     body: JSON.stringify({ values }),
-  });
+  }, workbookSessionId);
 }
 
 export async function syncStandardsToMicrosoftExcel(filters: DashboardFilters = {}) {
   assertMicrosoftExcelConfig();
   const base = await workbookGraphBasePathAsync();
-  const worksheets = await ensureCaseManagerWorksheets(base);
-  const rows = await standardsReportRows(filters);
+  const workbookSessionId = await createWorkbookSession(base);
+  try {
+    const worksheets = await ensureCaseManagerWorksheets(base, workbookSessionId);
+    const rows = await standardsReportRows(filters);
 
-  for (const owner of STANDARD_CASE_MANAGERS) {
-    const worksheetId = worksheets.get(owner);
-    if (!worksheetId) throw new Error(`Worksheet ${owner} was not found or created.`);
-    const ownerRows = rows
-      .filter((row) => row.owner === owner)
-      .sort((a, b) => a.sortDate.localeCompare(b.sortDate));
-    await updateWorksheetRange(base, worksheetId, [STANDARDS_SHEET_HEADERS, ...ownerRows.map(rowValues)]);
+    for (const owner of STANDARD_CASE_MANAGERS) {
+      const worksheetId = worksheets.get(owner);
+      if (!worksheetId) throw new Error(`Worksheet ${owner} was not found or created.`);
+      const ownerRows = rows
+        .filter((row) => row.owner === owner)
+        .sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+      await updateWorksheetRange(base, worksheetId, [STANDARDS_SHEET_HEADERS, ...ownerRows.map(rowValues)], workbookSessionId);
+    }
+
+    return {
+      workbookUrl: microsoftExcelWorkbookUrl(),
+      sheetsUpdated: STANDARD_CASE_MANAGERS.length,
+      rowsSynced: rows.length,
+    };
+  } finally {
+    await closeWorkbookSession(base, workbookSessionId).catch(() => undefined);
   }
-
-  return {
-    workbookUrl: microsoftExcelWorkbookUrl(),
-    sheetsUpdated: STANDARD_CASE_MANAGERS.length,
-    rowsSynced: rows.length,
-  };
 }

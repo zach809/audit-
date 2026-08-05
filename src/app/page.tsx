@@ -1853,7 +1853,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Standards</span>
               <h2>Case Manager Standards</h2>
-              <p className="muted small">One weekly place for the graphic score view and the Excel-style standards sheet.</p>
+              <p className="muted small">One weekly place for the Excel-style standards sheet, workbook download, and live Excel sync.</p>
             </div>
             <span className={`badge ${kpiGrade === "Strong" ? "Pass" : kpiGrade === "Watch" ? "Late" : "Flag"}`}>{kpiGrade}</span>
           </div>
@@ -1917,62 +1917,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               ))}
             </div>
           </details>
-          <div className="standards-view-switch" aria-label="Standards views">
-            <a href="#standards-graphic-view">Graphic View</a>
-            <a href="#standards-excel-view">Excel View</a>
-          </div>
-          <div className="kpi-score-row">
-            <div className="kpi-score-ring" style={{ "--score": `${kpiScore * 3.6}deg` } as CSSProperties}>
-              <span>{kpiScore}%</span>
-            </div>
-            <div className="kpi-score-copy">
-              <strong>{kpiGrade}</strong>
-              <p>{kpiFollowUp ? `${kpiFollowUp} workflow item${kpiFollowUp === 1 ? "" : "s"} still need follow-up this week.` : "No current weekly follow-up items are showing."}</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="panel kpi-panel standards-graphic" id="standards-graphic-view">
-          <div className="panel-heading">
-            <div>
-              <span className="label">Graphic View</span>
-              <h2>Standards by Case Manager</h2>
-              <p className="muted small">Completion view for setup standards, weekly check-ins, and court reminder template emails.</p>
-            </div>
-          </div>
-          {standardRows.length ? (
-            <div className="standards-attorney-chart">
-              {standardRows.map((item) => (
-                <article className="standards-attorney-row" key={item.caseManager}>
-                  <div className="standards-attorney-name">
-                    <strong>{item.caseManager}</strong>
-                    <span>{item.cases} case{item.cases === 1 ? "" : "s"}</span>
-                    <em>{item.completionRate}% complete</em>
-                  </div>
-                  <div className="standards-attorney-bars">
-                    {[
-                      { className: "welcome", label: "Welcome Letter", step: item.steps.welcome },
-                      { className: "meeting", label: "Initial Meeting", step: item.steps.attorneyCall },
-                      { className: "court-date", label: "Court Date", step: item.steps.courtDate },
-                      { className: "weekly-checkin", label: "Weekly Check-In", step: item.steps.weeklyCheckIn },
-                      { className: "court-reminder", label: "Court Reminder Email", step: item.steps.courtReminder },
-                    ].map((line) => (
-                      <div className={`attorney-standard-line ${line.className}`} key={line.className}>
-                        <span>{line.label}{line.step.late ? ` - ${line.step.late} late` : ""}</span>
-                        <div><b style={{ width: `${line.step.expected ? Math.max(4, Math.min(100, Math.round((line.step.completed / line.step.expected) * 100))) : 0}%` }} /></div>
-                        <strong>{line.step.expected ? `${line.step.completed}/${line.step.expected}` : "None due"}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="workspace-empty compact">
-              <strong>No standards data in this range yet.</strong>
-              <p>Run an audit batch or choose a date range with audited matters.</p>
-            </div>
-          )}
         </section>
 
         <details className="panel standards-sheet-panel" id="standards-excel-view" open>
