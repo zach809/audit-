@@ -148,7 +148,7 @@ Do not enable write permissions.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
 - `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`. Current default CM setup uses the listed Hirsch emails with password `Hirsch12345678`.
 - `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: optional live Standards Google Sheet sync. Share the target Sheet with the service-account email as Editor, then use the Standards tab button or the weekday cron sync.
-- `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_EXCEL_USER_ID`, `MICROSOFT_EXCEL_WORKBOOK_PATH` or `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID`: optional live Standards Excel Online sync. Store the workbook in OneDrive/SharePoint, grant the Microsoft app Graph write access, then use Standards -> Sync Excel Workbook.
+- `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_EXCEL_USER_ID`, and `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`: optional live Standards Excel Online sync. Store the workbook in OneDrive/SharePoint, grant the Microsoft app Graph write access, paste the workbook share link, then use Standards -> Sync Excel Workbook.
 
 ## Standards Google Sheet
 
@@ -187,9 +187,10 @@ To connect it:
 5. Add Microsoft Graph application permission for workbook access, such as `Files.ReadWrite.All`, and have an admin grant consent.
 6. Create an Excel workbook in OneDrive or SharePoint, for example `CWCA Standards.xlsx`.
 7. Put the workbook owner email into `MICROSOFT_EXCEL_USER_ID`, for example `zach@hirschlawgroup.com`.
-8. If the workbook is in that user's OneDrive root, set `MICROSOFT_EXCEL_WORKBOOK_PATH="CWCA Standards.xlsx"`. If it is in a folder, use a path like `CWCA/CWCA Standards.xlsx`.
-9. Optional: paste the workbook's browser URL into `MICROSOFT_EXCEL_WORKBOOK_WEB_URL` so CWCA can show an Open Excel Workbook button.
-10. Redeploy Vercel, then use Standards -> Sync Excel Workbook.
+8. Easiest option: copy the workbook sharing link from OneDrive/Teams and paste it into `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`.
+9. Optional but recommended: paste the same browser URL into `MICROSOFT_EXCEL_WORKBOOK_WEB_URL` so CWCA can show an Open Excel Workbook button.
+10. Advanced fallback: if you do not want to use a sharing link, set `MICROSOFT_EXCEL_WORKBOOK_PATH="CWCA Standards.xlsx"` for a file in that user's OneDrive root, or set `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID`.
+11. Redeploy Vercel, then use Standards -> Sync Excel Workbook.
 
 If your Microsoft tenant blocks broad application permissions, ask the Microsoft 365 admin to create/approve the app or use the regular Standards workbook download instead.
 - `SESSION_SECRET`: long random string for login cookies.

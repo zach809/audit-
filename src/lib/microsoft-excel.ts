@@ -26,6 +26,7 @@ function excelPrivateConfig() {
     userId: optionalEnv("MICROSOFT_EXCEL_USER_ID").trim(),
     workbookItemId: optionalEnv("MICROSOFT_EXCEL_WORKBOOK_ITEM_ID").trim(),
     workbookPath: optionalEnv("MICROSOFT_EXCEL_WORKBOOK_PATH").trim().replace(/^\/+/, ""),
+    workbookShareUrl: optionalEnv("MICROSOFT_EXCEL_WORKBOOK_SHARE_URL").trim(),
   };
 }
 
@@ -36,7 +37,7 @@ export function microsoftExcelConfigured(): boolean {
       config.clientId &&
       config.clientSecret &&
       config.userId &&
-      (config.workbookItemId || config.workbookPath),
+      (config.workbookItemId || config.workbookPath || config.workbookShareUrl),
   );
 }
 
@@ -48,7 +49,7 @@ function assertMicrosoftExcelConfig() {
   const config = excelPrivateConfig();
   if (!microsoftExcelConfigured()) {
     throw new Error(
-      "Excel Online sync is not configured. Add MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_EXCEL_USER_ID, and either MICROSOFT_EXCEL_WORKBOOK_ITEM_ID or MICROSOFT_EXCEL_WORKBOOK_PATH in Vercel.",
+      "Excel Online sync is not configured. Add MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_EXCEL_USER_ID, and MICROSOFT_EXCEL_WORKBOOK_SHARE_URL, MICROSOFT_EXCEL_WORKBOOK_ITEM_ID, or MICROSOFT_EXCEL_WORKBOOK_PATH in Vercel.",
     );
   }
   return config;
@@ -81,6 +82,24 @@ function workbookGraphBasePath(): string {
   if (workbookItemId) return `${userPart}/items/${encodeURIComponent(workbookItemId)}/workbook`;
   const cleanPath = workbookPath.split("/").map(encodeURIComponent).join("/");
   return `${userPart}/root:/${cleanPath}:/workbook`;
+}
+
+function shareIdFromUrl(url: string): string {
+  return `u!${Buffer.from(url).toString("base64url").replace(/=+$/g, "")}`;
+}
+
+async function workbookGraphBasePathAsync(): Promise<string> {
+  const { workbookShareUrl } = assertMicrosoftExcelConfig();
+  if (!workbookShareUrl) return workbookGraphBasePath();
+  const driveItem = await graphRequest<{ id?: string; parentReference?: { driveId?: string } }>(
+    `/shares/${shareIdFromUrl(workbookShareUrl)}/driveItem?$select=id,parentReference`,
+  );
+  const driveId = driveItem.parentReference?.driveId;
+  const itemId = driveItem.id;
+  if (!driveId || !itemId) {
+    throw new Error("Microsoft Graph could not resolve the Excel workbook sharing link. Confirm the app has Files.ReadWrite.All permission and the workbook link is valid.");
+  }
+  return `/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}/workbook`;
 }
 
 async function graphRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -127,8 +146,7 @@ function padRows(values: Array<Array<string | number>>, targetRows: number, colu
   return padded;
 }
 
-async function ensureCaseManagerWorksheets(): Promise<Map<string, string>> {
-  const base = workbookGraphBasePath();
+async function ensureCaseManagerWorksheets(base: string): Promise<Map<string, string>> {
   const workbook = await graphRequest<GraphWorksheetList>(`${base}/worksheets`);
   const worksheets = new Map((workbook.value ?? []).map((sheet) => [sheet.name, sheet.id]));
 
@@ -145,8 +163,7 @@ async function ensureCaseManagerWorksheets(): Promise<Map<string, string>> {
   return worksheets;
 }
 
-async function updateWorksheetRange(worksheetId: string, values: Array<Array<string | number>>) {
-  const base = workbookGraphBasePath();
+async function updateWorksheetRange(base: string, worksheetId: string, values: Array<Array<string | number>>) {
   const columnCount = STANDARDS_SHEET_HEADERS.length;
   const clearRows = Math.max(200, values.length + 10);
   const clearValues = padRows([], clearRows, columnCount);
@@ -164,7 +181,8 @@ async function updateWorksheetRange(worksheetId: string, values: Array<Array<str
 
 export async function syncStandardsToMicrosoftExcel(filters: DashboardFilters = {}) {
   assertMicrosoftExcelConfig();
-  const worksheets = await ensureCaseManagerWorksheets();
+  const base = await workbookGraphBasePathAsync();
+  const worksheets = await ensureCaseManagerWorksheets(base);
   const rows = await standardsReportRows(filters);
 
   for (const owner of STANDARD_CASE_MANAGERS) {
@@ -173,7 +191,7 @@ export async function syncStandardsToMicrosoftExcel(filters: DashboardFilters = 
     const ownerRows = rows
       .filter((row) => row.owner === owner)
       .sort((a, b) => a.sortDate.localeCompare(b.sortDate));
-    await updateWorksheetRange(worksheetId, [STANDARDS_SHEET_HEADERS, ...ownerRows.map(rowValues)]);
+    await updateWorksheetRange(base, worksheetId, [STANDARDS_SHEET_HEADERS, ...ownerRows.map(rowValues)]);
   }
 
   return {
