@@ -8,6 +8,10 @@
     {
       "path": "/api/standards/google-sync",
       "schedule": "30 23 * * 1-5"
+    },
+    {
+      "path": "/api/standards/excel-sync",
+      "schedule": "45 23 * * 1-5"
     }
   ]
 }

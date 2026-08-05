@@ -148,6 +148,7 @@ Do not enable write permissions.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
 - `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`. Current default CM setup uses the listed Hirsch emails with password `Hirsch12345678`.
 - `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: optional live Standards Google Sheet sync. Share the target Sheet with the service-account email as Editor, then use the Standards tab button or the weekday cron sync.
+- `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_EXCEL_USER_ID`, `MICROSOFT_EXCEL_WORKBOOK_PATH` or `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID`: optional live Standards Excel Online sync. Store the workbook in OneDrive/SharePoint, grant the Microsoft app Graph write access, then use Standards -> Sync Excel Workbook.
 
 ## Standards Google Sheet
 
@@ -168,6 +169,29 @@ To connect it:
 7. Redeploy Vercel, then use Standards -> Sync Google Sheet.
 
 The CWCA Standards page also separates Ongoing Cases from the new-matter setup score so case managers can see client contact, weekly check-ins, court results, and appearance filing email follow-up without mixing those items into the weekly standards score.
+
+## Standards Excel Online Workbook
+
+The Standards tab can also update a live Microsoft Excel workbook stored in OneDrive or SharePoint. CWCA writes one worksheet per case manager using the same rows as the workbook download:
+
+`Case Manager`, `Date`, `ATC / new matters #`, `Initial Meeting set - Phone call`, `Welcome letters sent`, `Court date event made`, `Weekly check-ins completed`, `Workflow completion %`.
+
+This is one-way from CWCA to Excel. It does not write to Clio.
+
+To connect it:
+
+1. Create a Microsoft Entra / Azure App Registration.
+2. Copy the Directory tenant ID into `MICROSOFT_TENANT_ID`.
+3. Copy the Application client ID into `MICROSOFT_CLIENT_ID`.
+4. Create a client secret and copy its value into `MICROSOFT_CLIENT_SECRET`.
+5. Add Microsoft Graph application permission for workbook access, such as `Files.ReadWrite.All`, and have an admin grant consent.
+6. Create an Excel workbook in OneDrive or SharePoint, for example `CWCA Standards.xlsx`.
+7. Put the workbook owner email into `MICROSOFT_EXCEL_USER_ID`, for example `zach@hirschlawgroup.com`.
+8. If the workbook is in that user's OneDrive root, set `MICROSOFT_EXCEL_WORKBOOK_PATH="CWCA Standards.xlsx"`. If it is in a folder, use a path like `CWCA/CWCA Standards.xlsx`.
+9. Optional: paste the workbook's browser URL into `MICROSOFT_EXCEL_WORKBOOK_WEB_URL` so CWCA can show an Open Excel Workbook button.
+10. Redeploy Vercel, then use Standards -> Sync Excel Workbook.
+
+If your Microsoft tenant blocks broad application permissions, ask the Microsoft 365 admin to create/approve the app or use the regular Standards workbook download instead.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.

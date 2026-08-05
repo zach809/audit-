@@ -7,6 +7,7 @@ import { formatLocal } from "@/lib/business-time";
 import { APP_VERSION } from "@/lib/version";
 import { APP_TZ, optionalEnv } from "@/lib/config";
 import { googleSheetsConfigured } from "@/lib/google-sheets";
+import { microsoftExcelConfigured, microsoftExcelWorkbookUrl } from "@/lib/microsoft-excel";
 import {
   getPostClosureData,
   POST_CLOSURE_CONTACT_METHODS,
@@ -1220,6 +1221,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const googleSheetId = optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID");
   const googleSheetUrl = googleSheetId ? `https://docs.google.com/spreadsheets/d/${googleSheetId}/edit` : "";
   const googleSyncReady = googleSheetsConfigured();
+  const excelSyncReady = microsoftExcelConfigured();
+  const excelWorkbookUrl = microsoftExcelWorkbookUrl();
   const priorStandardWeeks = Array.from({ length: 6 }, (_, index) => {
     const start = addDaysInput(weekStart, -7 * (index + 1));
     const end = addDaysInput(start, 4);
@@ -1885,6 +1888,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <button className="button primary" type="submit">Download Standards Workbook</button>
           </form>
           <div className="standards-online-actions">
+            <form action="/api/standards/excel-sync" method="post">
+              <input type="hidden" name="attorney" value={filters.attorney} />
+              <input type="hidden" name="overall" value={filters.overall} />
+              <input type="hidden" name="from" value={standardsActiveFrom} />
+              <input type="hidden" name="to" value={standardsActiveTo} />
+              <button className="button primary" type="submit" disabled={!excelSyncReady}>Sync Excel Workbook</button>
+            </form>
+            {excelWorkbookUrl ? <a className="button" href={excelWorkbookUrl} target="_blank" rel="noreferrer">Open Excel Workbook</a> : null}
+            {!excelSyncReady ? <small>Add Microsoft Excel env vars to turn on live Excel sync.</small> : <small>Updates the live Excel workbook, one tab per case manager.</small>}
             <form action="/api/standards/google-sync" method="post">
               <input type="hidden" name="attorney" value={filters.attorney} />
               <input type="hidden" name="overall" value={filters.overall} />

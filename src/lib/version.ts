@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-admin-review-site-button-2026-08-03";
+export const APP_VERSION = "cwca-excel-online-standards-sync-2026-08-04";
