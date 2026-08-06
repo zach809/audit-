@@ -1276,8 +1276,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     return `/case-manager?${params.toString()}`;
   };
   const standardsSheetPreviewRows = (await standardsReportRows({
-    attorney: filters.attorney,
-    overall: filters.overall,
     from: standardsActiveFrom,
     to: standardsActiveTo,
   })).map((row) => ({
@@ -1945,23 +1943,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               To
               <input name="to" type="date" defaultValue={standardsActiveTo} />
             </label>
-            <label>
-              Attorney
-              <select name="attorney" defaultValue={filters.attorney}>
-                <option value="">All attorneys</option>
-                {dashboardData.attorneys.map((a) => (
-                  <option key={a.id ?? "none"} value={a.id ?? ""}>{a.name || "Unassigned"} ({a.count})</option>
-                ))}
-              </select>
-            </label>
             <button className="primary" type="submit">Update View</button>
             <a className="button" href={filterLink({ tab: "standards" }, { from: lastWeekStart, to: lastWeekEnd })}>Last Week</a>
             <a className="button" href={filterLink({ tab: "standards" }, { from: weekStart, to: today })}>This Week</a>
           </form>
           <div className="standards-export-actions" aria-label="Standards download options">
             <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
-              <input type="hidden" name="attorney" value={filters.attorney} />
-              <input type="hidden" name="overall" value={filters.overall} />
               <input type="hidden" name="from" value={standardsActiveFrom} />
               <input type="hidden" name="to" value={standardsActiveTo} />
               <button className="button primary" type="submit">Download Excel Workbook</button>
@@ -1969,8 +1956,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
           <div className="standards-online-actions">
             <form action="/api/standards/excel-sync" method="post">
-              <input type="hidden" name="attorney" value={filters.attorney} />
-              <input type="hidden" name="overall" value={filters.overall} />
               <input type="hidden" name="from" value={standardsActiveFrom} />
               <input type="hidden" name="to" value={standardsActiveTo} />
               <button className="button primary" type="submit" disabled={!excelSyncReady}>Sync Excel Workbook</button>
@@ -1978,8 +1963,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             {excelWorkbookUrl ? <a className="button" href={excelWorkbookUrl} target="_blank" rel="noreferrer">Open Excel Workbook</a> : null}
             {!excelSyncReady ? <small>Add Microsoft Excel env vars to turn on live Excel sync.</small> : <small>Updates the live Excel workbook, one tab per case manager.</small>}
             <form action="/api/standards/google-sync" method="post">
-              <input type="hidden" name="attorney" value={filters.attorney} />
-              <input type="hidden" name="overall" value={filters.overall} />
               <input type="hidden" name="from" value={standardsActiveFrom} />
               <input type="hidden" name="to" value={standardsActiveTo} />
               <button className="button" type="submit" disabled={!googleSyncReady}>Sync Google Sheet</button>
@@ -2010,8 +1993,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </summary>
           <div className="standards-sheet-toolbar">
             <form action="/api/export.csv?type=standards" method="post">
-              <input type="hidden" name="attorney" value={filters.attorney} />
-              <input type="hidden" name="overall" value={filters.overall} />
               <input type="hidden" name="from" value={standardsActiveFrom} />
               <input type="hidden" name="to" value={standardsActiveTo} />
               <button className="button compact" type="submit">Download Workbook</button>

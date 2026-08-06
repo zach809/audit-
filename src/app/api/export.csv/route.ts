@@ -37,6 +37,9 @@ export async function POST(request: NextRequest) {
   const isStandards = exportType === "standards";
   const isStandardsCsv = exportType === "standards-csv";
   const isWeeklyCompliance = exportType === "weekly-compliance";
+  const reportFilters = isStandards || isStandardsCsv
+    ? { from: filters.from, to: filters.to }
+    : filters;
   const body = isCaseManagerText
     ? await caseManagerTodoText(filters, url.origin)
     : isLogicIssues
@@ -44,9 +47,9 @@ export async function POST(request: NextRequest) {
       : isWeeklyCompliance
         ? await weeklyComplianceComparisonCsv(filters)
       : isStandardsCsv
-        ? await standardsCsv(filters)
+        ? await standardsCsv(reportFilters)
       : isStandards
-        ? await standardsWorkbook(filters)
+        ? await standardsWorkbook(reportFilters)
       : isActionList
         ? await actionItemsCsv(filters, url.origin)
         : await dashboardCsv(filters);

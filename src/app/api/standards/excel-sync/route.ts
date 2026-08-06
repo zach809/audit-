@@ -53,8 +53,6 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const defaultRange = lastCompletedWeekRange();
   const filters = {
-    attorney: url.searchParams.get("attorney") || "",
-    overall: url.searchParams.get("overall") || "",
     from: url.searchParams.get("from") || defaultRange.from,
     to: url.searchParams.get("to") || defaultRange.to,
   };
@@ -75,8 +73,6 @@ export async function POST(request: NextRequest) {
   const form = await request.formData().catch(() => null);
   const defaultRange = lastCompletedWeekRange();
   const filters = {
-    attorney: form?.get("attorney")?.toString() ?? "",
-    overall: form?.get("overall")?.toString() ?? "",
     from: form?.get("from")?.toString() || defaultRange.from,
     to: form?.get("to")?.toString() || defaultRange.to,
     tab: "standards",

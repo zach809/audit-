@@ -1012,15 +1012,92 @@ function standardsOwnerSort(a: string, b: string): number {
 }
 
 export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
-  const { workspaceItems } = await getDashboardData({
-    attorney: filters.attorney,
-    overall: filters.overall,
-  });
+  await initDb();
+  const sql = db();
   const defaultRange = lastCompletedWeekRange();
   const from = filters.from || defaultRange.from;
   const to = filters.to || defaultRange.to;
   const dates = eachDateKey(from, to);
   const dateSet = new Set(dates);
+  const rangeStart = new Date(`${from}T00:00:00`);
+  const rangeEnd = new Date(`${to}T23:59:59`);
+  const workspaceItems = await sql<WorkspaceAuditItem[]>`
+    select
+      m.matter_id,
+      m.matter_number,
+      m.client_first_name,
+      m.client_last_name,
+      m.matter_created_at,
+      m.responsible_attorney_id,
+      m.responsible_attorney_name,
+      i.step_code,
+      case
+        when i.step_code = 'WEEKLY_CLIENT_CHECKIN'
+          then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else i.status end
+        else i.status
+      end as item_status,
+      i.deadline_at,
+      i.evidence_at,
+      i.evidence_source,
+      i.evidence_ref_id,
+      i.evidence_url,
+      i.audit_version,
+      case
+        when i.step_code = 'WEEKLY_CLIENT_CHECKIN'
+          then case when i.deadline_at is not null and now() <= i.deadline_at then null else i.reason_code end
+        else i.reason_code
+      end as reason_code,
+      r.review_decision,
+      r.review_note,
+      r.case_manager_name,
+      r.proof_type,
+      r.proof_reference,
+      r.next_step,
+      r.report_summary,
+      r.internal_notes,
+      r.include_in_report,
+      r.reviewed_by,
+      r.review_completed_at,
+      r.updated_at as review_updated_at,
+      coalesce(mex.active, false) as metric_excluded,
+      mex.requested_by as metric_exclusion_requested_by,
+      mex.request_reason as metric_exclusion_reason,
+      mex.updated_at as metric_exclusion_updated_at,
+      '[]'::json as review_history
+    from audit_matter m
+    join audit_item i on i.matter_id = m.matter_id
+    left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
+    left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
+    where lower(coalesce(m.matter_status, '')) <> 'closed'
+      and (
+        (
+          i.step_code in ('SETUP_WELCOME', 'SETUP_ATTY_CALL', 'SETUP_COURT_DATE')
+          and m.matter_created_at >= ${rangeStart}
+          and m.matter_created_at <= ${rangeEnd}
+        )
+        or (
+          i.step_code = 'WEEKLY_CLIENT_CHECKIN'
+          and coalesce(i.deadline_at, i.evidence_at, m.matter_created_at) >= ${rangeStart}
+          and coalesce(i.deadline_at, i.evidence_at, m.matter_created_at) <= ${rangeEnd}
+        )
+      )
+      and not exists (
+        select 1
+        from audit_item stale
+        where stale.matter_id = m.matter_id
+          and stale.status = 'Unknown'
+          and stale.reason_code in ('API_ERROR', 'MATTER_ERROR: API_ERROR')
+        group by stale.matter_id
+        having count(*) >= 3
+      )
+      and not exists (
+        select 1
+        from audit_item stale_notes
+        where stale_notes.matter_id = m.matter_id
+          and stale_notes.reason_code like 'NOTES_400:%'
+      )
+    order by m.matter_created_at, m.responsible_attorney_name, m.client_last_name, m.client_first_name, i.step_code
+  `;
   const rowsByOwnerDate = new Map<string, {
     owner: string;
     date: string;
