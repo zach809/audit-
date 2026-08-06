@@ -11993,6 +11993,92 @@ textarea {
   gap: 10px;
 }
 
+.weekly-report-graph-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.weekly-report-chart-card {
+  background: rgba(18, 32, 50, 0.9);
+  border: 1px solid rgba(203, 219, 239, 0.16);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.weekly-report-chart-card h5 {
+  color: #f4f8ff;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.weekly-report-mini-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.weekly-report-mini-bar {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(120px, 0.7fr) auto minmax(120px, 1fr);
+}
+
+.weekly-report-mini-bar span {
+  color: #d7e4f5;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.weekly-report-mini-bar b {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 950;
+  text-align: right;
+}
+
+.weekly-report-mini-bar i {
+  background: rgba(203, 219, 239, 0.14);
+  border-radius: 999px;
+  display: block;
+  height: 12px;
+  overflow: hidden;
+}
+
+.weekly-report-mini-bar em {
+  background: linear-gradient(90deg, #5ee6a0, #8ea2ff);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.weekly-report-drill-head {
+  align-items: baseline;
+  border-top: 1px solid rgba(203, 219, 239, 0.14);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 4px 0 10px;
+  padding-top: 14px;
+}
+
+.weekly-report-drill-head strong {
+  color: #f4f8ff;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.weekly-report-drill-head span {
+  color: #c8d6e8;
+  font-size: 13px;
+}
+
 .weekly-report-bar {
   align-items: center;
   background: rgba(18, 32, 50, 0.9);
@@ -12067,11 +12153,90 @@ textarea {
 
 @media (max-width: 860px) {
   .weekly-report-graph-head,
+  .weekly-report-graph-grid,
   .weekly-report-bar {
     grid-template-columns: 1fr;
+  }
+
+  .weekly-report-mini-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .weekly-report-mini-bar i {
+    grid-column: 1 / -1;
   }
 
   .weekly-report-graph-head > strong {
     justify-self: start;
   }
+}
+
+/* Standards sheet fit pass: keep the whole workbook preview inside the card. */
+.standards-tab .standards-sheet-panel {
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+.standards-tab .standards-sheet-scroll {
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.standards-tab .standards-sheet-table {
+  min-width: 0 !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+.standards-tab .standards-sheet-table th,
+.standards-tab .standards-sheet-table td {
+  overflow-wrap: anywhere !important;
+  padding: 12px 12px !important;
+  white-space: normal !important;
+}
+
+.standards-tab .standards-sheet-table th:first-child,
+.standards-tab .standards-sheet-table td:first-child {
+  min-width: 0 !important;
+  position: static !important;
+  width: 15% !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(2),
+.standards-tab .standards-sheet-table td:nth-child(2) {
+  min-width: 0 !important;
+  width: 10% !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(3),
+.standards-tab .standards-sheet-table td:nth-child(3) {
+  min-width: 0 !important;
+  width: 13% !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(4),
+.standards-tab .standards-sheet-table td:nth-child(4) {
+  min-width: 0 !important;
+  width: 17% !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(5),
+.standards-tab .standards-sheet-table td:nth-child(5),
+.standards-tab .standards-sheet-table th:nth-child(6),
+.standards-tab .standards-sheet-table td:nth-child(6),
+.standards-tab .standards-sheet-table th:nth-child(7),
+.standards-tab .standards-sheet-table td:nth-child(7) {
+  min-width: 0 !important;
+  width: 14% !important;
+}
+
+.standards-tab .standards-sheet-table th:nth-child(8),
+.standards-tab .standards-sheet-table td:nth-child(8) {
+  min-width: 0 !important;
+  width: 13% !important;
+}
+
+.standards-tab .standards-sheet-table td:nth-child(n+3) {
+  white-space: nowrap !important;
 }

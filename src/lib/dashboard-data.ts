@@ -1012,7 +1012,10 @@ function standardsOwnerSort(a: string, b: string): number {
 }
 
 export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
-  const { workspaceItems } = await getDashboardData(filters);
+  const { workspaceItems } = await getDashboardData({
+    attorney: filters.attorney,
+    overall: filters.overall,
+  });
   const defaultRange = lastCompletedWeekRange();
   const from = filters.from || defaultRange.from;
   const to = filters.to || defaultRange.to;
@@ -1066,12 +1069,14 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
 
   const standardsItems = workspaceItems.filter((item) => {
     if (item.metric_excluded) return false;
+    if (!STANDARD_CASE_MANAGERS.includes(standardsCaseManagerFor(item) as (typeof STANDARD_CASE_MANAGERS)[number])) return false;
     if (!isStandardsStep(item.step_code)) return false;
     const createdKey = csvDateKey(item.matter_created_at);
     return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
   });
   const ongoingStandardsItems = workspaceItems.filter((item) => {
     if (item.metric_excluded) return false;
+    if (!STANDARD_CASE_MANAGERS.includes(standardsCaseManagerFor(item) as (typeof STANDARD_CASE_MANAGERS)[number])) return false;
     if (item.step_code !== "WEEKLY_CLIENT_CHECKIN") return false;
     if (item.audit_version && item.audit_version !== APP_VERSION) return false;
     const dueKey = csvDateKey(item.deadline_at);

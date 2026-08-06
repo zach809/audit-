@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-reports-graph-weekly-checkin-eow-2026-08-06";
+export const APP_VERSION = "cwca-standards-workbook-named-cms-2026-08-06";

@@ -535,11 +535,38 @@ function weeklyComplianceFixText(category: string): string {
   return "Open the matter in Clio and confirm the matching proof.";
 }
 
+function weeklyComplianceStepForCategory(category: string): string {
+  if (category.includes("Welcome")) return "SETUP_WELCOME";
+  if (category.includes("Attorney phone")) return "SETUP_ATTY_CALL";
+  if (category.includes("Appearance")) return "APPEARANCE_FILING";
+  if (category.includes("Weekly")) return "WEEKLY_CLIENT_CHECKIN";
+  if (category.includes("Results calls")) return "POST_COURT_CALL";
+  if (category.includes("Court Results")) return "COURT_RESULTS";
+  if (category.includes("Court reminder")) return "COURT_REMINDER_CALL";
+  return "";
+}
+
+function weeklyComplianceFocusForStep(stepCode: string): string {
+  if (stepCode === "WEEKLY_CLIENT_CHECKIN" || stepCode === "COURT_REMINDER_CALL") return "ongoing-cases";
+  if (stepCode === "COURT_RESULTS" || stepCode === "POST_COURT_CALL") return "court-follow-up";
+  if (stepCode === "CLIENT_FOLLOW_UP") return "client-follow-up";
+  if (stepCode === "APPEARANCE_FILING") return "initial-client-setup";
+  return "initial-client-setup";
+}
+
 function weeklyComplianceDrillLink(filters: Record<string, string>, caseManager: string, category: string): string {
-  if (category.includes("Weekly") || category.includes("Court reminder")) {
-    return filterLink({ ...filters, tab: "ongoing", cm: caseManager }, {});
-  }
-  return filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "all", cm: caseManager }, {});
+  const stepCode = weeklyComplianceStepForCategory(category);
+  return filterLink(
+    {
+      ...filters,
+      tab: "workspace",
+      wstatus: "followup",
+      wfocus: stepCode ? weeklyComplianceFocusForStep(stepCode) : "all",
+      wstep: stepCode,
+      cm: caseManager,
+    },
+    {},
+  );
 }
 
 type MetricRow = {
@@ -755,6 +782,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const activeTab = dashboardTab(searchParams.tab);
   const workspaceStatusFilter = searchParams.wstatus ?? "followup";
   const workspaceFocusFilter = searchParams.wfocus ?? "all";
+  const workspaceStepFilter = searchParams.wstep ?? "";
   const workspaceCaseManagerFilter = searchParams.cm ?? "";
   const closureStatusFilter = searchParams.closure_status ?? "all";
   const closureStageFilter = searchParams.closure_stage ?? "";
@@ -868,11 +896,31 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     .sort((a, b) => b.currentWeek - a.currentWeek || a.caseManager.localeCompare(b.caseManager) || a.category.localeCompare(b.category));
   const weeklyComplianceIssueTotal = weeklyComplianceIssueRows.reduce((total, row) => total + row.currentWeek, 0);
   const weeklyComplianceMaxIssue = Math.max(1, ...weeklyComplianceIssueRows.map((row) => row.currentWeek));
+  const weeklyComplianceCategoryGraphRows = Array.from(
+    weeklyComplianceIssueRows.reduce((map, row) => {
+      map.set(row.category, (map.get(row.category) ?? 0) + row.currentWeek);
+      return map;
+    }, new Map<string, number>()),
+  )
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+  const weeklyComplianceCaseManagerGraphRows = Array.from(
+    weeklyComplianceIssueRows.reduce((map, row) => {
+      map.set(row.caseManager, (map.get(row.caseManager) ?? 0) + row.currentWeek);
+      return map;
+    }, new Map<string, number>()),
+  )
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+  const weeklyComplianceMaxCategory = Math.max(1, ...weeklyComplianceCategoryGraphRows.map((row) => row.value));
+  const weeklyComplianceMaxCaseManager = Math.max(1, ...weeklyComplianceCaseManagerGraphRows.map((row) => row.value));
   const caseManagerWorkspaceRows = allWorkspaceRows.filter(
     (item) => !workspaceCaseManagerFilter || item.caseManager.toLowerCase() === workspaceCaseManagerFilter.toLowerCase(),
   );
-  const focusedWorkspaceRows = caseManagerWorkspaceRows.filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter));
-  const workspaceLinkFilters = { ...filters, tab: "workspace", wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter };
+  const focusedWorkspaceRows = caseManagerWorkspaceRows
+    .filter((item) => workspaceFocusMatches(item.row.stepCode, workspaceFocusFilter))
+    .filter((item) => !workspaceStepFilter || item.row.stepCode === workspaceStepFilter);
+  const workspaceLinkFilters = { ...filters, tab: "workspace", wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter };
   const workspaceGroups = new Map<string, WorkspaceRow[]>();
   for (const item of focusedWorkspaceRows.filter((item) => workspaceFilterMatches(item.row.status, workspaceStatusFilter))) {
     const rows = workspaceGroups.get(item.attorney) ?? [];
@@ -1050,6 +1098,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const standardRows = Array.from(
     allWorkspaceRows
       .filter((item) => STANDARDS_GRAPHIC_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
+      .filter((item) => STANDARD_CASE_MANAGERS.includes(item.caseManager as (typeof STANDARD_CASE_MANAGERS)[number]))
       .reduce((map, item) => {
         const current = map.get(item.caseManager) ?? {
           caseManager: item.caseManager,
@@ -1330,6 +1379,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <input type="hidden" name="tab" value={activeTab} />
           <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
           <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+          <input type="hidden" name="wstep" value={workspaceStepFilter} />
           <button className="primary" type="submit">Run Audit Batch</button>
           </form>
           <a className="button" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">Review Site</a>
@@ -1916,13 +1966,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <input type="hidden" name="to" value={standardsActiveTo} />
               <button className="button primary" type="submit">Download Excel Workbook</button>
             </form>
-            <form action="/api/export.csv?type=standards-csv" method="post" className="kpi-download-form">
-              <input type="hidden" name="attorney" value={filters.attorney} />
-              <input type="hidden" name="overall" value={filters.overall} />
-              <input type="hidden" name="from" value={standardsActiveFrom} />
-              <input type="hidden" name="to" value={standardsActiveTo} />
-              <button className="button" type="submit">Download CSV</button>
-            </form>
           </div>
           <div className="standards-online-actions">
             <form action="/api/standards/excel-sync" method="post">
@@ -1961,17 +2004,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Excel View</span>
               <h3>Excel-Style Standards Sheet</h3>
-              <p className="muted small">Same rows used by the workbook, CSV, and live Excel sync.</p>
+              <p className="muted small">Same rows used by the workbook and live Excel sync.</p>
             </div>
             <span className="summary-action">Hide Rows</span>
           </summary>
           <div className="standards-sheet-toolbar">
-            <form action="/api/export.csv?type=standards-csv" method="post">
+            <form action="/api/export.csv?type=standards" method="post">
               <input type="hidden" name="attorney" value={filters.attorney} />
               <input type="hidden" name="overall" value={filters.overall} />
               <input type="hidden" name="from" value={standardsActiveFrom} />
               <input type="hidden" name="to" value={standardsActiveTo} />
-              <button className="button compact" type="submit">Download CSV</button>
+              <button className="button compact" type="submit">Download Workbook</button>
             </form>
             {excelWorkbookUrl ? <a className="button compact" href={excelWorkbookUrl} target="_blank" rel="noreferrer">Open Excel</a> : null}
             {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
@@ -2363,25 +2406,57 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <strong>{weeklyComplianceIssueTotal}</strong>
             </div>
             {weeklyComplianceIssueRows.length ? (
-              <div className="weekly-report-bars">
-                {weeklyComplianceIssueRows.slice(0, 16).map((row) => (
-                  <a
-                    className="weekly-report-bar"
-                    href={weeklyComplianceDrillLink(filters, row.caseManager, row.category)}
-                    key={`${row.caseManager}-${row.category}`}
-                  >
-                    <span className="weekly-report-bar-label">
-                      <b>{row.caseManager}</b>
-                      <small>{row.category}</small>
-                      <em>{weeklyComplianceFixText(row.category)}</em>
-                    </span>
-                    <span className="weekly-report-track" aria-hidden="true">
-                      <span style={{ width: `${Math.max(7, Math.round((row.currentWeek / weeklyComplianceMaxIssue) * 100))}%` }} />
-                    </span>
-                    <strong>{row.currentWeek}</strong>
-                  </a>
-                ))}
-              </div>
+              <>
+                <div className="weekly-report-graph-grid">
+                  <div className="weekly-report-chart-card">
+                    <h5>By Missing Item</h5>
+                    <div className="weekly-report-mini-bars">
+                      {weeklyComplianceCategoryGraphRows.map((row) => (
+                        <div className="weekly-report-mini-bar" key={row.label}>
+                          <span>{row.label}</span>
+                          <b>{row.value}</b>
+                          <i aria-hidden="true"><em style={{ width: `${Math.max(7, Math.round((row.value / weeklyComplianceMaxCategory) * 100))}%` }} /></i>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="weekly-report-chart-card">
+                    <h5>By Case Manager</h5>
+                    <div className="weekly-report-mini-bars">
+                      {weeklyComplianceCaseManagerGraphRows.map((row) => (
+                        <div className="weekly-report-mini-bar" key={row.label}>
+                          <span>{row.label}</span>
+                          <b>{row.value}</b>
+                          <i aria-hidden="true"><em style={{ width: `${Math.max(7, Math.round((row.value / weeklyComplianceMaxCaseManager) * 100))}%` }} /></i>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="weekly-report-drill-head">
+                  <strong>Click to Fix</strong>
+                  <span>These open the review area for the selected case manager and issue.</span>
+                </div>
+                <div className="weekly-report-bars">
+                  {weeklyComplianceIssueRows.slice(0, 16).map((row) => (
+                    <a
+                      className="weekly-report-bar"
+                      href={weeklyComplianceDrillLink(filters, row.caseManager, row.category)}
+                      key={`${row.caseManager}-${row.category}`}
+                    >
+                      <span className="weekly-report-bar-label">
+                        <b>{row.caseManager}</b>
+                        <small>{row.category}</small>
+                        <em>{weeklyComplianceFixText(row.category)}</em>
+                      </span>
+                      <span className="weekly-report-track" aria-hidden="true">
+                        <span style={{ width: `${Math.max(7, Math.round((row.currentWeek / weeklyComplianceMaxIssue) * 100))}%` }} />
+                      </span>
+                      <strong>{row.currentWeek}</strong>
+                    </a>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="workspace-empty compact">
                 <strong>No missing items in this comparison window.</strong>
@@ -2605,6 +2680,7 @@ Items Still Needing Action
           <input type="hidden" name="tab" value={activeTab} />
           <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
           <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+          <input type="hidden" name="wstep" value={workspaceStepFilter} />
           <label>
             Responsible Attorney
             <select name="attorney" defaultValue={filters.attorney}>
@@ -2637,10 +2713,10 @@ Items Still Needing Action
           <a className="button" href="/">Clear</a>
         </form>
         <div className="quick-filters">
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: today, to: today })}>Today</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: weekStart, to: today })}>This Week</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: monthStart, to: today })}>This Month</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, cm: workspaceCaseManagerFilter }, { from: "", to: "" })}>All Dates</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: today, to: today })}>Today</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: weekStart, to: today })}>This Week</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: monthStart, to: today })}>This Month</a>
+          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: "", to: "" })}>All Dates</a>
         </div>
         {hasFilters ? (
           <p className="filter-alert">
@@ -2708,6 +2784,12 @@ Items Still Needing Action
             <p className="workspace-filter-note">
               Showing case manager: <strong>{workspaceCaseManagerFilter}</strong>
               <a href={filterLink({ ...workspaceLinkFilters }, { cm: "" })}>Clear case manager</a>
+            </p>
+          ) : null}
+          {workspaceStepFilter ? (
+            <p className="workspace-filter-note">
+              Showing exact item: <strong>{workflowLabel(workspaceStepFilter)}</strong>
+              <a href={filterLink({ ...workspaceLinkFilters }, { wstep: "" })}>Show all items</a>
             </p>
           ) : null}
         </div>
