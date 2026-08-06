@@ -182,6 +182,12 @@ function endOfLocalWeek(date: Date): Date {
   return zonedDateTimeToUtc(parts.year, parts.month, parts.day + 6, 23, 59, 59);
 }
 
+function endOfLocalWorkWeek(date: Date): Date {
+  const start = startOfLocalWeek(date);
+  const parts = localParts(start);
+  return zonedDateTimeToUtc(parts.year, parts.month, parts.day + 4, 17, 0, 0);
+}
+
 function isInLocalWeek(date: Date, anchor: Date): boolean {
   const start = startOfLocalWeek(anchor);
   const end = endOfLocalWeek(anchor);
@@ -582,8 +588,9 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     dueWeeklyCheckInEvents[dueWeeklyCheckInEvents.length - 1] ??
     nextWeeklyCheckIn;
   const weeklyCheckInCalendarDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : null;
-  const weeklyCheckInDeadline = weeklyCheckInCourtDeadline ?? weeklyCheckInCalendarDeadline ?? firstWeeklyCheckInDeadline;
-  const weeklyCheckInCallAnchor = weeklyCheckInEvent?.at ?? weeklyCheckInDeadline;
+  const weeklyCheckInDueDate = weeklyCheckInCourtDeadline ?? weeklyCheckInCalendarDeadline ?? firstWeeklyCheckInDeadline;
+  const weeklyCheckInDeadline = weeklyCheckInDueDate ? endOfLocalWorkWeek(weeklyCheckInDueDate) : null;
+  const weeklyCheckInCallAnchor = weeklyCheckInEvent?.at ?? weeklyCheckInDueDate ?? weeklyCheckInDeadline;
   const weeklyPhoneCalls = evidence.communications
     .map((comm): Evidence<ClioCommunication> | null => {
       const at = commDate(comm);
@@ -593,7 +600,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
     .filter(Boolean) as Evidence<ClioCommunication>[];
   const weeklyCheckInWeekCalls = weeklyPhoneCalls.filter((call) => isInLocalWeek(call.at, weeklyCheckInCallAnchor));
   const weeklyCheckInCall = earliest(
-    weeklyCheckInWeekCalls.filter((call) => localDateKey(call.at) === localDateKey(weeklyCheckInCallAnchor)),
+    weeklyCheckInWeekCalls.filter((call) => !weeklyCheckInDeadline || call.at <= weeklyCheckInDeadline),
   );
   const nearbyWeeklyCheckInCall = nearestByLocalDate(weeklyCheckInWeekCalls, weeklyCheckInCallAnchor, 3);
   const weeklyCallWithoutCalendar = !weeklyCheckInEvent
@@ -604,28 +611,28 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
     }
     if (!weeklyCheckInEvent) {
-      if (weeklyCallWithoutCalendar && now > weeklyCheckInDeadline) {
+      if (weeklyCallWithoutCalendar && weeklyCheckInDeadline && now > weeklyCheckInDeadline) {
         return withEvidence(
           base("WEEKLY_CLIENT_CHECKIN", "Late", "Timing Review", weeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
           weeklyCallWithoutCalendar,
         );
       }
       return classify("WEEKLY_CLIENT_CHECKIN", null, weeklyCheckInDeadline, {
-        operationalState: weeklyCheckInCourtDeadline ? "Waiting until one week plus one day after last court date" : "Waiting for weekly check-in window",
+        operationalState: weeklyCheckInCourtDeadline ? "Waiting until Friday 5 PM of the weekly check-in week" : "Waiting for weekly check-in window",
         reasonCode: "WEEKLY_CALENDAR_EVENT_NOT_FOUND",
         now,
       });
     }
     if (weeklyCheckInCall) {
       return classify("WEEKLY_CLIENT_CHECKIN", weeklyCheckInCall, weeklyCheckInDeadline, {
-        reasonCode: weeklyCheckInCall.at > weeklyCheckInDeadline ? "CALL_FOUND_NEARBY_DATE" : null,
+        reasonCode: weeklyCheckInDeadline && weeklyCheckInCall.at > weeklyCheckInDeadline ? "CALL_FOUND_NEARBY_DATE" : null,
         now,
       });
     }
-    if (nearbyWeeklyCheckInCall && nearbyWeeklyCheckInCall.distance > 0 && now > weeklyCheckInDeadline) {
+    if (nearbyWeeklyCheckInCall && nearbyWeeklyCheckInCall.distance > 0 && weeklyCheckInDeadline && now > weeklyCheckInDeadline) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
     }
-    if (now <= weeklyCheckInDeadline) {
+    if (!weeklyCheckInDeadline || now <= weeklyCheckInDeadline) {
       return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Not Due Yet", weeklyCheckInDeadline, null), weeklyCheckInEvent);
     }
     if (commError) {

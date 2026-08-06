@@ -4,6 +4,7 @@ import {
   auditLogicIssuesCsv,
   caseManagerTodoText,
   dashboardCsv,
+  standardsCsv,
   standardsWorkbook,
   weeklyComplianceComparisonCsv,
 } from "@/lib/dashboard-data";
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
   const isCaseManagerText = exportType === "case-manager-text";
   const isLogicIssues = exportType === "logic-issues";
   const isStandards = exportType === "standards";
+  const isStandardsCsv = exportType === "standards-csv";
   const isWeeklyCompliance = exportType === "weekly-compliance";
   const body = isCaseManagerText
     ? await caseManagerTodoText(filters, url.origin)
@@ -41,6 +43,8 @@ export async function POST(request: NextRequest) {
       ? await auditLogicIssuesCsv(filters, url.origin)
       : isWeeklyCompliance
         ? await weeklyComplianceComparisonCsv(filters)
+      : isStandardsCsv
+        ? await standardsCsv(filters)
       : isStandards
         ? await standardsWorkbook(filters)
       : isActionList
@@ -52,6 +56,8 @@ export async function POST(request: NextRequest) {
       ? "cwca-audit-logic-issues.csv"
       : isWeeklyCompliance
         ? "cwca-case-manager-weekly-compliance-comparison.csv"
+      : isStandardsCsv
+        ? "cwca-weekly-standards-by-case-manager.csv"
       : isStandards
         ? "cwca-weekly-standards-by-case-manager.xls"
       : isActionList

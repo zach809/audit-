@@ -524,6 +524,24 @@ function filterLink(filters: Record<string, string>, next: Record<string, string
   return query ? `/?${query}` : "/";
 }
 
+function weeklyComplianceFixText(category: string): string {
+  if (category.includes("Welcome")) return "Open Communications and confirm the Welcome Letter / Carta de bienvenida email was sent.";
+  if (category.includes("Attorney phone")) return "Open Calendar and confirm the attorney/client phone-call event is linked to the matter.";
+  if (category.includes("Appearance")) return "Open Communications and confirm the Court Appearance filed template email was sent.";
+  if (category.includes("Weekly")) return "Open Calendar and Communications. Weekly check-ins are not missing until Friday 5 PM of that check-in week.";
+  if (category.includes("Results calls")) return "Open Calendar or Communications and confirm the post-results call was scheduled or logged.";
+  if (category.includes("Court Results")) return "Open Communications and confirm the Court Result and Next Court Date template email was sent.";
+  if (category.includes("Court reminder")) return "Open Communications and confirm the court reminder template email was sent before court.";
+  return "Open the matter in Clio and confirm the matching proof.";
+}
+
+function weeklyComplianceDrillLink(filters: Record<string, string>, caseManager: string, category: string): string {
+  if (category.includes("Weekly") || category.includes("Court reminder")) {
+    return filterLink({ ...filters, tab: "ongoing", cm: caseManager }, {});
+  }
+  return filterLink({ ...filters, tab: "workspace", wstatus: "followup", wfocus: "all", cm: caseManager }, {});
+}
+
 type MetricRow = {
   matters_checked?: number | string;
   pass_count?: number | string;
@@ -591,7 +609,7 @@ const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "command", label: "Command Center", description: "What needs attention first" },
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
-  { id: "standards", label: "Standards", description: "Graphic and Excel views" },
+  { id: "standards", label: "Standards", description: "Excel sheet, downloads, and sync" },
   { id: "ongoing", label: "Ongoing", description: "Active case maintenance" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Exports, spreadsheets, and weekly summaries" },
@@ -844,6 +862,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     filters.to ? new Date(`${filters.to}T12:00:00`) : new Date(),
     !filters.to,
   );
+  const weeklyComplianceIssueRows = weeklyComplianceSections
+    .flatMap((section) => section.rows.map((row) => ({ ...row, caseManager: section.caseManager })))
+    .filter((row) => row.currentWeek > 0)
+    .sort((a, b) => b.currentWeek - a.currentWeek || a.caseManager.localeCompare(b.caseManager) || a.category.localeCompare(b.category));
+  const weeklyComplianceIssueTotal = weeklyComplianceIssueRows.reduce((total, row) => total + row.currentWeek, 0);
+  const weeklyComplianceMaxIssue = Math.max(1, ...weeklyComplianceIssueRows.map((row) => row.currentWeek));
   const caseManagerWorkspaceRows = allWorkspaceRows.filter(
     (item) => !workspaceCaseManagerFilter || item.caseManager.toLowerCase() === workspaceCaseManagerFilter.toLowerCase(),
   );
@@ -1341,6 +1365,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <span>{tab.description}</span>
           </a>
         ))}
+        <a className="dashboard-tab review-tab" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">
+          <strong>Review Site</strong>
+          <span>Open Review Racer dashboard</span>
+        </a>
       </nav>
 
       {activeTab === "command" ? (
@@ -1456,7 +1484,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
           <div className="command-route-grid">
             <a href={tabLink(filters, "matters")}><strong>Matters</strong><span>Review proof for individual matters.</span></a>
-            <a href={tabLink(filters, "standards")}><strong>Standards</strong><span>Excel and graphic score views.</span></a>
+            <a href={tabLink(filters, "standards")}><strong>Standards</strong><span>Excel sheet, downloads, and sync.</span></a>
             <a href={tabLink(filters, "ongoing")}><strong>Ongoing</strong><span>Client contact, weekly check-ins, court reminders.</span></a>
             <a href={tabLink(filters, "reports")}><strong>Reports</strong><span>Exports, weekly comparisons, Google Sheets.</span></a>
             <a href={tabLink(filters, "debug")}><strong>Audit Debug</strong><span>AI review, stale rows, matcher issues.</span></a>
@@ -1880,13 +1908,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <a className="button" href={filterLink({ tab: "standards" }, { from: lastWeekStart, to: lastWeekEnd })}>Last Week</a>
             <a className="button" href={filterLink({ tab: "standards" }, { from: weekStart, to: today })}>This Week</a>
           </form>
-          <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
-            <input type="hidden" name="attorney" value={filters.attorney} />
-            <input type="hidden" name="overall" value={filters.overall} />
-            <input type="hidden" name="from" value={standardsActiveFrom} />
-            <input type="hidden" name="to" value={standardsActiveTo} />
-            <button className="button primary" type="submit">Download Standards Workbook</button>
-          </form>
+          <div className="standards-export-actions" aria-label="Standards download options">
+            <form action="/api/export.csv?type=standards" method="post" className="kpi-download-form">
+              <input type="hidden" name="attorney" value={filters.attorney} />
+              <input type="hidden" name="overall" value={filters.overall} />
+              <input type="hidden" name="from" value={standardsActiveFrom} />
+              <input type="hidden" name="to" value={standardsActiveTo} />
+              <button className="button primary" type="submit">Download Excel Workbook</button>
+            </form>
+            <form action="/api/export.csv?type=standards-csv" method="post" className="kpi-download-form">
+              <input type="hidden" name="attorney" value={filters.attorney} />
+              <input type="hidden" name="overall" value={filters.overall} />
+              <input type="hidden" name="from" value={standardsActiveFrom} />
+              <input type="hidden" name="to" value={standardsActiveTo} />
+              <button className="button" type="submit">Download CSV</button>
+            </form>
+          </div>
           <div className="standards-online-actions">
             <form action="/api/standards/excel-sync" method="post">
               <input type="hidden" name="attorney" value={filters.attorney} />
@@ -1924,11 +1961,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <div>
               <span className="label">Excel View</span>
               <h3>Excel-Style Standards Sheet</h3>
-              <p className="muted small">Same rows used by the workbook and Google Sheet sync.</p>
+              <p className="muted small">Same rows used by the workbook, CSV, and live Excel sync.</p>
             </div>
             <span className="summary-action">Hide Rows</span>
           </summary>
-          {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
+          <div className="standards-sheet-toolbar">
+            <form action="/api/export.csv?type=standards-csv" method="post">
+              <input type="hidden" name="attorney" value={filters.attorney} />
+              <input type="hidden" name="overall" value={filters.overall} />
+              <input type="hidden" name="from" value={standardsActiveFrom} />
+              <input type="hidden" name="to" value={standardsActiveTo} />
+              <button className="button compact" type="submit">Download CSV</button>
+            </form>
+            {excelWorkbookUrl ? <a className="button compact" href={excelWorkbookUrl} target="_blank" rel="noreferrer">Open Excel</a> : null}
+            {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
+          </div>
           <div className="standards-sheet-scroll">
             <table className="standards-sheet-table">
               <thead>
@@ -1985,72 +2032,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       {activeTab === "ongoing" ? (
       <section className="kpi-layout">
         <section className="panel ongoing-cases-panel">
-          <div className="panel-heading">
-            <div>
-              <span className="label">Active Cases</span>
-              <h2>Ongoing Case Maintenance</h2>
-              <p className="muted small">Client contact, weekly client check-ins, and court reminders that are due now. Not-due-yet items are not counted.</p>
-            </div>
-            <span className={`badge ${ongoingTotals.followUp ? "Late" : "Pass"}`}>{ongoingTotals.followUp ? `${ongoingTotals.followUp} need follow-up` : "All clear"}</span>
-          </div>
-          <div className="ongoing-summary-grid">
-            <div><span>Cases Checked</span><strong>{ongoingTotals.cases}</strong></div>
-            <div><span>Items Due</span><strong>{ongoingTotals.expected}</strong></div>
-            <div><span>Completed</span><strong>{ongoingTotals.completed}</strong></div>
-            <div><span>Needs Help</span><strong>{ongoingTotals.followUp}</strong></div>
-            <div><span>Court Reminders</span><strong>{ongoingTotals.courtReminder}/{ongoingTotals.courtReminderExpected}</strong></div>
-            <div><span>Score</span><strong>{ongoingCompletionRate}%</strong></div>
-          </div>
-          {ongoingCaseRows.length ? (
-            <div className="ongoing-cm-table" role="table" aria-label="Ongoing case maintenance by case manager">
-              <div className="ongoing-cm-header" role="row">
-                <span>Case Manager</span>
-                <span>Progress</span>
-                <span>Client Contact</span>
-                <span>Weekly Check-In</span>
-                <span>Court Reminder</span>
-                <span>Follow-Up</span>
-              </div>
-              {ongoingCaseRows.map((row) => (
-                <article className="ongoing-cm-row" key={row.caseManager}>
-                  <div className="ongoing-cm-person">
-                    <strong>{row.caseManager}</strong>
-                    <span>{row.cases} case{row.cases === 1 ? "" : "s"} checked</span>
-                    <a href={caseManagerPortalLink(row.caseManager)}>Open CM task page</a>
-                  </div>
-                  <div className="ongoing-progress-cell">
-                    <strong>{row.completionRate}%</strong>
-                    <div className="ongoing-progress-track"><span style={{ width: `${row.completionRate}%` }} /></div>
-                  </div>
-                  {row.clientContactExpected && row.clientContact < row.clientContactExpected ? (
-                    <a className="ongoing-status needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.clientContact}/{row.clientContactExpected}</a>
-                  ) : (
-                    <span className={row.clientContactExpected ? "ongoing-status good" : "ongoing-status quiet"}>{row.clientContactExpected ? `${row.clientContact}/${row.clientContactExpected}` : "None due"}</span>
-                  )}
-                  {row.weeklyCheckInExpected && row.weeklyCheckIn < row.weeklyCheckInExpected ? (
-                    <a className="ongoing-status needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.weeklyCheckIn}/{row.weeklyCheckInExpected}</a>
-                  ) : (
-                    <span className={row.weeklyCheckInExpected ? "ongoing-status good" : "ongoing-status quiet"}>{row.weeklyCheckInExpected ? `${row.weeklyCheckIn}/${row.weeklyCheckInExpected}` : "None due"}</span>
-                  )}
-                  {row.courtReminderExpected && row.courtReminder < row.courtReminderExpected ? (
-                    <a className="ongoing-status needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.courtReminder}/{row.courtReminderExpected}</a>
-                  ) : (
-                    <span className={row.courtReminderExpected ? "ongoing-status good" : "ongoing-status quiet"}>{row.courtReminderExpected ? `${row.courtReminder}/${row.courtReminderExpected}` : "None due"}</span>
-                  )}
-                  {row.followUp ? (
-                    <a className="ongoing-followup needs" href={ongoingWorkspaceLink(row.caseManager)}>{row.followUp} item{row.followUp === 1 ? "" : "s"}</a>
-                  ) : (
-                    <span className="ongoing-followup">Clear</span>
-                  )}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="workspace-empty compact">
-              <strong>No ongoing case items are due in this range.</strong>
-              <p>Not-due-yet items are not counted against the team.</p>
-            </div>
-          )}
           <section className="ongoing-action-panel">
             <div className="panel-heading compact-heading">
               <div>
@@ -2116,6 +2097,21 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                         </form>
                         <a className="button compact" href={caseManagerPortalLink(item.caseManager)}>Open CM Task Page</a>
                         {proofHref ? <a className="button compact" href={proofHref} target="_blank" rel="noreferrer">Open Saved Proof</a> : null}
+                        <form action="/api/metrics/exclusion" method="post">
+                          <input type="hidden" name="action" value={item.row.metricExcluded ? "restore" : "exclude"} />
+                          <input type="hidden" name="matter_id" value={item.row.matterId} />
+                          <input type="hidden" name="reason" value={`Admin removed ${workflowLabel(item.row.stepCode)} from Standards scoring from the Ongoing follow-up list.`} />
+                          <input type="hidden" name="tab" value="ongoing" />
+                          <input type="hidden" name="attorney" value={filters.attorney} />
+                          <input type="hidden" name="overall" value={filters.overall} />
+                          <input type="hidden" name="from" value={filters.from} />
+                          <input type="hidden" name="to" value={filters.to} />
+                          <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
+                          <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+                          <button className="button compact warning" type="submit">
+                            {item.row.metricExcluded ? "Restore to Score" : "Remove from Score"}
+                          </button>
+                        </form>
                       </div>
                     </article>
                   );
@@ -2356,6 +2352,42 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <input type="hidden" name="to" value={filters.to} />
               <button className="primary compact" type="submit">Download Comparison CSV</button>
             </form>
+          </div>
+          <div className="weekly-report-graph">
+            <div className="weekly-report-graph-head">
+              <div>
+                <span className="label">Fix First</span>
+                <h4>Current week issues by case manager</h4>
+                <p>Click any row to open the area where the team can review or clear the issue.</p>
+              </div>
+              <strong>{weeklyComplianceIssueTotal}</strong>
+            </div>
+            {weeklyComplianceIssueRows.length ? (
+              <div className="weekly-report-bars">
+                {weeklyComplianceIssueRows.slice(0, 16).map((row) => (
+                  <a
+                    className="weekly-report-bar"
+                    href={weeklyComplianceDrillLink(filters, row.caseManager, row.category)}
+                    key={`${row.caseManager}-${row.category}`}
+                  >
+                    <span className="weekly-report-bar-label">
+                      <b>{row.caseManager}</b>
+                      <small>{row.category}</small>
+                      <em>{weeklyComplianceFixText(row.category)}</em>
+                    </span>
+                    <span className="weekly-report-track" aria-hidden="true">
+                      <span style={{ width: `${Math.max(7, Math.round((row.currentWeek / weeklyComplianceMaxIssue) * 100))}%` }} />
+                    </span>
+                    <strong>{row.currentWeek}</strong>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="workspace-empty compact">
+                <strong>No missing items in this comparison window.</strong>
+                <span>The current week is clear for the categories in this report.</span>
+              </div>
+            )}
           </div>
           <div className="weekly-compliance-list">
             {weeklyComplianceSections.map((section) => (
