@@ -1982,6 +1982,63 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </details>
         </section>
 
+        <section className="panel standards-weekly-graph-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="label">Graph View</span>
+              <h3>Weekly Missing-Item Comparison</h3>
+              <p className="muted small">Same logic as the Reports comparison table. Lower current-week bars are better.</p>
+            </div>
+          </div>
+          <div className="standards-weekly-graph-list">
+            {weeklyComplianceSections.map((section) => {
+              const sectionIssueCount = section.rows.reduce((total, row) => total + row.currentWeek, 0);
+              const sectionMax = Math.max(1, ...section.rows.flatMap((row) => [row.previousWeek, row.currentWeek]));
+              return (
+                <details
+                  className="standards-weekly-graph-card"
+                  key={`standards-graph-${section.caseManager}`}
+                  open={section.rows.some((row) => row.currentWeek > 0 || row.previousWeek > 0)}
+                >
+                  <summary>
+                    <div>
+                      <strong>Case Manager: {section.caseManager}</strong>
+                      <span>{section.previousWeekLabel} vs {section.currentWeekLabel}</span>
+                    </div>
+                    <b>{sectionIssueCount} current</b>
+                  </summary>
+                  <div className="standards-weekly-graph-rows">
+                    {section.rows.map((row) => (
+                      <a
+                        className="standards-weekly-graph-row"
+                        href={weeklyComplianceDrillLink(filters, section.caseManager, row.category)}
+                        key={`standards-graph-${section.caseManager}-${row.category}`}
+                      >
+                        <span className="standards-weekly-graph-label">{row.category}</span>
+                        <span className="standards-weekly-bars" aria-hidden="true">
+                          <span className="standards-weekly-bar-line previous">
+                            <i style={{ width: `${Math.round((row.previousWeek / sectionMax) * 100)}%` }} />
+                          </span>
+                          <span className="standards-weekly-bar-line current">
+                            <i style={{ width: `${Math.round((row.currentWeek / sectionMax) * 100)}%` }} />
+                          </span>
+                        </span>
+                        <span className="standards-weekly-counts">
+                          <small>Previous {row.previousWeek}</small>
+                          <strong>Current {row.currentWeek}</strong>
+                          <em className={row.change < 0 ? "improved" : row.change > 0 ? "worse" : "same"}>
+                            {row.change > 0 ? `+${row.change}` : row.change}
+                          </em>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </section>
+
         <details className="panel standards-sheet-panel" id="standards-excel-view" open>
           <summary>
             <div>

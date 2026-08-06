@@ -12171,6 +12171,184 @@ textarea {
   }
 }
 
+/* Standards weekly comparison graph: same data as Reports, easier to scan. */
+.standards-weekly-graph-panel {
+  background: linear-gradient(145deg, rgba(20, 37, 58, 0.94), rgba(14, 27, 44, 0.98)) !important;
+  border: 1px solid rgba(203, 219, 239, 0.22) !important;
+  border-radius: 22px !important;
+  box-shadow: 0 18px 42px rgba(4, 10, 20, 0.22) !important;
+}
+
+.standards-weekly-graph-panel h3 {
+  color: #f7fbff;
+  font-size: 24px;
+  line-height: 1.1;
+  margin: 2px 0 6px;
+}
+
+.standards-weekly-graph-list {
+  display: grid;
+  gap: 14px;
+}
+
+.standards-weekly-graph-card {
+  background: rgba(10, 23, 38, 0.82);
+  border: 1px solid rgba(203, 219, 239, 0.17);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.standards-weekly-graph-card summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  list-style: none;
+  padding: 16px 18px;
+}
+
+.standards-weekly-graph-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.standards-weekly-graph-card summary div {
+  display: grid;
+  gap: 4px;
+}
+
+.standards-weekly-graph-card summary strong {
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.standards-weekly-graph-card summary span {
+  color: #bed0e4;
+  font-size: 13px;
+}
+
+.standards-weekly-graph-card summary b {
+  background: rgba(96, 232, 164, 0.13);
+  border: 1px solid rgba(96, 232, 164, 0.42);
+  border-radius: 999px;
+  color: #9ef4c5;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 950;
+  padding: 7px 12px;
+}
+
+.standards-weekly-graph-rows {
+  border-top: 1px solid rgba(203, 219, 239, 0.13);
+  display: grid;
+  gap: 0;
+  padding: 6px 10px 12px;
+}
+
+.standards-weekly-graph-row {
+  align-items: center;
+  border-radius: 14px;
+  color: inherit;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(260px, 1.3fr) minmax(170px, 0.6fr);
+  padding: 12px 10px;
+  text-decoration: none;
+}
+
+.standards-weekly-graph-row:hover {
+  background: rgba(203, 219, 239, 0.07);
+}
+
+.standards-weekly-graph-label {
+  color: #f4f8ff;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.standards-weekly-bars {
+  display: grid;
+  gap: 7px;
+}
+
+.standards-weekly-bar-line {
+  background: rgba(203, 219, 239, 0.15);
+  border-radius: 999px;
+  display: block;
+  height: 12px;
+  overflow: hidden;
+}
+
+.standards-weekly-bar-line i {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.standards-weekly-bar-line.previous i {
+  background: #8aa0c2;
+}
+
+.standards-weekly-bar-line.current i {
+  background: #ffbf6b;
+}
+
+.standards-weekly-counts {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr 1fr auto;
+}
+
+.standards-weekly-counts small,
+.standards-weekly-counts strong {
+  background: rgba(203, 219, 239, 0.08);
+  border: 1px solid rgba(203, 219, 239, 0.12);
+  border-radius: 999px;
+  color: #dce8f7;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.standards-weekly-counts em {
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 950;
+  min-width: 38px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.standards-weekly-counts em.same {
+  background: rgba(203, 219, 239, 0.1);
+  color: #dce8f7;
+}
+
+.standards-weekly-counts em.improved {
+  background: rgba(96, 232, 164, 0.15);
+  color: #93f1bc;
+}
+
+.standards-weekly-counts em.worse {
+  background: rgba(255, 122, 122, 0.16);
+  color: #ffc0c0;
+}
+
+@media (max-width: 900px) {
+  .standards-weekly-graph-row {
+    grid-template-columns: 1fr;
+  }
+
+  .standards-weekly-counts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* Standards sheet fit pass: keep the whole workbook preview inside the card. */
 .standards-tab .standards-sheet-panel {
   max-width: 100% !important;
