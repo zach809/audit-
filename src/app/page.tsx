@@ -1986,14 +1986,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="panel-heading">
             <div>
               <span className="label">Graph View</span>
-              <h3>Weekly Missing-Item Comparison</h3>
-              <p className="muted small">Same logic as the Reports comparison table. Lower current-week bars are better.</p>
+              <h3>Weekly Completion Graph</h3>
+              <p className="muted small">Same logic as the Reports comparison table, shown as completion. Green means the current week has no missing items.</p>
             </div>
           </div>
           <div className="standards-weekly-graph-list">
             {weeklyComplianceSections.map((section) => {
               const sectionIssueCount = section.rows.reduce((total, row) => total + row.currentWeek, 0);
-              const sectionMax = Math.max(1, ...section.rows.flatMap((row) => [row.previousWeek, row.currentWeek]));
+              const completedCategories = section.rows.filter((row) => row.currentWeek === 0).length;
+              const sectionCompletion = section.rows.length ? Math.round((completedCategories / section.rows.length) * 100) : 100;
               return (
                 <details
                   className="standards-weekly-graph-card"
@@ -2005,8 +2006,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                       <strong>Case Manager: {section.caseManager}</strong>
                       <span>{section.previousWeekLabel} vs {section.currentWeekLabel}</span>
                     </div>
-                    <b>{sectionIssueCount} current</b>
+                    <b>{sectionCompletion}% complete</b>
                   </summary>
+                  <div className="standards-weekly-completion-hero">
+                    <span className="standards-weekly-completion-bar" aria-hidden="true">
+                      <i style={{ width: `${sectionCompletion}%` }} />
+                    </span>
+                    <strong>{sectionCompletion}%</strong>
+                    <small>{sectionIssueCount ? `${sectionIssueCount} item${sectionIssueCount === 1 ? "" : "s"} still need follow-up` : "All current-week categories are clear"}</small>
+                  </div>
                   <div className="standards-weekly-graph-rows">
                     {section.rows.map((row) => (
                       <a
@@ -2015,17 +2023,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                         key={`standards-graph-${section.caseManager}-${row.category}`}
                       >
                         <span className="standards-weekly-graph-label">{row.category}</span>
-                        <span className="standards-weekly-bars" aria-hidden="true">
-                          <span className="standards-weekly-bar-line previous">
-                            <i style={{ width: `${Math.round((row.previousWeek / sectionMax) * 100)}%` }} />
-                          </span>
-                          <span className="standards-weekly-bar-line current">
-                            <i style={{ width: `${Math.round((row.currentWeek / sectionMax) * 100)}%` }} />
-                          </span>
+                        <span className={`standards-weekly-status-bar ${row.currentWeek === 0 ? "complete" : "needs-work"}`} aria-hidden="true">
+                          <i style={{ width: row.currentWeek === 0 ? "100%" : "18%" }} />
                         </span>
                         <span className="standards-weekly-counts">
                           <small>Previous {row.previousWeek}</small>
-                          <strong>Current {row.currentWeek}</strong>
+                          <strong>{row.currentWeek === 0 ? "100% complete" : `${row.currentWeek} open`}</strong>
                           <em className={row.change < 0 ? "improved" : row.change > 0 ? "worse" : "same"}>
                             {row.change > 0 ? `+${row.change}` : row.change}
                           </em>
