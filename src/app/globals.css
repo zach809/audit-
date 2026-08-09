@@ -12848,3 +12848,85 @@ button.primary {
     font-size: 42px !important;
   }
 }
+
+/* Final header button fix: only Run Audit Batch + Clio status belong in the hero. */
+.shell > .app-header.topbar .header-actions,
+.app-header.topbar .header-actions {
+  width: fit-content !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  padding: 10px !important;
+  overflow: visible !important;
+}
+
+.shell > .app-header.topbar .header-actions > a:not([href="/api/auth/clio/start"]),
+.app-header.topbar .header-actions > a:not([href="/api/auth/clio/start"]),
+.shell > .app-header.topbar .header-actions form[action="/logout"],
+.app-header.topbar .header-actions form[action="/logout"] {
+  display: none !important;
+}
+
+.shell > .app-header.topbar .header-actions form,
+.app-header.topbar .header-actions form {
+  display: flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+}
+
+.shell > .app-header.topbar .header-actions button.primary,
+.app-header.topbar .header-actions button.primary {
+  width: auto !important;
+  min-width: 172px !important;
+  max-width: 210px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
+}
+
+.shell > .app-header.topbar .header-actions .badge.Pass,
+.app-header.topbar .header-actions .badge.Pass {
+  width: auto !important;
+  min-width: 136px !important;
+  max-width: 170px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
+  text-align: center !important;
+}
+
+@media (max-width: 760px) {
+  .shell > .app-header.topbar .header-actions,
+  .app-header.topbar .header-actions {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    justify-content: stretch !important;
+  }
+
+  .shell > .app-header.topbar .header-actions form,
+  .app-header.topbar .header-actions form,
+  .shell > .app-header.topbar .header-actions button.primary,
+  .app-header.topbar .header-actions button.primary,
+  .shell > .app-header.topbar .header-actions .badge.Pass,
+  .app-header.topbar .header-actions .badge.Pass {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
