@@ -1,4 +1,4 @@
-import { addBusinessDaysDeadline, addWeekdayHours, businessDayEnd, effectiveIntake, isBusinessDay, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
+import { addBusinessDaysDeadline, addWeekdayHours, businessDayEnd, effectiveIntake, localParts, setupDeadlines, zonedDateTimeToUtc } from "./business-time";
 import { ClioApiError, ClioClient } from "./clio";
 import { db, initDb, pruneExpiredStoredData } from "./db";
 import {
@@ -134,26 +134,6 @@ function addHours(date: Date, hours: number): Date {
 
 function addDaysRaw(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
-}
-
-function previousBusinessDayEnd(date: Date): Date {
-  const parts = localParts(date);
-  let candidate = zonedDateTimeToUtc(parts.year, parts.month, parts.day - 1, 17, 0, 0);
-  while (!isBusinessDay(candidate)) {
-    const candidateParts = localParts(candidate);
-    candidate = zonedDateTimeToUtc(candidateParts.year, candidateParts.month, candidateParts.day - 1, 17, 0, 0);
-  }
-  return candidate;
-}
-
-function previousBusinessDayStart(date: Date): Date {
-  const parts = localParts(date);
-  let candidate = zonedDateTimeToUtc(parts.year, parts.month, parts.day - 1, 8, 0, 0);
-  while (!isBusinessDay(candidate)) {
-    const candidateParts = localParts(candidate);
-    candidate = zonedDateTimeToUtc(candidateParts.year, candidateParts.month, candidateParts.day - 1, 8, 0, 0);
-  }
-  return candidate;
 }
 
 function localDateKey(date: Date): string {
@@ -650,7 +630,7 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
   const courtResultDeadline = lastCourtEnd ? addHours(lastCourtEnd, 48) : null;
   const courtResult = lastCourtEnd ? templateCommunicationEvidence(isCourtResultTemplate, lastCourtEnd) ?? communicationEvidence(isCourtResultTemplate, lastCourtEnd, { includeBodyText: true }) : null;
   const postCourtCallDeadline = courtResult?.at ? addHours(courtResult.at, 24) : null;
-  const courtReminderDeadline = nextCourt ? previousBusinessDayEnd(nextCourt.at) : null;
+  const courtReminderDeadline = nextCourt ? endOfLocalBusinessDay(nextCourt.at) : null;
   const courtReminderWindowStart = nextCourt ? new Date(nextCourt.at.getTime() - 14 * 24 * 60 * 60 * 1000) : null;
   const courtReminderTemplateEvidence = courtReminderWindowStart
     ? templateCommunicationEvidence(isCourtReminderTemplate, courtReminderWindowStart) ?? communicationEvidence(isCourtReminderTemplate, courtReminderWindowStart, { includeBodyText: true })

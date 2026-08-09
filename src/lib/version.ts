@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-standards-completion-graph-2026-08-06";
+export const APP_VERSION = "cwca-tuesday-product-polish-2026-08-09";

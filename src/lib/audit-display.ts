@@ -66,13 +66,13 @@ export function actionFor(stepCode: string, status: string, reasonCode?: string 
       return "Weekly check-in calendar event exists, but CWCA did not find matching phone-call proof. Check Communications for the client call.";
     }
     if (reasonCode === "REMINDER_TEMPLATE_FOUND_AFTER_GOAL") {
-      return "Court reminder email proof exists, but it was sent after the 5:00 PM prior-business-day goal. Review timing only.";
+      return "Court reminder email proof exists, but it was sent after the 5:00 PM court-date goal. Review timing only.";
     }
     if (reasonCode === "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND") {
       return "Court reminder email proof exists. Recheck this matter with the current CWCA version so the older call-based flag can clear.";
     }
     if (reasonCode === "REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT" || reasonCode === "CALL_NOT_FOUND_PRE_COURT") {
-      return "CWCA did not find the court reminder email template before court. Check or send the reminder template in Communications.";
+      return "CWCA did not find the court reminder email template by 5:00 PM Illinois time on the court date. Check or send the reminder template in Communications.";
     }
     return info ? `${info.missing} ${info.action}` : "Complete or verify this workflow step in Clio.";
   }
@@ -102,7 +102,7 @@ export function whyFlagged(stepCode: string, status: string, reasonCode?: string
     if (reasonCode === "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND") return "CWCA found the weekly check-in calendar event, but not the matching phone-call communication.";
     if (reasonCode === "REMINDER_TEMPLATE_FOUND_AFTER_GOAL") return "CWCA found the court reminder email/template, but it was sent after the reminder goal.";
     if (reasonCode === "REMINDER_TEMPLATE_FOUND_CALL_NOT_FOUND") return "This is an older call-based flag. The reminder email/template exists, so recheck the matter with the current rule.";
-    if (reasonCode === "REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT" || reasonCode === "CALL_NOT_FOUND_PRE_COURT") return "CWCA did not find the court reminder email/template before court.";
+    if (reasonCode === "REMINDER_TEMPLATE_NOT_FOUND_PRE_COURT" || reasonCode === "CALL_NOT_FOUND_PRE_COURT") return "CWCA did not find the court reminder email/template by the 5:00 PM court-date deadline.";
     return `${workflowLabel(stepCode)} needs follow-up because CWCA did not find matching proof in Clio.`;
   }
   if (status === "Late") return `${workflowLabel(stepCode)} was found, but after the expected timeliness goal.`;

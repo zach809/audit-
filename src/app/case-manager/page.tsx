@@ -87,7 +87,7 @@ function cmOpportunityText(row: WorkspaceAuditItem): string {
     case "WEEKLY_CLIENT_CHECKIN":
       return "Confirm the weekly client check-in event and call proof by 5:00 PM Illinois time one week plus one day after the last court date.";
     case "COURT_REMINDER_CALL":
-      return "Confirm the court reminder email template by 5:00 PM Illinois time on the business day before court.";
+      return "Confirm the court reminder email template by 5:00 PM Illinois time on the court date.";
     case "CLIENT_CONTACT":
     case "CLIENT_FOLLOWUP":
       return "Confirm the client received a firm response or outreach.";
@@ -346,7 +346,7 @@ export default async function CaseManagerPortalPage({
     {
       label: "Court reminders",
       count: courtReminderTasks.length,
-      text: "Confirm court reminder template emails by 5 PM the business day before court.",
+      text: "Confirm court reminder template emails by 5 PM Illinois time on the court date.",
     },
     {
       label: "New matter setup",

@@ -56,7 +56,7 @@ export const TEMPLATE_REGISTRY: TemplateRegistryEntry[] = [
   {
     category: "courtReminder",
     label: "Court Reminder Email",
-    purpose: "Pre-court reminder email proof due before court.",
+    purpose: "Court reminder email proof due by 5:00 PM Illinois time on the court date.",
     clioTab: "communications",
     subjects: [
       "In-Person Court Reminder",

@@ -66,7 +66,7 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   COURT_REMINDER_CALL: {
     label: "Court Reminder Email",
-    goal: "Send the court reminder email template before court, due by 5:00 PM Illinois time on the prior business day.",
+    goal: "Send the court reminder email template by 5:00 PM Illinois time on the court date.",
     missing: "Court reminder email still needs template proof in Clio.",
     action: "Check or send the court reminder email template in the matter Communications tab.",
     late: "Court reminder email proof was found, but it was completed after the reminder goal.",

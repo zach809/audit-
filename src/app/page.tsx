@@ -169,7 +169,7 @@ function ongoingReminderText(stepCode: string): string {
     case "WEEKLY_CLIENT_CHECKIN":
       return "Please confirm the weekly client check-in event and call proof by 5:00 PM Illinois time one week plus one day after the last court date.";
     case "COURT_REMINDER_CALL":
-      return "Please confirm the court reminder email template was sent by 5:00 PM Illinois time on the business day before court.";
+      return "Please confirm the court reminder email template was sent by 5:00 PM Illinois time on the court date.";
     default:
       return "Please open Clio, confirm the proof, and then recheck the task in CWCA.";
   }
@@ -522,17 +522,6 @@ function filterLink(filters: Record<string, string>, next: Record<string, string
   }
   const query = params.toString();
   return query ? `/?${query}` : "/";
-}
-
-function weeklyComplianceFixText(category: string): string {
-  if (category.includes("Welcome")) return "Open Communications and confirm the Welcome Letter / Carta de bienvenida email was sent.";
-  if (category.includes("Attorney phone")) return "Open Calendar and confirm the attorney/client phone-call event is linked to the matter.";
-  if (category.includes("Appearance")) return "Open Communications and confirm the Court Appearance filed template email was sent.";
-  if (category.includes("Weekly")) return "Open Calendar and Communications. Weekly check-ins are not missing until Friday 5 PM of that check-in week.";
-  if (category.includes("Results calls")) return "Open Calendar or Communications and confirm the post-results call was scheduled or logged.";
-  if (category.includes("Court Results")) return "Open Communications and confirm the Court Result and Next Court Date template email was sent.";
-  if (category.includes("Court reminder")) return "Open Communications and confirm the court reminder template email was sent before court.";
-  return "Open the matter in Clio and confirm the matching proof.";
 }
 
 function weeklyComplianceStepForCategory(category: string): string {
@@ -890,30 +879,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     filters.to ? new Date(`${filters.to}T12:00:00`) : new Date(),
     !filters.to,
   );
-  const weeklyComplianceIssueRows = weeklyComplianceSections
-    .flatMap((section) => section.rows.map((row) => ({ ...row, caseManager: section.caseManager })))
-    .filter((row) => row.currentWeek > 0)
-    .sort((a, b) => b.currentWeek - a.currentWeek || a.caseManager.localeCompare(b.caseManager) || a.category.localeCompare(b.category));
-  const weeklyComplianceIssueTotal = weeklyComplianceIssueRows.reduce((total, row) => total + row.currentWeek, 0);
-  const weeklyComplianceMaxIssue = Math.max(1, ...weeklyComplianceIssueRows.map((row) => row.currentWeek));
-  const weeklyComplianceCategoryGraphRows = Array.from(
-    weeklyComplianceIssueRows.reduce((map, row) => {
-      map.set(row.category, (map.get(row.category) ?? 0) + row.currentWeek);
-      return map;
-    }, new Map<string, number>()),
-  )
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
-  const weeklyComplianceCaseManagerGraphRows = Array.from(
-    weeklyComplianceIssueRows.reduce((map, row) => {
-      map.set(row.caseManager, (map.get(row.caseManager) ?? 0) + row.currentWeek);
-      return map;
-    }, new Map<string, number>()),
-  )
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
-  const weeklyComplianceMaxCategory = Math.max(1, ...weeklyComplianceCategoryGraphRows.map((row) => row.value));
-  const weeklyComplianceMaxCaseManager = Math.max(1, ...weeklyComplianceCaseManagerGraphRows.map((row) => row.value));
   const caseManagerWorkspaceRows = allWorkspaceRows.filter(
     (item) => !workspaceCaseManagerFilter || item.caseManager.toLowerCase() === workspaceCaseManagerFilter.toLowerCase(),
   );
@@ -1390,8 +1355,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="deployment-proof">
         <div>
           <span className="label">Deployment Proof</span>
-          <strong>Command Center and template registry are active</strong>
-          <p>Version {APP_VERSION}: The dashboard now starts with a cleaner action view, accepted template subjects, and direct paths into the right review area.</p>
+          <strong>Tuesday-ready dashboard polish is active</strong>
+          <p>Version {APP_VERSION}: cleaner navigation, clearer action areas, and the same read-only Clio audit behavior.</p>
         </div>
         <a className="button compact" href="/api/health" target="_blank" rel="noreferrer">Check Version</a>
       </section>
@@ -1424,22 +1389,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         <section className="panel command-hero">
           <div>
             <span className="label">Start Here</span>
-            <h2>What Needs Attention This Week</h2>
-            <p className="muted">A clean view for what matters now. Use this first, then drill into Matters, Standards, Ongoing, or the CM portal only when needed.</p>
+            <h2>Today&apos;s Audit Command Center</h2>
+            <p className="muted">One simple starting point: see what needs attention, open the right work area, and keep the team moving without scrolling through every detail.</p>
           </div>
           <div className="command-actions">
-            <a className="button primary compact" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>Open Matter Review</a>
-            <a className="button compact" href="/case-manager">Open CM Portal</a>
-            <a className="button compact" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">Open Review Site</a>
-            <a className="button compact" href={tabLink(filters, "debug")}>AI Debug</a>
+            <a className="button primary compact" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>Review Matters</a>
+            <a className="button compact" href="/case-manager">CM Task Page</a>
+            <a className="button compact" href={tabLink(filters, "standards")}>Standards</a>
+            <a className="button compact" href={tabLink(filters, "debug")}>Audit Debug</a>
           </div>
         </section>
 
         <section className="command-metric-grid">
           <a className="command-metric needs" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>
-            <span>Needs follow-up</span>
+            <span>Needs Review</span>
             <strong>{needsFollowUpCount}</strong>
-            <small>Open items, timing review, or visibility review.</small>
+            <small>Items needing proof, timing review, or visibility review.</small>
           </a>
           <a className="command-metric" href={tabLink(filters, "standards")}>
             <span>Standards score</span>
@@ -1447,12 +1412,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <small>{kpiFollowUp} setup item{kpiFollowUp === 1 ? "" : "s"} still need proof.</small>
           </a>
           <a className="command-metric" href={tabLink(filters, "ongoing")}>
-            <span>Ongoing case help</span>
+            <span>Ongoing Cases</span>
             <strong>{ongoingTotals.followUp}</strong>
-            <small>Client contact, weekly check-ins, and court reminder templates.</small>
+            <small>Client contact, weekly check-ins, and court reminder emails.</small>
           </a>
           <a className="command-metric" href={tabLink(filters, "post-closure")}>
-            <span>Post-closure outreach</span>
+            <span>Post-Closure</span>
             <strong>{postClosureNeedsOutreach}</strong>
             <small>Closed-matter follow-ups needing review.</small>
           </a>
@@ -2436,74 +2401,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <input type="hidden" name="to" value={filters.to} />
               <button className="primary compact" type="submit">Download Comparison CSV</button>
             </form>
-          </div>
-          <div className="weekly-report-graph">
-            <div className="weekly-report-graph-head">
-              <div>
-                <span className="label">Fix First</span>
-                <h4>Current week issues by case manager</h4>
-                <p>Click any row to open the area where the team can review or clear the issue.</p>
-              </div>
-              <strong>{weeklyComplianceIssueTotal}</strong>
-            </div>
-            {weeklyComplianceIssueRows.length ? (
-              <>
-                <div className="weekly-report-graph-grid">
-                  <div className="weekly-report-chart-card">
-                    <h5>By Missing Item</h5>
-                    <div className="weekly-report-mini-bars">
-                      {weeklyComplianceCategoryGraphRows.map((row) => (
-                        <div className="weekly-report-mini-bar" key={row.label}>
-                          <span>{row.label}</span>
-                          <b>{row.value}</b>
-                          <i aria-hidden="true"><em style={{ width: `${Math.max(7, Math.round((row.value / weeklyComplianceMaxCategory) * 100))}%` }} /></i>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="weekly-report-chart-card">
-                    <h5>By Case Manager</h5>
-                    <div className="weekly-report-mini-bars">
-                      {weeklyComplianceCaseManagerGraphRows.map((row) => (
-                        <div className="weekly-report-mini-bar" key={row.label}>
-                          <span>{row.label}</span>
-                          <b>{row.value}</b>
-                          <i aria-hidden="true"><em style={{ width: `${Math.max(7, Math.round((row.value / weeklyComplianceMaxCaseManager) * 100))}%` }} /></i>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="weekly-report-drill-head">
-                  <strong>Click to Fix</strong>
-                  <span>These open the review area for the selected case manager and issue.</span>
-                </div>
-                <div className="weekly-report-bars">
-                  {weeklyComplianceIssueRows.slice(0, 16).map((row) => (
-                    <a
-                      className="weekly-report-bar"
-                      href={weeklyComplianceDrillLink(filters, row.caseManager, row.category)}
-                      key={`${row.caseManager}-${row.category}`}
-                    >
-                      <span className="weekly-report-bar-label">
-                        <b>{row.caseManager}</b>
-                        <small>{row.category}</small>
-                        <em>{weeklyComplianceFixText(row.category)}</em>
-                      </span>
-                      <span className="weekly-report-track" aria-hidden="true">
-                        <span style={{ width: `${Math.max(7, Math.round((row.currentWeek / weeklyComplianceMaxIssue) * 100))}%` }} />
-                      </span>
-                      <strong>{row.currentWeek}</strong>
-                    </a>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="workspace-empty compact">
-                <strong>No missing items in this comparison window.</strong>
-                <span>The current week is clear for the categories in this report.</span>
-              </div>
-            )}
           </div>
           <div className="weekly-compliance-list">
             {weeklyComplianceSections.map((section) => (
