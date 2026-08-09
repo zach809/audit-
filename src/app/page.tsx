@@ -737,7 +737,6 @@ function DashboardUnavailable({ message, connected }: { message: string; connect
         </div>
         <div className="actions header-actions">
           {connected ? <span className="badge Pass">Clio Connected</span> : <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>}
-          <a className="button" href="/logout">Log Out</a>
         </div>
       </section>
       <section className="panel">
@@ -1329,11 +1328,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <p>Open matters, proof links, and follow-up in one focused workspace.</p>
         </div>
         <div className="actions header-actions">
-          {connected ? (
-            <span className="badge Pass">Clio Connected</span>
-          ) : (
-            <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>
-          )}
           <form action="/api/audit/run" method="post">
           <input type="hidden" name="attorney" value={filters.attorney} />
           <input type="hidden" name="overall" value={filters.overall} />
@@ -1345,10 +1339,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <input type="hidden" name="wstep" value={workspaceStepFilter} />
           <button className="primary" type="submit">Run Audit Batch</button>
           </form>
-          <a className="button" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">Review Site</a>
-          <form action="/logout" method="post">
-            <button type="submit">Log Out</button>
-          </form>
+          {connected ? (
+            <span className="badge Pass">Clio Connected</span>
+          ) : (
+            <a className="button primary" href="/api/auth/clio/start">Connect Clio</a>
+          )}
         </div>
       </div>
 
@@ -1421,6 +1416,20 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <strong>{postClosureNeedsOutreach}</strong>
             <small>Closed-matter follow-ups needing review.</small>
           </a>
+        </section>
+
+        <section className="panel demo-readiness-panel">
+          <div>
+            <span className="label">Boss Demo Ready</span>
+            <h2>How To Read This Fast</h2>
+            <p className="muted small">CWCA is a read-only coaching tool. It does not change Clio. Scores improve only when proof is found in Clio or an approved exception is saved.</p>
+          </div>
+          <div className="demo-readiness-grid">
+            <a href={tabLink(filters, "matters")}><strong>1. Review Matters</strong><span>Open the exact client and proof links.</span></a>
+            <a href={tabLink(filters, "standards")}><strong>2. Check Standards</strong><span>See setup completion by case manager.</span></a>
+            <a href="/case-manager"><strong>3. CM Task Page</strong><span>Case managers clear tasks by proving them in Clio.</span></a>
+            <a href={tabLink(filters, "debug")}><strong>4. Audit Debug</strong><span>Use AI to spot matcher or stale-data issues.</span></a>
+          </div>
         </section>
 
         <section className="command-grid">
@@ -1945,6 +1954,28 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               ))}
             </div>
           </details>
+        </section>
+
+        <section className="panel standards-score-help">
+          <div>
+            <span className="label">Score Improvement Guide</span>
+            <h3>What improves a case manager score?</h3>
+            <p className="muted small">For each new matter, CWCA looks for three proof items in Clio: Welcome Letter, Initial Meeting phone call, and Court Date event. Late proof can score lower, but approved exceptions count as full credit.</p>
+          </div>
+          <div className="standards-score-help-grid">
+            <a href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>
+              <strong>Open missing proof</strong>
+              <span>Go straight to matter cards that need follow-up.</span>
+            </a>
+            <a href="/case-manager">
+              <strong>Send CMs to their task page</strong>
+              <span>They can fix work in Clio and verify it here.</span>
+            </a>
+            <a href={tabLink(filters, "debug")}>
+              <strong>Check false positives</strong>
+              <span>Use Audit Debug before coaching if something looks wrong.</span>
+            </a>
+          </div>
         </section>
 
         <section className="panel standards-weekly-graph-panel">

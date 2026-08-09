@@ -526,6 +526,20 @@ export default async function CaseManagerPortalPage({
             ) : null}
           </div>
         ) : null}
+        <div className="cm-score-action-guide" aria-label="How to improve this score">
+          <div>
+            <strong>1. Open Clio</strong>
+            <span>Use the blue button on each task so you land in the right tab.</span>
+          </div>
+          <div>
+            <strong>2. Add or confirm proof</strong>
+            <span>Welcome Letter, phone call, or court date must exist in Clio.</span>
+          </div>
+          <div>
+            <strong>3. Verify here</strong>
+            <span>CWCA only clears the task after it finds matching proof.</span>
+          </div>
+        </div>
       </section>
 
       <form className="cm-task-filters" action="/case-manager" method="get">

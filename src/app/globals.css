@@ -12235,6 +12235,173 @@ textarea {
   white-space: nowrap !important;
 }
 
+/* Boss demo final polish: tighter hero actions, score guidance, and clearer demo path. */
+.shell > .app-header.topbar .header-actions,
+.app-header.topbar .header-actions {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 560px !important;
+  display: inline-flex !important;
+  grid-template-columns: none !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  padding: 10px !important;
+}
+
+.shell > .app-header.topbar .header-actions form,
+.app-header.topbar .header-actions form {
+  width: auto !important;
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+}
+
+.shell > .app-header.topbar .header-actions button.primary,
+.app-header.topbar .header-actions button.primary,
+.shell > .app-header.topbar .header-actions .button.primary,
+.app-header.topbar .header-actions .button.primary {
+  width: auto !important;
+  min-width: 168px !important;
+  max-width: 220px !important;
+  min-height: 48px !important;
+  padding: 0 24px !important;
+  white-space: nowrap !important;
+  text-align: center !important;
+  overflow: visible !important;
+}
+
+.shell > .app-header.topbar .header-actions .badge,
+.app-header.topbar .header-actions .badge {
+  min-height: 46px !important;
+  padding: 0 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  flex: 0 0 auto !important;
+}
+
+.demo-readiness-panel,
+.standards-score-help {
+  display: grid !important;
+  grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.18fr) !important;
+  gap: 22px !important;
+  align-items: stretch !important;
+  padding: 24px !important;
+  border-radius: 22px !important;
+  background: linear-gradient(135deg, rgba(21, 40, 61, 0.92), rgba(13, 28, 45, 0.96)) !important;
+}
+
+.demo-readiness-panel h2,
+.standards-score-help h3 {
+  margin: 6px 0 8px !important;
+  font-size: clamp(24px, 2vw, 34px) !important;
+  line-height: 1.05 !important;
+}
+
+.demo-readiness-grid,
+.standards-score-help-grid,
+.cm-score-action-guide {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.demo-readiness-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.demo-readiness-grid a,
+.standards-score-help-grid a,
+.cm-score-action-guide > div {
+  min-height: 108px !important;
+  padding: 16px !important;
+  border-radius: 16px !important;
+  background: rgba(7, 20, 35, 0.72) !important;
+  border: 1px solid rgba(184, 211, 244, 0.18) !important;
+  color: var(--demo-text, #f7fbff) !important;
+  text-decoration: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.demo-readiness-grid a:hover,
+.standards-score-help-grid a:hover {
+  border-color: rgba(83, 239, 156, 0.45) !important;
+  transform: translateY(-1px) !important;
+}
+
+.demo-readiness-grid strong,
+.standards-score-help-grid strong,
+.cm-score-action-guide strong {
+  font-size: 15px !important;
+  color: #ffffff !important;
+}
+
+.demo-readiness-grid span,
+.standards-score-help-grid span,
+.cm-score-action-guide span {
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  color: var(--demo-muted, #c8d5e5) !important;
+}
+
+.cm-score-action-guide {
+  margin-top: 16px !important;
+}
+
+.cm-score-action-guide > div {
+  min-height: 92px !important;
+  background: rgba(11, 29, 48, 0.82) !important;
+}
+
+.cm-score-helper {
+  margin-top: 14px !important;
+}
+
+@media (max-width: 1050px) {
+  .demo-readiness-panel,
+  .standards-score-help {
+    grid-template-columns: 1fr !important;
+  }
+
+  .demo-readiness-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .standards-score-help-grid,
+  .cm-score-action-guide {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .shell > .app-header.topbar .header-actions,
+  .app-header.topbar .header-actions {
+    width: 100% !important;
+    max-width: none !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    justify-content: stretch !important;
+  }
+
+  .shell > .app-header.topbar .header-actions button.primary,
+  .app-header.topbar .header-actions button.primary,
+  .shell > .app-header.topbar .header-actions .button.primary,
+  .app-header.topbar .header-actions .button.primary,
+  .shell > .app-header.topbar .header-actions .badge,
+  .app-header.topbar .header-actions .badge {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .demo-readiness-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* Tuesday demo polish: final visual layer for a calmer, finished product feel. */
 :root {
   --demo-bg: #21344a;
