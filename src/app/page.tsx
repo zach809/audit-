@@ -2649,7 +2649,7 @@ Items Still Needing Action
             <select name="attorney" defaultValue={filters.attorney}>
               <option value="">All</option>
               {dashboardData.attorneys.map((a) => (
-                <option key={a.id ?? "none"} value={a.id ?? ""}>{a.name || "Unassigned"} ({a.count})</option>
+                <option key={a.id ?? "none"} value={a.id ?? "__unassigned"}>{a.name || "Unassigned"} ({a.count})</option>
               ))}
             </select>
           </label>

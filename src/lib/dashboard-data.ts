@@ -185,6 +185,12 @@ export function logicIssueNextStep(row: LogicIssueRow): string {
 export async function getDashboardData(filters: DashboardFilters = {}) {
   await initDb();
   const sql = db();
+  const attorneyCondition =
+    filters.attorney === "__unassigned"
+      ? sql`(m.responsible_attorney_id is null or m.responsible_attorney_id = '')`
+      : filters.attorney
+        ? sql`m.responsible_attorney_id = ${filters.attorney}`
+        : sql`true`;
   const overallCondition =
     filters.overall === "Unchecked"
       ? sql`
@@ -206,7 +212,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         : sql`true`;
   const conditions = [
     sql`lower(coalesce(m.matter_status, '')) <> 'closed'`,
-    filters.attorney ? sql`m.responsible_attorney_id = ${filters.attorney}` : sql`true`,
+    attorneyCondition,
     overallCondition,
     filters.from ? sql`m.matter_created_at >= ${new Date(filters.from)}` : sql`true`,
     filters.to ? sql`m.matter_created_at < ${new Date(`${filters.to}T23:59:59`)}` : sql`true`,

@@ -418,7 +418,16 @@ export async function discoverMatters(client = new ClioClient(), lookbackDays = 
   await initDb();
   const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
   const fields = "id,number,display_number,status,created_at,responsible_attorney{id,name},originating_attorney{id,name},client{id,first_name,last_name,name}";
-  const matters = await client.list<ClioMatter>("/matters.json", { fields, created_since: since.toISOString() });
+  const [createdResult, updatedResult] = await Promise.allSettled([
+    client.list<ClioMatter>("/matters.json", { fields, created_since: since.toISOString(), order: "id(asc)" }),
+    client.list<ClioMatter>("/matters.json", { fields, updated_since: since.toISOString(), order: "id(asc)" }),
+  ]);
+  if (createdResult.status === "rejected" && updatedResult.status === "rejected") {
+    throw createdResult.reason;
+  }
+  const createdMatters = createdResult.status === "fulfilled" ? createdResult.value : [];
+  const updatedMatters = updatedResult.status === "fulfilled" ? updatedResult.value : [];
+  const matters = Array.from(new Map([...createdMatters, ...updatedMatters].map((matter) => [String(matter.id), matter])).values());
   let count = 0;
   for (const matter of matters) {
     await saveMatter(matter);
@@ -855,6 +864,12 @@ export async function auditNextBatch(
     const batchSize = options.batchSize ?? config.auditBatchSize;
     const fromDate = parseDate(options.filters?.from);
     const toDate = parseDate(options.filters?.to ? `${options.filters.to}T23:59:59` : undefined);
+    const attorneyCondition =
+      options.filters?.attorney === "__unassigned"
+        ? sql`(m.responsible_attorney_id is null or m.responsible_attorney_id = '')`
+        : options.filters?.attorney
+          ? sql`m.responsible_attorney_id = ${options.filters.attorney}`
+          : sql`true`;
     const fromCondition = fromDate
       ? sql`
           (
@@ -885,7 +900,7 @@ export async function auditNextBatch(
       : sql`true`;
     const batchConditions = [
       sql`lower(coalesce(m.matter_status, '')) <> 'closed'`,
-      options.filters?.attorney ? sql`m.responsible_attorney_id = ${options.filters.attorney}` : sql`true`,
+      attorneyCondition,
       fromCondition,
       toCondition,
     ];
