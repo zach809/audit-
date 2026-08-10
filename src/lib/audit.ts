@@ -428,6 +428,11 @@ export async function discoverMatters(client = new ClioClient(), lookbackDays = 
   return count;
 }
 
+async function discoverRecentMattersFirst(client: ClioClient, lookbackDays: number): Promise<number> {
+  const recentWindowDays = Math.min(Math.max(lookbackDays, 1), 7);
+  return discoverMatters(client, recentWindowDays);
+}
+
 async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<EvidenceBundle> {
   const calendarFrom = new Date(matter.matter_created_at.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const calendarTo = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -842,7 +847,10 @@ export async function auditNextBatch(
     const existingRows = await sql`select count(*)::int as count from audit_matter`;
     const needsDiscovery = Number(existingRows[0]?.count ?? 0) === 0;
     if (options.discover ?? needsDiscovery) {
-      discovered = await discoverMatters(client, options.discoverLookbackDays);
+      discovered += await discoverRecentMattersFirst(client, options.discoverLookbackDays ?? config.initialLookbackDays);
+      if (needsDiscovery) {
+        discovered += await discoverMatters(client, options.discoverLookbackDays);
+      }
     }
     const batchSize = options.batchSize ?? config.auditBatchSize;
     const fromDate = parseDate(options.filters?.from);

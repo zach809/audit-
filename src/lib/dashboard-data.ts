@@ -248,6 +248,11 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       : sql`true`;
   const normalizedItemStatus = sql`
     case
+      when i.deadline_at is not null
+        and now() <= i.deadline_at
+        and i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL', 'APPEARANCE_FILING', 'COURT_RESULTS', 'POST_COURT_CALL')
+        and i.status in ('Missing', 'Unknown', 'Needs Review', 'Needs Recheck')
+        then 'Pending'
       when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else i.status end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -274,6 +279,11 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   `;
   const normalizedReasonCode = sql`
     case
+      when i.deadline_at is not null
+        and now() <= i.deadline_at
+        and i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL', 'APPEARANCE_FILING', 'COURT_RESULTS', 'POST_COURT_CALL')
+        and i.status in ('Missing', 'Unknown', 'Needs Review', 'Needs Recheck')
+        then null
       when i.step_code in ('CLIENT_CONTACT', 'WEEKLY_CLIENT_CHECKIN', 'COURT_REMINDER_CALL')
         then case when i.deadline_at is not null and now() <= i.deadline_at then null else i.reason_code end
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
@@ -353,7 +363,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     left join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
     left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
-    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${workspaceDateCondition} and ${conditions[5]} and ${conditions[6]}
       and exists (
         select 1
         from audit_item visible_item
@@ -402,7 +412,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         count(i.*) filter (where (${normalizedItemStatus}) = 'Unknown')::int as unknown_items
       from audit_matter m
       left join audit_item i on i.matter_id = m.matter_id
-      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
+      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${workspaceDateCondition} and ${conditions[5]} and ${conditions[6]}
       group by m.matter_id, m.overall_status
     ) s
   `;
@@ -579,6 +589,11 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
         : sql`true`;
   const normalizedItemStatus = sql`
     case
+      when i.deadline_at is not null
+        and now() <= i.deadline_at
+        and i.step_code in ('APPEARANCE_FILING', 'COURT_RESULTS', 'POST_COURT_CALL')
+        and i.status in ('Missing', 'Unknown', 'Needs Review', 'Needs Recheck')
+        then 'Pending'
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then 'Pending' else 'Missing' end
       when i.step_code = 'APPEARANCE_FILING'
@@ -590,6 +605,11 @@ async function getActionRows(filters: DashboardFilters = {}): Promise<ActionCsvR
   `;
   const normalizedReasonCode = sql`
     case
+      when i.deadline_at is not null
+        and now() <= i.deadline_at
+        and i.step_code in ('APPEARANCE_FILING', 'COURT_RESULTS', 'POST_COURT_CALL')
+        and i.status in ('Missing', 'Unknown', 'Needs Review', 'Needs Recheck')
+        then null
       when i.step_code = 'COURT_RESULTS' and i.reason_code like 'NOTES_400:%'
         then case when i.deadline_at is not null and now() <= i.deadline_at then null else 'NOT_FOUND' end
       when i.step_code = 'APPEARANCE_FILING'
@@ -1388,13 +1408,13 @@ function isClearedByHumanReview(item: WorkspaceAuditItem): boolean {
 
 function isIncompleteForWeeklyComparison(item: WorkspaceAuditItem): boolean {
   if (item.metric_excluded || isClearedByHumanReview(item)) return false;
+  if (item.deadline_at) {
+    const deadline = item.deadline_at instanceof Date ? item.deadline_at : new Date(item.deadline_at);
+    if (Number.isFinite(deadline.getTime()) && deadline >= new Date()) return false;
+  }
   if (["WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"].includes(item.step_code)) {
     if (item.reason_code === "NOT_FOUND") return false;
     if (item.audit_version && item.audit_version !== APP_VERSION) return false;
-  }
-  if (["CLIENT_CONTACT", "WEEKLY_CLIENT_CHECKIN", "COURT_REMINDER_CALL"].includes(item.step_code) && item.deadline_at) {
-    const deadline = item.deadline_at instanceof Date ? item.deadline_at : new Date(item.deadline_at);
-    if (Number.isFinite(deadline.getTime()) && deadline >= new Date()) return false;
   }
   return ["Missing", "Unknown", "Needs Review", "Needs Recheck"].includes(item.item_status);
 }

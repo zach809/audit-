@@ -780,9 +780,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const weekStart = weekStartInput(new Date());
   const lastWeekStart = addDaysInput(weekStart, -7);
   const lastWeekEnd = addDaysInput(weekStart, -1);
+  const recentStart = addDaysInput(today, -7);
   const monthStart = monthStartInput(new Date());
   const defaultToCurrentWeek = activeTab === "command" || activeTab === "matters" || activeTab === "workspace" || activeTab === "ongoing" || activeTab === "debug";
-  const defaultFrom = activeTab === "standards" ? lastWeekStart : defaultToCurrentWeek ? weekStart : "";
+  const defaultFrom = activeTab === "standards" ? lastWeekStart : defaultToCurrentWeek ? recentStart : "";
   const defaultTo = activeTab === "standards" ? lastWeekEnd : defaultToCurrentWeek ? today : "";
   const filters = {
     attorney: searchParams.attorney ?? "",
