@@ -369,7 +369,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     left join audit_item i on i.matter_id = m.matter_id
     left join audit_review r on r.matter_id = i.matter_id and r.step_code = i.step_code
     left join audit_metric_exclusion mex on mex.matter_id = m.matter_id
-    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${workspaceDateCondition} and ${conditions[5]} and ${conditions[6]}
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       and exists (
         select 1
         from audit_item visible_item
@@ -418,7 +418,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         count(i.*) filter (where (${normalizedItemStatus}) = 'Unknown')::int as unknown_items
       from audit_matter m
       left join audit_item i on i.matter_id = m.matter_id
-      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${workspaceDateCondition} and ${conditions[5]} and ${conditions[6]}
+      where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       group by m.matter_id, m.overall_status
     ) s
   `;

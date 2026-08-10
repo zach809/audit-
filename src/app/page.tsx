@@ -2639,7 +2639,7 @@ Items Still Needing Action
             <h2>Review Matters</h2>
           </div>
         </div>
-        <form className="filters">
+        <form className="filters" action="/" method="get">
           <input type="hidden" name="tab" value={activeTab} />
           <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
           <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
