@@ -1290,9 +1290,16 @@ function xmlEscape(value: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-function xmlCell(value: unknown, type: "String" | "Number" = "String", style = ""): string {
+function xmlCell(value: unknown, type: "String" | "Number" = "String", style = "", extraAttrs = ""): string {
   const styleAttr = style ? ` ss:StyleID="${style}"` : "";
-  return `<Cell${styleAttr}><Data ss:Type="${type}">${xmlEscape(value)}</Data></Cell>`;
+  const attrs = extraAttrs ? ` ${extraAttrs}` : "";
+  return `<Cell${styleAttr}${attrs}><Data ss:Type="${type}">${xmlEscape(value)}</Data></Cell>`;
+}
+
+function xmlBlankCell(style = "", extraAttrs = ""): string {
+  const styleAttr = style ? ` ss:StyleID="${style}"` : "";
+  const attrs = extraAttrs ? ` ${extraAttrs}` : "";
+  return `<Cell${styleAttr}${attrs}/>`;
 }
 
 function worksheetName(name: string): string {
@@ -1303,36 +1310,151 @@ function worksheetName(name: string): string {
 export async function standardsWorkbook(filters: DashboardFilters = {}): Promise<string> {
   const rows = await standardsReportRows(filters);
   const owners = [...STANDARD_CASE_MANAGERS];
+  const workbookFrom = filters.from ? csvDisplayDate(filters.from) : "";
+  const workbookTo = filters.to ? csvDisplayDate(filters.to) : "";
+  const periodLabel = workbookFrom && workbookTo ? `${workbookFrom} - ${workbookTo}` : "Selected week";
   const sheets = owners.map((owner) => {
     const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+    const totals = ownerRows.reduce(
+      (acc, row) => {
+        acc.newMatters += row.newMatters;
+        acc.attorneyCall += row.attorneyCall;
+        acc.welcome += row.welcome;
+        acc.courtDate += row.courtDate;
+        acc.weeklyCheckIns += row.weeklyCheckIns;
+        return acc;
+      },
+      { newMatters: 0, attorneyCall: 0, welcome: 0, courtDate: 0, weeklyCheckIns: 0 },
+    );
+    const requiredSetup = totals.newMatters * 3;
+    const completedSetup = totals.attorneyCall + totals.welcome + totals.courtDate;
+    const missingSetup = Math.max(0, requiredSetup - completedSetup);
+    const overallPercent = requiredSetup ? completedSetup / requiredSetup : 0;
+    const overallLabel = requiredSetup ? `${Math.round(overallPercent * 100)}%` : "No activity";
+    const standardsMetLabel = requiredSetup ? `${completedSetup} of ${requiredSetup}` : "0 of 0";
+    const statusLabel = !requiredSetup ? "NO DATA" : overallPercent >= 0.9 ? "ON TARGET" : "BELOW TARGET";
+    const statusStyle = !requiredSetup ? "StatusNeutral" : overallPercent >= 0.9 ? "StatusGood" : "StatusBad";
+    const headerRows = [
+      `<Row ss:Height="34">${xmlCell("CASE MANAGER STANDARDS SCORECARD", "String", "Title", 'ss:MergeAcross="7"')}</Row>`,
+      `<Row ss:Height="24">${xmlCell("At-a-glance review of daily activity", "String", "Subtitle", 'ss:MergeAcross="7"')}</Row>`,
+      `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
+      `<Row ss:Height="22">${[
+        xmlCell("CASE MANAGER", "String", "DarkHeader", 'ss:MergeAcross="1"'),
+        xmlCell("START DATE", "String", "DarkHeader", 'ss:MergeAcross="1"'),
+        xmlCell("END DATE", "String", "DarkHeader", 'ss:MergeAcross="1"'),
+        xmlCell("TARGET", "String", "DarkHeader", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="28">${[
+        xmlCell(owner, "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(workbookFrom || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(workbookTo || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell("90%", "String", "InputBlue", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
+      `<Row ss:Height="28">${[
+        xmlCell("OVERALL COMPLIANCE", "String", "TileBlue", 'ss:MergeAcross="1"'),
+        xmlCell("STANDARDS TARGETS MET", "String", "TileTeal", 'ss:MergeAcross="1"'),
+        xmlCell("CASES HANDLED", "String", "TileNavy", 'ss:MergeAcross="1"'),
+        xmlCell("FOLLOW-UP ITEMS", "String", "TileCopper", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="54">${[
+        xmlCell(overallLabel, "String", "TileBlueBig", 'ss:MergeAcross="1"'),
+        xmlCell(standardsMetLabel, "String", "TileTealBig", 'ss:MergeAcross="1"'),
+        xmlCell(totals.newMatters, "Number", "TileNavyBig", 'ss:MergeAcross="1"'),
+        xmlCell(missingSetup, "Number", "TileCopperBig", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="22">${[
+        xmlCell(statusLabel, "String", "TileBlueFooter", 'ss:MergeAcross="1"'),
+        xmlCell("Target threshold: 90%", "String", "TileTealFooter", 'ss:MergeAcross="1"'),
+        xmlCell(`${totals.weeklyCheckIns} weekly check-ins`, "String", "TileNavyFooter", 'ss:MergeAcross="1"'),
+        xmlCell("Lower is better", "String", "TileCopperFooter", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
+      `<Row ss:Height="24">${xmlCell("CORE STANDARDS", "String", "Section", 'ss:MergeAcross="4"')}${xmlBlankCell()}${xmlCell("SCORE NOTES", "String", "Section", 'ss:MergeAcross="1"')}</Row>`,
+      `<Row ss:Height="24">${[
+        xmlCell("STANDARD", "String", "SmallHeader", 'ss:MergeAcross="1"'),
+        xmlCell("ACTUAL", "String", "SmallHeader"),
+        xmlCell("REQUIRED", "String", "SmallHeader"),
+        xmlCell("STATUS", "String", "SmallHeader"),
+        xmlBlankCell(),
+        xmlCell("PERIOD", "String", "SmallHeader", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="24">${[
+        xmlCell("Initial meeting set - Phone call", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.attorneyCall, "Number", "Actual"),
+        xmlCell(totals.newMatters, "Number", "Required"),
+        xmlCell(totals.attorneyCall >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.attorneyCall >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
+        xmlBlankCell(),
+        xmlCell(periodLabel, "String", "Note", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="24">${[
+        xmlCell("Welcome letters sent", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.welcome, "Number", "Actual"),
+        xmlCell(totals.newMatters, "Number", "Required"),
+        xmlCell(totals.welcome >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.welcome >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
+        xmlBlankCell(),
+        xmlCell("Each new matter should have matching proof.", "String", "Note", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="24">${[
+        xmlCell("Court date event made", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.courtDate, "Number", "Actual"),
+        xmlCell(totals.newMatters, "Number", "Required"),
+        xmlCell(totals.courtDate >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.courtDate >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
+        xmlBlankCell(),
+        xmlCell("Court date means the client court event was made in Clio.", "String", "Note", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="24">${[
+        xmlCell("Weekly check-ins completed", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.weeklyCheckIns, "Number", "Actual"),
+        xmlCell("As due", "String", "Required"),
+        xmlCell(totals.weeklyCheckIns ? "TRACKED" : "NO DATA", "String", totals.weeklyCheckIns ? "StatusGood" : "StatusNeutral"),
+        xmlBlankCell(),
+        xmlCell("Ongoing-case check-ins are included when due.", "String", "Note", 'ss:MergeAcross="1"'),
+      ].join("")}</Row>`,
+      `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
+      `<Row ss:Height="24">${xmlCell("DAILY ACTIVITY ROWS", "String", "Section", 'ss:MergeAcross="7"')}</Row>`,
+    ].join("");
     const tableRows = [
-      `<Row>${STANDARDS_HEADERS.map((header) => xmlCell(header)).join("")}</Row>`,
+      `<Row ss:Height="24">${STANDARDS_HEADERS.map((header) => xmlCell(header, "String", "SmallHeader")).join("")}</Row>`,
       ...ownerRows.map((row) =>
-        `<Row>${[
-          xmlCell(row.owner),
-          xmlCell(row.date),
-          xmlCell(row.newMatters, "Number"),
-          xmlCell(row.attorneyCall, "Number"),
-          xmlCell(row.welcome, "Number"),
-          xmlCell(row.courtDate, "Number"),
-          xmlCell(row.weeklyCheckIns, "Number"),
-          xmlCell(row.completion),
+        `<Row ss:Height="22">${[
+          xmlCell(row.owner, "String", "TableCell"),
+          xmlCell(row.date, "String", "TableCell"),
+          xmlCell(row.newMatters, "Number", "TableNumber"),
+          xmlCell(row.attorneyCall, "Number", "TableNumber"),
+          xmlCell(row.welcome, "Number", "TableNumber"),
+          xmlCell(row.courtDate, "Number", "TableNumber"),
+          xmlCell(row.weeklyCheckIns, "Number", "TableNumber"),
+          xmlCell(row.completion, "String", row.completion === "100%" ? "PercentGood" : "PercentReview"),
         ].join("")}</Row>`,
       ),
+      ownerRows.length ? "" : `<Row ss:Height="22">${xmlCell(owner, "String", "TableCell")}${xmlCell("No activity", "String", "TableCell", 'ss:MergeAcross="6"')}</Row>`,
     ].join("");
     return `
       <Worksheet ss:Name="${xmlEscape(worksheetName(owner))}">
-        <Table>
-          <Column ss:Width="95"/>
-          <Column ss:Width="105"/>
-          <Column ss:Width="165"/>
-          <Column ss:Width="165"/>
+        <Table ss:DefaultRowHeight="20">
+          <Column ss:Width="120"/>
+          <Column ss:Width="100"/>
           <Column ss:Width="150"/>
-          <Column ss:Width="165"/>
-          <Column ss:Width="170"/>
+          <Column ss:Width="180"/>
           <Column ss:Width="160"/>
+          <Column ss:Width="170"/>
+          <Column ss:Width="180"/>
+          <Column ss:Width="160"/>
+          ${headerRows}
           ${tableRows}
         </Table>
+        <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+          <FreezePanes/>
+          <FrozenNoSplit/>
+          <SplitHorizontal>21</SplitHorizontal>
+          <TopRowBottomPane>21</TopRowBottomPane>
+          <ActivePane>2</ActivePane>
+          <Panes>
+            <Pane><Number>3</Number></Pane>
+            <Pane><Number>2</Number></Pane>
+          </Panes>
+        </WorksheetOptions>
       </Worksheet>`;
   }).join("");
 
@@ -1342,6 +1464,69 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
   xmlns:o="urn:schemas-microsoft-com:office:office"
   xmlns:x="urn:schemas-microsoft-com:office:excel"
   xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="Default" ss:Name="Normal">
+      <Alignment ss:Vertical="Center"/>
+      <Font ss:FontName="Arial" ss:Size="10"/>
+    </Style>
+    <Style ss:ID="Title">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Arial" ss:Size="20" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#082344" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="Subtitle">
+      <Alignment ss:Vertical="Center"/>
+      <Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Italic="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#255D89" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="DarkHeader">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#082344" ss:Pattern="Solid"/>
+      <Borders><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D8E5F4"/></Borders>
+    </Style>
+    <Style ss:ID="InputBlue">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+      <Font ss:FontName="Arial" ss:Size="11" ss:Bold="1" ss:Color="#0000FF"/>
+      <Interior ss:Color="#E8F1FA" ss:Pattern="Solid"/>
+      <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#2A5B84"/></Borders>
+    </Style>
+    <Style ss:ID="Section">
+      <Alignment ss:Vertical="Center"/>
+      <Font ss:FontName="Arial" ss:Size="12" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#082344" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="SmallHeader">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      <Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#123E63"/>
+      <Interior ss:Color="#E3EDF6" ss:Pattern="Solid"/>
+      <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#C9D5E2"/></Borders>
+    </Style>
+    <Style ss:ID="TileBlue"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#255D89" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileBlueBig"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="24" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#255D89" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileBlueFooter"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#255D89" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileTeal"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#247A84" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileTealBig"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="24" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#247A84" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileTealFooter"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#247A84" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileNavy"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#082344" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileNavyBig"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="24" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#082344" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileNavyFooter"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#082344" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileCopper"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#CF5A12" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileCopperBig"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="24" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#CF5A12" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TileCopperFooter"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#CF5A12" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="LinkLike"><Font ss:FontName="Arial" ss:Size="10" ss:Color="#0A4A7A" ss:Underline="Single"/><Interior ss:Color="#F7FAFC" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="Actual"><Alignment ss:Horizontal="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1"/><Interior ss:Color="#E5F3E6" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="Required"><Alignment ss:Horizontal="Center"/><Font ss:FontName="Arial" ss:Size="10"/><Interior ss:Color="#F7FAFC" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="Note"><Font ss:FontName="Arial" ss:Size="9" ss:Color="#123E63"/><Interior ss:Color="#F7FAFC" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="StatusGood"><Alignment ss:Horizontal="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#0F5132"/><Interior ss:Color="#DDF4E7" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="StatusBad"><Alignment ss:Horizontal="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#B42318"/><Interior ss:Color="#FDE7E4" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="StatusNeutral"><Alignment ss:Horizontal="Center"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#1F2937"/><Interior ss:Color="#EDF2F7" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="TableCell"><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#0F172A"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D7E2EE"/></Borders></Style>
+    <Style ss:ID="TableNumber"><Alignment ss:Horizontal="Right"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#0F172A"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D7E2EE"/></Borders></Style>
+    <Style ss:ID="PercentGood"><Alignment ss:Horizontal="Right"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#047857"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D7E2EE"/></Borders></Style>
+    <Style ss:ID="PercentReview"><Alignment ss:Horizontal="Right"/><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#B42318"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D7E2EE"/></Borders></Style>
+    <Style ss:ID="Spacer"><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+  </Styles>
   ${sheets}
 </Workbook>`;
 }
