@@ -418,16 +418,18 @@ export async function discoverMatters(client = new ClioClient(), lookbackDays = 
   await initDb();
   const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
   const fields = "id,number,display_number,status,created_at,responsible_attorney{id,name},originating_attorney{id,name},client{id,first_name,last_name,name}";
-  const [createdResult, updatedResult] = await Promise.allSettled([
+  const [newestResult, createdResult, updatedResult] = await Promise.allSettled([
+    client.listFirstPage<ClioMatter>("/matters.json", { fields, order: "id(desc)" }),
     client.list<ClioMatter>("/matters.json", { fields, created_since: since.toISOString(), order: "id(asc)" }),
     client.list<ClioMatter>("/matters.json", { fields, updated_since: since.toISOString(), order: "id(asc)" }),
   ]);
-  if (createdResult.status === "rejected" && updatedResult.status === "rejected") {
-    throw createdResult.reason;
+  if (newestResult.status === "rejected" && createdResult.status === "rejected" && updatedResult.status === "rejected") {
+    throw newestResult.reason;
   }
+  const newestMatters = newestResult.status === "fulfilled" ? newestResult.value : [];
   const createdMatters = createdResult.status === "fulfilled" ? createdResult.value : [];
   const updatedMatters = updatedResult.status === "fulfilled" ? updatedResult.value : [];
-  const matters = Array.from(new Map([...createdMatters, ...updatedMatters].map((matter) => [String(matter.id), matter])).values());
+  const matters = Array.from(new Map([...newestMatters, ...createdMatters, ...updatedMatters].map((matter) => [String(matter.id), matter])).values());
   let count = 0;
   for (const matter of matters) {
     await saveMatter(matter);
@@ -1051,7 +1053,11 @@ export async function auditNextBatch(
     const nextStep = remainingUnchecked > 0
       ? `${remainingUnchecked} ${matterLabel} still need an audit. Click Run Audit Batch about ${batchesLeft} more ${batchLabel}.`
       : "All discovered matters in this view have been audited.";
-    const message = `Audited ${audited} more matters. ${nextStep} Found/updated ${discovered} Clio matters.`;
+    const latestMatterRows = await sql`select max(matter_created_at) as latest_created_at from audit_matter`;
+    const latestCreatedAt = latestMatterRows[0]?.latest_created_at
+      ? new Date(String(latestMatterRows[0].latest_created_at)).toLocaleString("en-US", { timeZone: "America/Chicago" })
+      : "none";
+    const message = `Audited ${audited} more matters. ${nextStep} Found/updated ${discovered} Clio matters. Newest saved matter: ${latestCreatedAt}.`;
     await sql`update audit_run set finished_at = now(), status = 'completed', matters_discovered = ${discovered}, matters_audited = ${audited}, message = ${message} where id = ${runId}`;
     return { audited, discovered, remainingUnchecked, message };
   } catch (error) {

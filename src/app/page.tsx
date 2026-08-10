@@ -619,7 +619,6 @@ const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
   "SETUP_ATTY_CALL",
   "SETUP_COURT_DATE",
   "WEEKLY_CLIENT_CHECKIN",
-  "COURT_REMINDER_CALL",
 ]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
@@ -1063,6 +1062,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const standardRows = Array.from(
     allWorkspaceRows
       .filter((item) => STANDARDS_GRAPHIC_WORKFLOW_CODES.has(item.row.stepCode) && !item.row.metricExcluded)
+      .filter((item) => !["Not Due Yet", "Pending", "N/A", "Not Checked"].includes(item.row.status))
       .filter((item) => STANDARD_CASE_MANAGERS.includes(item.caseManager as (typeof STANDARD_CASE_MANAGERS)[number]))
       .reduce((map, item) => {
         const current = map.get(item.caseManager) ?? {
@@ -1073,7 +1073,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             attorneyCall: { completed: 0, expected: 0, late: 0 },
             courtDate: { completed: 0, expected: 0, late: 0 },
             weeklyCheckIn: { completed: 0, expected: 0, late: 0 },
-            courtReminder: { completed: 0, expected: 0, late: 0 },
           },
         };
         const stepKey =
@@ -1085,9 +1084,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                 ? "courtDate"
                 : item.row.stepCode === "WEEKLY_CLIENT_CHECKIN"
                   ? "weeklyCheckIn"
-                  : item.row.stepCode === "COURT_REMINDER_CALL"
-                    ? "courtReminder"
-                    : null;
+                  : null;
         if (!stepKey) return map;
         if (KPI_WORKFLOW_CODES.has(item.row.stepCode)) current.matters.add(item.row.matterId);
         current.steps[stepKey].expected += 1;
@@ -1100,7 +1097,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       }, new Map<string, {
         caseManager: string;
         matters: Set<string>;
-        steps: Record<"welcome" | "attorneyCall" | "courtDate" | "weeklyCheckIn" | "courtReminder", { completed: number; expected: number; late: number }>;
+        steps: Record<"welcome" | "attorneyCall" | "courtDate" | "weeklyCheckIn", { completed: number; expected: number; late: number }>;
       }>())
       .values(),
   )
@@ -1109,8 +1106,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       const completedStandards = Object.values(item.steps).reduce((sum, step) => sum + step.completed, 0);
       const lateStandards = Object.values(item.steps).reduce((sum, step) => sum + step.late, 0);
       const totalStandards = Object.values(item.steps).reduce((sum, step) => sum + step.expected, 0);
-      const onTimeStandards = Math.max(0, completedStandards - lateStandards);
-      const scorePoints = onTimeStandards + lateStandards * 0.5;
+      const missingStandards = Math.max(0, totalStandards - completedStandards);
+      const deduction = missingStandards * 2 + lateStandards * 0.5;
       return {
         caseManager: item.caseManager,
         cases,
@@ -1123,8 +1120,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         attorneyCallLate: item.steps.attorneyCall.late,
         courtDateLate: item.steps.courtDate.late,
         lateStandards,
+        missingStandards,
+        deduction,
         completedStandards,
-        completionRate: totalStandards ? Math.round((scorePoints / totalStandards) * 100) : 0,
+        totalStandards,
+        completionRate: Math.max(0, 100 - deduction),
       };
     })
     .sort((a, b) => a.caseManager.localeCompare(b.caseManager));
@@ -1954,7 +1954,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div>
             <span className="label">Score Improvement Guide</span>
             <h3>What improves a case manager score?</h3>
-            <p className="muted small">For each new matter, CWCA looks for three proof items in Clio: Welcome Letter, Initial Meeting phone call, and Court Date event. Late proof can score lower, but approved exceptions count as full credit.</p>
+            <p className="muted small">Every case manager starts at 100 points. Missing or incorrect proof deducts 2 points; completed-late proof deducts 0.5 points. Approved exceptions do not reduce the score.</p>
           </div>
           <div className="standards-score-help-grid">
             <a href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>
@@ -1976,54 +1976,61 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <div className="panel-heading">
             <div>
               <span className="label">Graph View</span>
-              <h3>Weekly Completion Graph</h3>
-              <p className="muted small">Same logic as the Reports comparison table, shown as completion. Green means the current week has no missing items.</p>
+              <h3>Four-KPI Standards Score</h3>
+              <p className="muted small">Welcome Letter, Initial Call, Court Date Added, and Weekly Client Check-In. Scores begin at 100: missing items deduct 2 points and late items deduct 0.5 points.</p>
             </div>
           </div>
           <div className="standards-weekly-graph-list">
-            {weeklyComplianceSections.map((section) => {
-              const sectionIssueCount = section.rows.reduce((total, row) => total + row.currentWeek, 0);
-              const completedCategories = section.rows.filter((row) => row.currentWeek === 0).length;
-              const sectionCompletion = section.rows.length ? Math.round((completedCategories / section.rows.length) * 100) : 100;
+            {standardRows.map((section) => {
+              const score = section.completionRate;
+              const scoreLabel = Number.isInteger(score) ? `${score}%` : `${score.toFixed(1)}%`;
+              const stepRows = [
+                { label: "Welcome Letter", ...section.steps.welcome },
+                { label: "Initial Attorney-Client Call", ...section.steps.attorneyCall },
+                { label: "Court Date Added", ...section.steps.courtDate },
+                { label: "Weekly Client Check-In", ...section.steps.weeklyCheckIn },
+              ].map((step) => ({
+                ...step,
+                missing: Math.max(0, step.expected - step.completed),
+                deduction: Math.max(0, step.expected - step.completed) * 2 + step.late * 0.5,
+                completion: step.expected ? Math.round((step.completed / step.expected) * 100) : 100,
+              }));
               return (
                 <details
                   className="standards-weekly-graph-card"
                   key={`standards-graph-${section.caseManager}`}
-                  open={section.rows.some((row) => row.currentWeek > 0 || row.previousWeek > 0)}
+                  open={section.missingStandards > 0 || section.lateStandards > 0}
                 >
                   <summary>
                     <div>
                       <strong>Case Manager: {section.caseManager}</strong>
-                      <span>{section.previousWeekLabel} vs {section.currentWeekLabel}</span>
+                      <span>{standardsActiveFrom} through {standardsActiveTo}</span>
                     </div>
-                    <b>{sectionCompletion}% complete</b>
+                    <b>{scoreLabel} standards score</b>
                   </summary>
                   <div className="standards-weekly-completion-hero">
                     <span className="standards-weekly-completion-bar" aria-hidden="true">
-                      <i style={{ width: `${sectionCompletion}%` }} />
+                      <i style={{ width: `${score}%` }} />
                     </span>
-                    <strong>{sectionCompletion}%</strong>
-                    <small>{sectionIssueCount ? `${sectionIssueCount} item${sectionIssueCount === 1 ? "" : "s"} still need follow-up` : "All current-week categories are clear"}</small>
+                    <strong>{scoreLabel}</strong>
+                    <small>Started at 100 | {section.missingStandards} missing | {section.lateStandards} late | -{section.deduction} points</small>
                   </div>
                   <div className="standards-weekly-graph-rows">
-                    {section.rows.map((row) => (
-                      <a
+                    {stepRows.map((row) => (
+                      <div
                         className="standards-weekly-graph-row"
-                        href={weeklyComplianceDrillLink(filters, section.caseManager, row.category)}
-                        key={`standards-graph-${section.caseManager}-${row.category}`}
+                        key={`standards-graph-${section.caseManager}-${row.label}`}
                       >
-                        <span className="standards-weekly-graph-label">{row.category}</span>
-                        <span className={`standards-weekly-status-bar ${row.currentWeek === 0 ? "complete" : "needs-work"}`} aria-hidden="true">
-                          <i style={{ width: row.currentWeek === 0 ? "100%" : "18%" }} />
+                        <span className="standards-weekly-graph-label">{row.label}</span>
+                        <span className={`standards-weekly-status-bar ${row.missing === 0 && row.late === 0 ? "complete" : "needs-work"}`} aria-hidden="true">
+                          <i style={{ width: `${row.completion}%` }} />
                         </span>
                         <span className="standards-weekly-counts">
-                          <small>Previous {row.previousWeek}</small>
-                          <strong>{row.currentWeek === 0 ? "100% complete" : `${row.currentWeek} open`}</strong>
-                          <em className={row.change < 0 ? "improved" : row.change > 0 ? "worse" : "same"}>
-                            {row.change > 0 ? `+${row.change}` : row.change}
-                          </em>
+                          <small>{row.completed}/{row.expected} completed</small>
+                          <strong>{row.missing ? `${row.missing} missing` : row.late ? `${row.late} late` : row.expected ? "On time" : "No items due"}</strong>
+                          <em className={row.deduction > 0 ? "worse" : "same"}>-{row.deduction}</em>
                         </span>
-                      </a>
+                      </div>
                     ))}
                   </div>
                 </details>

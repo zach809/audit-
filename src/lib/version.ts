@@ -1,1 +1,1 @@
-export const APP_VERSION = "cwca-date-filter-logout-fix-2026-08-10";
+export const APP_VERSION = "cwca-four-kpi-deduction-score-2026-08-10";

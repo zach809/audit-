@@ -206,4 +206,12 @@ export class ClioClient {
     } while (pageToken);
     return results;
   }
+
+  async listFirstPage<T>(path: string, query: Query, limit = 200): Promise<T[]> {
+    const response = await this.request<ListResponse<T>>(path, {
+      ...query,
+      limit: Math.min(200, Math.max(1, limit)),
+    });
+    return response.data ?? [];
+  }
 }

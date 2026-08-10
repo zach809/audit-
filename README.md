@@ -68,6 +68,18 @@ CWCA checks open matters using Illinois business time: Monday-Friday, 8:00 AM-5:
 
 Template proof is checked from matter-linked Clio Communications. CWCA looks at the email subject line for templates like Welcome Letter, Carta de bienvenida, Welcome to Hirsch Law Group, Court Appearance Has Been Filed Notification, and Court Result / Resultado messages.
 
+## Standards Score
+
+The case-manager Standards score uses four KPIs: Welcome Letter, Initial Attorney-Client Call, Court Date Added, and Weekly Client Check-In. Each score begins at 100 points.
+
+- Missing or incorrect proof: deduct 2 points per item.
+- Completed after the deadline: deduct 0.5 points per item.
+- Completed on time: no deduction.
+- Approved Exception: no deduction.
+- Not Due Yet, Pending, N/A, and Not Checked: excluded from the score.
+
+The three new-matter setup KPIs use the operational 2-business-hour grace period. The score cannot fall below 0.
+
 ## Compliance And Data Handling
 
 CWCA must stay read-only against Clio. Do not add create, update, delete, webhook, billing, payment, or document-content behavior.
