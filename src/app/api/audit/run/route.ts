@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       const result = await auditNextBatch(undefined, {
         discover: true,
         discoverLookbackDays: config.initialLookbackDays,
-        batchSize: config.auditBatchSize,
+        batchSize: Math.max(config.auditBatchSize, 25),
         maxRunMs: 25000,
         selection: "recent",
         filters,

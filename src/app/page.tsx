@@ -1330,14 +1330,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
         <div className="actions header-actions">
           <form action="/api/audit/run" method="post">
-          <input type="hidden" name="attorney" value={filters.attorney} />
-          <input type="hidden" name="overall" value={filters.overall} />
-          <input type="hidden" name="from" value={filters.from} />
-          <input type="hidden" name="to" value={filters.to} />
           <input type="hidden" name="tab" value={activeTab} />
-          <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
-          <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
-          <input type="hidden" name="wstep" value={workspaceStepFilter} />
           <button className="primary" type="submit">Run Audit Batch</button>
           </form>
           {connected ? (
@@ -2690,7 +2683,7 @@ Items Still Needing Action
         </div>
         {hasFilters ? (
           <p className="filter-alert">
-            Filtered view is on.
+            Filtered view is on. Clear filters to see all attorneys and all matching matters.
           </p>
         ) : null}
         <div className="filter-summary">
