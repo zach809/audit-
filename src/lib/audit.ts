@@ -149,6 +149,15 @@ function localDateDistanceDays(a: Date, b: Date): number {
   return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
 }
 
+function isMoreThanOneLocalMonthAway(courtAt: Date, now: Date): boolean {
+  const nowParts = localParts(now);
+  const courtParts = localParts(courtAt);
+  const monthsAhead = (courtParts.year - nowParts.year) * 12 + (courtParts.month - nowParts.month);
+  if (monthsAhead > 1) return true;
+  if (monthsAhead < 1) return false;
+  return courtParts.day > nowParts.day;
+}
+
 function startOfLocalWeek(date: Date): Date {
   const parts = localParts(date);
   const weekdayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday);
@@ -469,7 +478,7 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
   };
 }
 
-function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
+export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
   const setup = setupDeadlines(record.matter_created_at);
   const clientDeadline = addBusinessDaysDeadline(record.effective_intake_at, 1);
   const appearanceDeadline = addWeekdayHours(record.matter_created_at, 48);
@@ -796,12 +805,18 @@ function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new D
       reasonCode: commError || "DIRECTION_UNCLEAR",
       now,
     }),
-    classify("APPEARANCE_FILING", appearanceEvidence, appearanceDeadline, {
-      operationalState: "Waiting for 48-hour review window",
-      unknown: Boolean(commError && now > appearanceDeadline),
-      reasonCode: commError,
-      now,
-    }),
+    nextCourt &&
+    courtReminderWindowStart &&
+    now < courtReminderWindowStart &&
+    isMoreThanOneLocalMonthAway(nextCourt.at, now) &&
+    !appearanceEvidence
+      ? base("APPEARANCE_FILING", "Pending", "Not Due Yet", appearanceDeadline, null)
+      : classify("APPEARANCE_FILING", appearanceEvidence, appearanceDeadline, {
+          operationalState: "Waiting for 48-hour review window",
+          unknown: Boolean(commError && now > appearanceDeadline),
+          reasonCode: commError,
+          now,
+        }),
     courtResultItem,
     postCourtCallItem,
     courtReminderItem,
