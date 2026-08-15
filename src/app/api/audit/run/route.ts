@@ -3,6 +3,7 @@ import { auditNextBatch, auditOneMatterById } from "@/lib/audit";
 import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
 import { appConfig } from "@/lib/config";
+import { scheduleStandardsPublish } from "@/lib/standards-publish";
 
 export const maxDuration = 300;
 
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
+  scheduleStandardsPublish({ auditStatus: "completed" });
   if (request.cookies.get("cwca_session")) {
     return NextResponse.redirect(new URL(`/?audit=ran&message=${encodeURIComponent(result.message)}`, request.url), 303);
   }
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
     if (matterId) {
       try {
         const result = await auditOneMatterById(undefined, matterId);
+        scheduleStandardsPublish({ auditStatus: "completed" });
         return redirectBack(request, { ...filters, audit: "ran", message: result.message });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -77,6 +80,7 @@ export async function POST(request: NextRequest) {
         selection: "recent",
         filters,
       });
+      scheduleStandardsPublish({ auditStatus: "completed" });
       return redirectBack(request, { ...filters, audit: "ran", message: result.message });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
