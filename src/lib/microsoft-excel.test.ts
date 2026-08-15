@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, afterEach, before, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
+import { STANDARDS_SHEET_HEADERS } from "./dashboard-data";
 import * as excel from "./microsoft-excel";
+import type { SheetDailyRow } from "./standards-sheet-sync";
 
 const ENV_KEYS = [
   "MICROSOFT_TENANT_ID",
@@ -173,5 +177,100 @@ describe("Microsoft Excel auth", () => {
         return true;
       },
     );
+  });
+});
+
+function daily(owner: string, date: string, sortDate: string, extras: Partial<SheetDailyRow> = {}): SheetDailyRow {
+  return { owner, date, sortDate, newMatters: 0, attorneyCall: 0, welcome: 0, courtDate: 0, weeklyCheckIns: 0, completion: "No activity", ...extras };
+}
+
+function work(owner: string, date: string, sortDate: string, completion: string): SheetDailyRow {
+  return daily(owner, date, sortDate, { newMatters: 1, attorneyCall: 1, welcome: 1, courtDate: 1, weeklyCheckIns: 0, completion });
+}
+
+describe("Microsoft Excel daily write plan", () => {
+  const now = new Date("2026-08-15T16:00:00Z");
+
+  it("writes Date as an Excel serial with yyyy-mm-dd numberFormat, not a text date", () => {
+    const plan = excel.planExcelWorksheetValues({
+      owner: "Lori",
+      existingGrid: [STANDARDS_SHEET_HEADERS],
+      incoming: [work("Lori", "8/3/2026", "2026-08-03", "100%")],
+      now,
+    });
+    assert.equal(plan.values[0][1], "Date");
+    assert.equal(plan.values[1][1], 46237);
+    assert.equal(typeof plan.values[1][1], "number");
+    assert.equal(plan.numberFormat[1][1], "yyyy-mm-dd");
+    assert.notEqual(plan.values[1][1], "8/3/2026");
+    assert.notEqual(plan.values[1][1], "2026-08-03");
+  });
+
+  it("does not write a row for a date after today even when the requested range includes it", () => {
+    const plan = excel.planExcelWorksheetValues({
+      owner: "Lori",
+      existingGrid: [
+        STANDARDS_SHEET_HEADERS,
+        ["Lori", 46237, 1, 1, 1, 1, 0, "100%"],
+        ["Lori", 46255, 0, 0, 0, 0, 0, "0%"],
+        ["Lori", 46262, 0, 0, 0, 0, 0, "0%"],
+      ],
+      incoming: [
+        work("Lori", "8/3/2026", "2026-08-03", "100%"),
+        daily("Lori", "8/21/2026", "2026-08-21", { weeklyCheckIns: 0, completion: "0%" }),
+        daily("Lori", "8/28/2026", "2026-08-28", { weeklyCheckIns: 0, completion: "0%" }),
+      ],
+      now,
+    });
+    const dateSerials = plan.values.slice(1).map((row) => row[1]).filter((value) => value !== "");
+    assert.deepEqual(dateSerials, [46237]);
+    assert.ok(!dateSerials.includes(46255));
+    assert.ok(!dateSerials.includes(46262));
+    assert.equal(plan.values[2][1], "");
+    assert.equal(plan.values[3][1], "");
+  });
+
+  it("keeps a hand-written past date and does not clear-and-rewrite the archive", () => {
+    const plan = excel.planExcelWorksheetValues({
+      owner: "Lori",
+      existingGrid: [
+        STANDARDS_SHEET_HEADERS,
+        ["Lori", "7/1/2026", 12, 12, 12, 12, 4, "100%"],
+      ],
+      incoming: [work("Lori", "8/3/2026", "2026-08-03", "83%")],
+      now,
+    });
+    assert.equal(plan.values[1][0], "Lori");
+    assert.equal(plan.values[1][1], 46204);
+    assert.equal(plan.values[1][7], "100%");
+    assert.equal(plan.values[2][1], 46237);
+    assert.equal(plan.values[2][7], "83%");
+  });
+
+  it("uses No activity, never 0, for a past day with no completed work", () => {
+    const plan = excel.planExcelWorksheetValues({
+      owner: "Lori",
+      existingGrid: [STANDARDS_SHEET_HEADERS, ["Lori", 46237, 0, 0, 0, 0, 0, "0%"]],
+      incoming: [daily("Lori", "8/4/2026", "2026-08-04", { completion: "0%" })],
+      now,
+    });
+    const written = plan.values.filter((row) => row[0] === "Lori");
+    assert.ok(written.length >= 1);
+    assert.equal(written[0][7], "No activity");
+    assert.ok(written.every((row) => row[7] !== 0 && row[7] !== "0" && row[7] !== "0%"));
+    assert.equal(written.some((row) => row[1] === 46238), false);
+  });
+});
+
+describe("excel-sync route defaults and writer guards", () => {
+  it("defaults Excel sync to the current Chicago month and reuses the shared archive helpers", () => {
+    const route = readFileSync(fileURLToPath(new URL("../app/api/standards/excel-sync/route.ts", import.meta.url)), "utf8");
+    const writer = readFileSync(fileURLToPath(new URL("./microsoft-excel.ts", import.meta.url)), "utf8");
+    assert.doesNotMatch(route, /lastCompletedWeekRange/);
+    assert.match(route, /currentChicagoMonthRange/);
+    assert.match(writer, /planExcelWorksheetValues/);
+    assert.match(writer, /numberFormat/);
+    assert.doesNotMatch(writer, /clearRows|padRows\(\[\]/);
+    assert.match(writer, /collectArchiveRows|upsertDailyRows/);
   });
 });

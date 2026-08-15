@@ -1,5 +1,13 @@
 import { optionalEnv } from "./config";
 import { STANDARD_CASE_MANAGERS, STANDARDS_SHEET_HEADERS, standardsReportRows, type DashboardFilters } from "./dashboard-data";
+import {
+  activityCompletion,
+  collectArchiveRows,
+  excelSerialFromDateKey,
+  rowsOnOrBeforeToday,
+  upsertDailyRows,
+  type SheetDailyRow,
+} from "./standards-sheet-sync";
 
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const GRAPH_APP_SCOPE = "https://graph.microsoft.com/.default";
@@ -200,16 +208,18 @@ async function closeWorkbookSession(base: string, workbookSessionId: string): Pr
   await graphRequest(`${base}/closeSession`, { method: "POST" }, workbookSessionId);
 }
 
-function rowValues(row: Awaited<ReturnType<typeof standardsReportRows>>[number]): Array<string | number> {
+export const EXCEL_DATE_NUMBER_FORMAT = "yyyy-mm-dd";
+
+function dailyRowValues(row: SheetDailyRow): Array<string | number> {
   return [
     row.owner,
-    row.date,
+    excelSerialFromDateKey(row.sortDate || row.date),
     row.newMatters,
     row.attorneyCall,
     row.welcome,
     row.courtDate,
     row.weeklyCheckIns,
-    row.completion,
+    activityCompletion(row),
   ];
 }
 
@@ -219,11 +229,22 @@ function rangeAddress(rowCount: number, columnCount: number): string {
   return `A1:${endColumn}${Math.max(1, rowCount)}`;
 }
 
-function padRows(values: Array<Array<string | number>>, targetRows: number, columnCount: number): Array<Array<string | number>> {
-  const emptyRow = Array.from({ length: columnCount }, () => "");
-  const padded = values.map((row) => [...row, ...emptyRow].slice(0, columnCount));
-  while (padded.length < targetRows) padded.push([...emptyRow]);
-  return padded;
+export function planExcelWorksheetValues(input: {
+  owner: string;
+  existingGrid: Array<Array<string | number | undefined>>;
+  incoming: SheetDailyRow[];
+  now?: Date;
+}): { values: Array<Array<string | number>>; numberFormat: string[][] } {
+  const now = input.now ?? new Date();
+  const existingAll = collectArchiveRows(input.existingGrid, input.owner);
+  const kept = upsertDailyRows(rowsOnOrBeforeToday(existingAll, now), rowsOnOrBeforeToday(input.incoming, now));
+  const leftover = Math.max(0, existingAll.length - kept.length);
+  const emptyRow = Array.from({ length: STANDARDS_SHEET_HEADERS.length }, () => "");
+  const values = [STANDARDS_SHEET_HEADERS, ...kept.map(dailyRowValues), ...Array.from({ length: leftover }, () => [...emptyRow])];
+  const numberFormat = values.map((row, index) =>
+    row.map((_, column) => (index > 0 && column === 1 && row[1] !== "" ? EXCEL_DATE_NUMBER_FORMAT : "General")),
+  );
+  return { values, numberFormat };
 }
 
 async function ensureCaseManagerWorksheets(base: string, workbookSessionId: string): Promise<Map<string, string>> {
@@ -243,19 +264,29 @@ async function ensureCaseManagerWorksheets(base: string, workbookSessionId: stri
   return worksheets;
 }
 
-async function updateWorksheetRange(base: string, worksheetId: string, values: Array<Array<string | number>>, workbookSessionId: string) {
+async function readWorksheetValues(base: string, worksheetId: string, workbookSessionId: string): Promise<Array<Array<string | number>>> {
   const columnCount = STANDARDS_SHEET_HEADERS.length;
-  const clearRows = Math.max(200, values.length + 10);
-  const clearValues = padRows([], clearRows, columnCount);
+  const json = await graphRequest<{ values?: Array<Array<string | number | null>> }>(
+    `${base}/worksheets/${encodeURIComponent(worksheetId)}/range(address='${rangeAddress(200, columnCount)}')?$select=values`,
+    {},
+    workbookSessionId,
+  );
+  return (json.values ?? []).map((row) => (row ?? []).map((cell) => (cell == null ? "" : cell)));
+}
 
-  await graphRequest(`${base}/worksheets/${encodeURIComponent(worksheetId)}/range(address='${rangeAddress(clearRows, columnCount)}')`, {
+async function writeOwnerWorksheet(
+  base: string,
+  worksheetId: string,
+  owner: string,
+  incoming: SheetDailyRow[],
+  now: Date,
+  workbookSessionId: string,
+) {
+  const existingGrid = await readWorksheetValues(base, worksheetId, workbookSessionId);
+  const plan = planExcelWorksheetValues({ owner, existingGrid, incoming, now });
+  await graphRequest(`${base}/worksheets/${encodeURIComponent(worksheetId)}/range(address='${rangeAddress(plan.values.length, STANDARDS_SHEET_HEADERS.length)}')`, {
     method: "PATCH",
-    body: JSON.stringify({ values: clearValues }),
-  }, workbookSessionId);
-
-  await graphRequest(`${base}/worksheets/${encodeURIComponent(worksheetId)}/range(address='${rangeAddress(values.length, columnCount)}')`, {
-    method: "PATCH",
-    body: JSON.stringify({ values }),
+    body: JSON.stringify({ values: plan.values, numberFormat: plan.numberFormat }),
   }, workbookSessionId);
 }
 
@@ -271,15 +302,14 @@ export async function syncStandardsToMicrosoftExcel(filters: DashboardFilters = 
   const workbookSessionId = await createWorkbookSession(base);
   try {
     const worksheets = await ensureCaseManagerWorksheets(base, workbookSessionId);
-    const rows = await standardsReportRows(filters);
+    const now = new Date();
+    const rows = rowsOnOrBeforeToday(await standardsReportRows(filters), now);
 
     for (const owner of STANDARD_CASE_MANAGERS) {
       const worksheetId = worksheets.get(owner);
       if (!worksheetId) throw new Error(`Worksheet ${owner} was not found or created.`);
-      const ownerRows = rows
-        .filter((row) => row.owner === owner)
-        .sort((a, b) => a.sortDate.localeCompare(b.sortDate));
-      await updateWorksheetRange(base, worksheetId, [STANDARDS_SHEET_HEADERS, ...ownerRows.map(rowValues)], workbookSessionId);
+      const ownerRows = rows.filter((row) => row.owner === owner);
+      await writeOwnerWorksheet(base, worksheetId, owner, ownerRows, now, workbookSessionId);
     }
 
     return {
