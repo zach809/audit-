@@ -791,11 +791,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     to: searchParams.to ?? defaultTo,
   };
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
+  const standardsDefaultFrom = lastWeekStart;
+  const standardsDefaultTo = lastWeekEnd;
+  const standardsActiveFrom = filters.from || standardsDefaultFrom;
+  const standardsActiveTo = filters.to || standardsDefaultTo;
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
   let postClosure: Awaited<ReturnType<typeof getPostClosureData>> | null = null;
+  let standardsRows: Awaited<ReturnType<typeof standardsReportRows>> | null = null;
   let dataError = "";
   try {
-    [data, postClosure] = await Promise.all([
+    [data, postClosure, standardsRows] = await Promise.all([
       getDashboardData(filters),
       getPostClosureData({
         status: closureStatusFilter,
@@ -803,13 +808,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         attorney: closureAttorneyFilter,
         window: closureWindowFilter,
       }),
+      standardsReportRows({
+        from: standardsActiveFrom,
+        to: standardsActiveTo,
+      }),
     ]);
   } catch (error) {
     data = null;
     postClosure = null;
+    standardsRows = null;
     dataError = dashboardErrorMessage(error);
   }
-  if (!data || !postClosure) {
+  if (!data || !postClosure || !standardsRows) {
     return (
       <DashboardUnavailable
         connected={connected}
@@ -1016,10 +1026,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     checked: allWorkspaceRows.filter((item) => item.row.stepCode === code).length,
   }));
   const maxWorkflowCount = Math.max(1, ...workflowAreaBreakdown.map((item) => item.followUp));
-  const standardsDefaultFrom = lastWeekStart;
-  const standardsDefaultTo = lastWeekEnd;
-  const standardsActiveFrom = filters.from || standardsDefaultFrom;
-  const standardsActiveTo = filters.to || standardsDefaultTo;
   const kpiRows = allWorkspaceRows.filter(
     (item) =>
       KPI_WORKFLOW_CODES.has(item.row.stepCode) &&
@@ -1240,10 +1246,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     const params = new URLSearchParams({ window: "this-week", cmname: caseManager });
     return `/case-manager?${params.toString()}`;
   };
-  const standardsSheetPreviewRows = (await standardsReportRows({
-    from: standardsActiveFrom,
-    to: standardsActiveTo,
-  })).map((row) => ({
+  const standardsSheetPreviewRows = standardsRows.map((row) => ({
     caseManager: row.owner,
     sortDate: row.sortDate,
     date: row.date,
