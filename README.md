@@ -160,7 +160,7 @@ Do not enable write permissions.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
 - `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`. Current default CM setup uses the listed Hirsch emails with password `Hirsch12345678`.
 - `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: optional live Standards Google Sheet sync. Share the target Sheet with the service-account email as Editor, then use the Standards tab button or the weekday cron sync.
-- `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_EXCEL_USER_ID`, and `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`: optional live Standards Excel Online sync. Store the workbook in OneDrive/SharePoint, grant the Microsoft app Graph write access, paste the workbook share link, then use Standards -> Sync Excel Workbook.
+- `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_EXCEL_USER_ID`, and `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`: optional live Standards Excel Online sync. Prefer `MICROSOFT_EXCEL_REFRESH_TOKEN` (delegated `Files.ReadWrite` + `offline_access`; public client, no `client_secret`). If that env var is unset, CWCA uses application client-credentials and `MICROSOFT_CLIENT_SECRET`.
 
 ## Standards Google Sheet
 
@@ -192,19 +192,19 @@ This is one-way from CWCA to Excel. It does not write to Clio.
 
 To connect it:
 
-1. Create a Microsoft Entra / Azure App Registration.
+1. Create a Microsoft Entra / Azure App Registration. For delegated sync, register it as a public client (no client secret on the refresh grant).
 2. Copy the Directory tenant ID into `MICROSOFT_TENANT_ID`.
 3. Copy the Application client ID into `MICROSOFT_CLIENT_ID`.
-4. Create a client secret and copy its value into `MICROSOFT_CLIENT_SECRET`.
-5. Add Microsoft Graph application permission for workbook access, such as `Files.ReadWrite.All`, and have an admin grant consent.
+4. Preferred: obtain a delegated refresh token for a named user who can edit the workbook, with Graph delegated `Files.ReadWrite` and `offline_access`, and put it in `MICROSOFT_EXCEL_REFRESH_TOKEN`. Do not send a client secret with that grant.
+5. Application fallback only: if `MICROSOFT_EXCEL_REFRESH_TOKEN` is unset, create a client secret (`MICROSOFT_CLIENT_SECRET`) and use Graph application permission. That path is unchanged; this firm’s IT has already refused `Files.ReadWrite.All`.
 6. Create an Excel workbook in OneDrive or SharePoint, for example `CWCA Standards.xlsx`.
-7. Put the workbook owner email into `MICROSOFT_EXCEL_USER_ID`, for example `zach@hirschlawgroup.com`.
+7. Put the workbook owner email into `MICROSOFT_EXCEL_USER_ID`, for example `zach@hirschlawgroup.com`. Delegated writes are attributed to this named account.
 8. Easiest option: copy the workbook sharing link from OneDrive/Teams and paste it into `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`.
 9. Optional but recommended: paste the same browser URL into `MICROSOFT_EXCEL_WORKBOOK_WEB_URL` so CWCA can show an Open Excel Workbook button.
 10. Advanced fallback: if you do not want to use a sharing link, set `MICROSOFT_EXCEL_WORKBOOK_PATH="CWCA Standards.xlsx"` for a file in that user's OneDrive root, or set `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID`.
 11. Redeploy Vercel, then use Standards -> Sync Excel Workbook.
 
-If your Microsoft tenant blocks broad application permissions, ask the Microsoft 365 admin to create/approve the app or use the regular Standards workbook download instead.
+If the refresh token is revoked or expired, sync fails with a named `invalid_grant` error. A person must re-issue the token; retrying will not fix it.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.

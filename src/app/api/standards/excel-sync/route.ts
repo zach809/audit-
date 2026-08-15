@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     return redirectBack(request, {
       ...filters,
       excel: "synced",
-      notice: `Excel workbook updated: ${result.rowsSynced} row${result.rowsSynced === 1 ? "" : "s"} across ${result.sheetsUpdated} case-manager tabs.`,
+      notice: `Excel workbook updated (${result.authMode === "delegated" ? `delegated as ${result.authAccount}` : "application client-credentials"}): ${result.rowsSynced} row${result.rowsSynced === 1 ? "" : "s"} across ${result.sheetsUpdated} case-manager tabs.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
