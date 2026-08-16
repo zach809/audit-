@@ -1046,10 +1046,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const maxAttorneyFollowUp = Math.max(1, ...topAttorneyChart.map((section) => section.needsFollowUp));
   const healthPct = totalCount ? Math.round((num(dashboardData.summary.pass) / totalCount) * 100) : 0;
   const donutSegments = [
-    { color: "#b42318", value: needsFollowUpCount },
-    { color: "#067647", value: num(dashboardData.summary.pass) },
-    { color: "#175cd3", value: num(dashboardData.summary.pending) },
-    { color: "#98a2b3", value: uncheckedCount },
+    { color: "oklch(0.2 0.014 250)", value: needsFollowUpCount },
+    { color: "oklch(0.17 0.012 250)", value: num(dashboardData.summary.pass) },
+    { color: "oklch(0.84 0.012 250)", value: num(dashboardData.summary.pending) },
+    { color: "oklch(0.38 0.02 250)", value: uncheckedCount },
   ];
   let donutCursor = 0;
   const donutGradient = statusChartRawTotal
@@ -1060,7 +1060,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           return `${segment.color} ${start}% ${donutCursor}%`;
         })
         .join(", ")
-    : "#98a2b3 0% 100%";
+    : "oklch(0.38 0.02 250) 0% 100%";
   const issueBreakdown = [
     { label: "Needs Action", value: num(dashboardData.summary.missing_items), className: "red" },
     { label: "Late Timing", value: num(dashboardData.summary.late_items), className: "amber" },
@@ -1379,6 +1379,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           <h1>What is still owed today</h1>
           <p>Find the missing work, the case manager who owns it, and the next step in Clio.</p>
         </div>
+        <p className="owed-count">
+          <strong>{needsFollowUpCount}</strong>
+          <span>still owed</span>
+        </p>
         <div className="actions header-actions">
           <form action="/api/audit/run" method="post">
           <input type="hidden" name="tab" value={activeTab} />
@@ -1417,11 +1421,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             href={tabLink(filters, tab.id)}
             key={tab.id}
           >
+            <span className="sign-picto" aria-hidden="true" />
             <strong>{tab.label}</strong>
             <span>{tab.description}</span>
           </a>
         ))}
         <a className="dashboard-tab review-tab" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">
+          <span className="sign-picto" aria-hidden="true" />
           <strong>Review Site</strong>
           <span>Open Review Racer dashboard</span>
         </a>

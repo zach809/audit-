@@ -1,31 +1,55 @@
 ---
 name: Clio Workflow Auditor
-description: Exhibit-docket operate surface for a PI firm's daily owed work
+description: Terminal wayfinding operate surface for a PI firm's daily owed work
 colors:
-  paper: "oklch(0.96 0.012 250)"
-  paper-strong: "oklch(0.99 0.006 250)"
-  ink: "oklch(0.22 0.03 250)"
-  muted-ink: "oklch(0.36 0.025 250)"
-  rule: "oklch(0.78 0.02 250)"
-  mark-late: "oklch(0.42 0.14 35)"
-  mark-ok: "oklch(0.36 0.1 150)"
-  flag: "oklch(0.93 0.03 85)"
+  ground: "oklch(0.97 0.01 250)"
+  ink: "oklch(0.2 0.014 250)"
+  panel: "oklch(0.17 0.012 250)"
+  panel-type: "oklch(0.99 0.004 250)"
+  muted-ground: "oklch(0.38 0.02 250)"
+  muted-panel: "oklch(0.84 0.012 250)"
+  signal: "oklch(0.88 0.195 102)"
+  coral: "oklch(0.7 0.12 35)"
+  rule: "oklch(0.82 0.012 250)"
+  field: "oklch(0.99 0.004 250)"
+  field-disabled: "oklch(0.9 0.01 250)"
+  panel-rule: "oklch(0.3 0.01 250)"
 typography:
   ui:
-    fontFamily: "Outfit, Segoe UI, sans-serif"
+    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.45
   display:
-    fontFamily: "Outfit, Segoe UI, sans-serif"
+    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
     fontSize: "2rem"
-    fontWeight: 700
+    fontWeight: 800
     lineHeight: 1.15
-  number:
-    fontFamily: "JetBrains Mono, ui-monospace, monospace"
-    fontSize: "16px"
-    fontWeight: 600
-    lineHeight: 1.2
+  display-sm:
+    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontSize: "1.75rem"
+    fontWeight: 800
+    lineHeight: 1.15
+  metric:
+    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontSize: "2.5rem"
+    fontWeight: 800
+    lineHeight: 1
+  metric-sm:
+    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontSize: "2rem"
+    fontWeight: 800
+    lineHeight: 1
+  monumental:
+    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontSize: "4.5rem"
+    fontWeight: 800
+    lineHeight: 0.9
+  monumental-sm:
+    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontSize: "3.25rem"
+    fontWeight: 800
+    lineHeight: 0.9
 rounded:
   none: "0px"
 spacing:
@@ -33,27 +57,28 @@ spacing:
   md: "12px"
   lg: "16px"
   xl: "24px"
+  xxl: "28px"
 components:
   button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.paper}"
+    backgroundColor: "{colors.field}"
+    textColor: "{colors.ink}"
     rounded: "{rounded.none}"
     padding: "10px 14px"
     height: "44px"
   button-secondary:
-    backgroundColor: "{colors.paper-strong}"
+    backgroundColor: "{colors.field}"
     textColor: "{colors.ink}"
     rounded: "{rounded.none}"
     padding: "10px 14px"
     height: "44px"
   badge:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
+    backgroundColor: "{colors.panel}"
+    textColor: "{colors.panel-type}"
     rounded: "{rounded.none}"
-    padding: "4px 10px"
+    padding: "4px 0"
   matter-card:
-    backgroundColor: "{colors.paper-strong}"
-    textColor: "{colors.ink}"
+    backgroundColor: "{colors.panel}"
+    textColor: "{colors.panel-type}"
     rounded: "{rounded.none}"
     padding: "16px"
 ---
@@ -62,39 +87,39 @@ components:
 
 ## Overview
 
-CWCA is an operate docket, not a SaaS command center. The page is a court exhibit sticker on a case file: official compliance words, a named owner, and a next action. The visual world is bond paper under office light, navy ink, and a mark that still reads when the color is gone.
+CWCA is an operate docket read as an airport sign. The page is a concourse wall with near-black destination panels. A case manager glances, reads the owed count, finds a named person, and takes the labelled action on the row's trailing edge.
 
-Direction: grounded list #5, exhibit sticker system, seed `43686ca8`. Raises kept from the roll: visible ruled cells, one token seed, invert-not-tint for the current tab, a flag for the next action, and a named owner on every mark.
+Direction: Terminal Wayfinding, brief-pinned by CWCA-19. Seed `cwca19-terminal`. Yellow is reserved for Missing, the only state that means a person must act now.
 
 ## Colors
 
-Paper is a cool courthouse fluorescent, not cream. Ink is navy. Late is coral. On Time is forest. Those hues support the marks; they do not replace them. Body and muted ink both sit above 4.5:1 on paper.
+The room is light. Ground is a cool concourse wall. Panels are near-black. Type on panels is white. Type on ground is near-black. Signal yellow is attention only. Coral is for errors, never for status.
 
 ## Typography
 
-Outfit carries the UI and the client names. JetBrains Mono is for counts and dates, always tabular. Body is 16px. Headings use `text-wrap: balance`. No tiny uppercase labels.
+Source Sans 3 is the Frutiger-cut workhorse. One family for UI, names, and numbers. Every number is tabular. Body is 16px. Headings use `text-wrap: balance`. No tiny uppercase labels.
 
 ## Layout
 
-First viewport: the owed-work title, visible tabs, a ruled strip of counts, then matter cards. Each card is client name, attorney, case manager, official status mark, and a "Do this next" flag when work is owed. Filters stay in the URL.
+First viewport: a full-width header sign with the owed-work title and a monumental tabular count, then a strip of destination tabs, then dark rows. Each row is client name, owner, official status mark, and a labelled action locked to the trailing edge. Filters stay in the URL. Content uses the available width.
 
 ## Elevation & Depth
 
-No glass, no drop shadow, no hover lift. Separation is a 1px ink rule. The next-action flag is a manila field with a 2px ink edge.
+No glass, no drop shadow, no hover lift. Separation is the panel sitting on the wall. The current tab is the same dark sign with an inverted pictogram and a white baseline.
 
 ## Shapes
 
-`border-radius: 0` on every surface. Status marks are shapes, not pills:
+No `border-radius` declarations. Status marks are shapes, not pills:
 
 - On Time: filled square
 - Late: diamond
-- Missing: triangle
+- Missing: triangle, the only yellow mark
 - Not Due Yet: empty square
 - No activity: dashed empty square
 
 ## Components
 
-Buttons are 44px tall, labeled in words, and look like controls at rest. The current tab inverts to ink-on-paper. Matter cards keep an `#matter-{id}` anchor so a status save returns to the same card.
+Buttons are 44px tall, labelled in words, and look like controls at rest. Matter cards keep an `#matter-{id}` anchor so a status save returns to the same card.
 
 ## Do's and Don'ts
 
@@ -106,4 +131,4 @@ Do not hide an action behind hover or a closed disclosure.
 
 Do not use color as the only difference between states.
 
-Do not add rounded cards, gradient text, or metric-hero decoration.
+Do not use yellow for headers, branding, or the current tab.
