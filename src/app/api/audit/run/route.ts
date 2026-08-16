@@ -4,6 +4,7 @@ import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
 import { appConfig } from "@/lib/config";
 import { scheduleStandardsPublish } from "@/lib/standards-publish";
+import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export const maxDuration = 300;
 
@@ -16,6 +17,8 @@ function redirectBack(request: NextRequest, params: Record<string, string>) {
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   if (!isAuthorizedWorkerRequest(request)) {
     if (!request.headers.get("authorization")) {
       return NextResponse.redirect(new URL("/login", request.url), 303);
@@ -48,6 +51,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   if (request.cookies.get("cwca_session")) {
     const form = await request.formData().catch(() => null);
     const matterId = form?.get("matter_id")?.toString();
