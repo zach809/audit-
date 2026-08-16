@@ -25,6 +25,7 @@ import { MatterAiHelp } from "./matter-ai-help";
 import { LogicAiReview } from "./logic-ai-review";
 import { RestoreMatterFocus } from "./restore-matter-focus";
 import { matterFocusId } from "@/lib/dashboard-return";
+import { complianceMark } from "@/lib/compliance-mark";
 import {
   actionFor,
   auditItemPriority,
@@ -42,9 +43,13 @@ import type { PostClosureFollowUpRow } from "@/lib/post-closure";
 export const dynamic = "force-dynamic";
 
 function badge(value: string | null | undefined) {
-  const label = value || "";
-  const cls = statusClass(label);
-  return <span className={`badge ${cls}`}>{displayAuditStatus(label) || "N/A"}</span>;
+  const mark = complianceMark(value);
+  return (
+    <span className={`badge mark-${mark.kind} ${statusClass(mark.label)}`}>
+      <span className="mark-shape" aria-hidden="true" />
+      {mark.label}
+    </span>
+  );
 }
 
 type DashboardItem = {
@@ -632,7 +637,7 @@ const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
 ]);
 
 const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
-  { id: "command", label: "Command Center", description: "What needs attention first" },
+  { id: "command", label: "Today", description: "What is missing, who owns it, what to do" },
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
   { id: "standards", label: "Standards", description: "Excel sheet, downloads, and sync" },
   { id: "ongoing", label: "Ongoing", description: "Active case maintenance" },
@@ -659,7 +664,7 @@ const POST_CLOSURE_WINDOW_FILTERS = [
 
 const WORKSPACE_STATUS_FILTERS = [
   { id: "followup", label: "Needs Follow-Up" },
-  { id: "missing", label: "Needs Action" },
+  { id: "missing", label: "Missing" },
   { id: "review", label: "Needs Review" },
   { id: "late", label: "Late" },
   { id: "pending", label: "Not Due Yet" },
@@ -684,13 +689,13 @@ const WORKSPACE_FOCUS_STEPS: Record<string, string[]> = {
 const GUIDE_STATUS_CARDS = [
   {
     color: "red",
-    title: "Needs Follow-Up",
-    text: "Start here. These are alerted, late, or review items that a case manager or attorney should check in Clio.",
+    title: "Missing",
+    text: "Start here. These items have no matching proof in Clio yet.",
   },
   {
     color: "green",
-    title: "On Track",
-    text: "CWCA found the expected workflow evidence and no current problem is showing for that item.",
+    title: "On Time",
+    text: "CWCA found the expected workflow evidence before the deadline.",
   },
   {
     color: "blue",
@@ -704,8 +709,8 @@ const GUIDE_STATUS_CARDS = [
   },
   {
     color: "amber",
-    title: "Late Timing",
-    text: "Evidence was found, but it appears after the workflow goal. Use this for timing coaching, not blame.",
+    title: "Late",
+    text: "Proof was found after the deadline. Use this for timing coaching, not blame.",
   },
   {
     color: "slate",
@@ -1370,16 +1375,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <RestoreMatterFocus />
       <div className="topbar app-header">
         <div className="title">
-          <div className="eyebrow-row">
-            <span className="eyebrow">Internal Workflow Coaching</span>
-            <span className="badge Pass">Read-Only Clio</span>
-          </div>
-          <h1>Clio Workflow Auditor</h1>
-          <p>Open matters, proof links, and follow-up in one focused workspace.</p>
+          <h1>What is still owed today</h1>
+          <p>Find the missing work, the case manager who owns it, and the next step in Clio.</p>
         </div>
         <div className="actions header-actions">
           <form action="/api/audit/run" method="post">
           <input type="hidden" name="tab" value={activeTab} />
+          <input type="hidden" name="sort" value={matterSort} />
+          <input type="hidden" name="dir" value={matterDir} />
+          <input type="hidden" name="page" value={String(matterPage)} />
           <button className="primary" type="submit">Run Audit Batch</button>
           </form>
           {connected ? (
@@ -1390,7 +1394,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </div>
       </div>
 
-      <section className="deployment-proof">
+      <section className="deployment-proof hidden-chrome">
         <div>
           <span className="label">Deployment Proof</span>
           <strong>Tuesday-ready dashboard polish is active</strong>
@@ -1426,9 +1430,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       <section className="command-center-layout">
         <section className="panel command-hero">
           <div>
-            <span className="label">Start Here</span>
-            <h2>Today&apos;s Audit Command Center</h2>
-            <p className="muted">One simple starting point: see what needs attention, open the right work area, and keep the team moving without scrolling through every detail.</p>
+            <h2>Start with what is missing</h2>
+            <p className="muted">Open the matter, see who owns it, and do the next step in Clio. Nothing here is hover-only.</p>
           </div>
           <div className="command-actions">
             <a className="button primary compact" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>Review Matters</a>
@@ -1461,7 +1464,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </a>
         </section>
 
-        <section className="panel demo-readiness-panel">
+        <section className="panel demo-readiness-panel hidden-chrome">
           <div>
             <span className="label">Boss Demo Ready</span>
             <h2>How To Read This Fast</h2>
@@ -1477,12 +1480,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
 
         <section className="command-grid">
           <div className="panel command-panel">
-            <div className="panel-heading">
-              <div>
-                <span className="label">Proof Queue</span>
-                <h2>Fix These First</h2>
-                <p className="muted small">Highest-priority items in the selected date range.</p>
-              </div>
+          <div className="panel-heading">
+            <div>
+              <h2>Do these first</h2>
+              <p className="muted small">Highest-priority items in the selected date range. Client name, owner, and the Clio link are on the row.</p>
+            </div>
               <a className="button compact" href={tabLink(filters, "matters")}>All Matters</a>
             </div>
             {todaysPriorities.length ? (
@@ -1494,7 +1496,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                       <div>
                         <span className="label">{workflowLabel(item.row.stepCode)}</span>
                         <strong>{item.row.clientName}</strong>
-                        <small>{item.row.matterNumber} - {item.attorney}</small>
+                        <small>{item.row.matterNumber} · {item.caseManager} · {item.attorney}</small>
                       </div>
                       <span className={`badge ${statusClass(item.row.status)}`}>{displayItemStatus(item.row)}</span>
                       <div className="command-task-actions">
@@ -1513,7 +1515,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             )}
           </div>
 
-          <div className="panel command-panel">
+          <div className="panel command-panel hidden-chrome">
             <div className="panel-heading">
               <div>
                 <span className="label">Template Proof</span>
@@ -1539,7 +1541,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </div>
         </section>
 
-        <section className="panel command-panel">
+        <section className="panel command-panel hidden-chrome">
           <div className="panel-heading">
             <div>
               <span className="label">Product Map</span>
@@ -2202,7 +2204,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                           <h4>{item.row.clientName}</h4>
                           <p>{item.row.matterNumber}</p>
                         </div>
-                        <span className={`badge ${statusClass(item.row.status)}`}>{displayAuditStatus(item.row.status, item.row.reasonCode)}</span>
+                        {badge(item.row.status)}
                       </div>
                       <p className="ongoing-action-reminder">{ongoingReminderText(item.row.stepCode)}</p>
                       <div className="ongoing-action-meta">
@@ -2707,6 +2709,7 @@ Items Still Needing Action
           <input type="hidden" name="closure_window" value={closureWindowFilter} />
           <input type="hidden" name="sort" value={matterSort} />
           <input type="hidden" name="dir" value={matterDir} />
+          <input type="hidden" name="page" value={String(matterPage)} />
           <label>
             Responsible Attorney
             <select name="attorney" defaultValue={filters.attorney}>
@@ -2851,6 +2854,7 @@ Items Still Needing Action
                 <div className="workspace-table">
                   <div className="workspace-row workspace-row-head">
                     <span>Client / Matter</span>
+                    <span>Case Manager</span>
                     <span>Audit Item</span>
                     <span>Status</span>
                     <span>Timing</span>
@@ -2863,6 +2867,15 @@ Items Still Needing Action
                         <span>
                           <strong>{row.clientName}</strong>
                           <small>{row.matterNumber}</small>
+                        </span>
+                        <span>
+                          <strong>{standardsCaseManagerFor({
+                            matter_number: row.matterNumber,
+                            client_first_name: row.clientName,
+                            client_last_name: "",
+                            responsible_attorney_name: section.attorney,
+                            case_manager_name: row.caseManagerName ?? null,
+                          })}</strong>
                         </span>
                         <span>{workflowLabel(row.stepCode)}</span>
                         <span>{badge(currentItemStatus(row))}</span>
@@ -3082,22 +3095,15 @@ Items Still Needing Action
               ) : null}
 
               {!refreshNeeded && nextAction ? (
-                <details className={`matter-dropdown next-action-card status-row-${statusClass(currentItemStatus(nextAction))}`}>
-                  <summary>
-                    <span>
-                      <span className="label">Next Best Action</span>
-                      <strong>{actionFor(nextAction.stepCode, nextAction.status, nextAction.reasonCode)}</strong>
-                    </span>
-                    <span className="dropdown-pill" aria-hidden="true" />
-                  </summary>
-                  <div className="matter-dropdown-body next-action-content">
-                    <p><b>Why?</b> {problemText(nextAction)}</p>
-                    <div className="next-action-links">
-                      <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
-                      {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof in Clio</a> : null}
-                    </div>
+                <div className={`next-action-card status-row-${statusClass(currentItemStatus(nextAction))}`}>
+                  <span className="label">Do this next</span>
+                  <strong>{actionFor(nextAction.stepCode, nextAction.status, nextAction.reasonCode)}</strong>
+                  <p>{problemText(nextAction)}</p>
+                  <div className="next-action-links">
+                    <a className="button compact primary" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
+                    {evidencePath(nextAction, true) ? <a className="button compact" href={evidencePath(nextAction, true)} target="_blank" rel="noreferrer">Open Proof in Clio</a> : null}
                   </div>
-                </details>
+                </div>
               ) : null}
 
               {refreshNeeded ? (

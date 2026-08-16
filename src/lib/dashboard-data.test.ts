@@ -226,6 +226,7 @@ describe("matter bulk actions", () => {
     assert.match(page, /MatterBulkBar/);
   });
 });
+
 describe("standardsCaseManagerFor", () => {
   it("assigns Elanna Myers Park City matters to Ronald, and her other matters to Lori", () => {
     assert.equal(

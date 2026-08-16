@@ -16,10 +16,15 @@ const FILTERS = {
   tab: "matters",
   wstatus: "followup",
   wfocus: "ongoing-cases",
+  wstep: "WEEKLY_CLIENT_CHECKIN",
+  cm: "Lori",
   closure_status: "due",
   closure_stage: "30",
   closure_attorney: "Elanna Myers",
   closure_window: "current",
+  sort: "date",
+  dir: "desc",
+  page: "7",
 };
 
 describe("dashboard return after a mutation", () => {
@@ -62,7 +67,7 @@ describe("dashboard return after a mutation", () => {
     const page = source("../app/page.tsx");
     const cardStart = page.indexOf('className="matter-card"');
     assert.ok(cardStart >= 0, "matter-card markup not found");
-    const card = page.slice(cardStart, cardStart + 1800);
+    const card = page.slice(cardStart, cardStart + 2200);
     assert.match(card, /matterFocusId\(/);
     assert.match(card, /Case Manager/);
     assert.match(card, /standardsCaseManagerFor\(/);
@@ -70,5 +75,21 @@ describe("dashboard return after a mutation", () => {
     const controls = source("../app/matter-review-controls.tsx");
     assert.match(controls, /matterFocusId/);
     assert.equal(controls.includes("location.reload()"), false);
+  });
+
+  it("filter forms still carry every load-bearing query key", () => {
+    const page = source("../app/page.tsx");
+    const start = page.indexOf('<form className="filters"');
+    assert.ok(start >= 0, "filter form not found");
+    const form = page.slice(start, page.indexOf("</form>", start));
+    for (const name of ["attorney", "overall", "from", "to", "tab", "wstatus", "wfocus", "wstep", "cm"]) {
+      assert.match(form, new RegExp(`name="${name}"`), name);
+    }
+    for (const name of ["closure_status", "closure_stage", "closure_attorney", "closure_window"]) {
+      assert.match(form, new RegExp(`name="${name}"`), name);
+    }
+    for (const name of ["sort", "dir", "page"]) {
+      assert.match(form, new RegExp(`name="${name}"`), `${name} must survive Apply or paging resets to page 1`);
+    }
   });
 });

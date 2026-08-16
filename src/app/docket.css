@@ -1,0 +1,497 @@
+/* CWCA exhibit-docket layer. Wins the cascade after globals.css. */
+
+:root {
+  --paper: oklch(0.96 0.012 250);
+  --paper-strong: oklch(0.99 0.006 250);
+  --ink: oklch(0.22 0.03 250);
+  --muted-ink: oklch(0.36 0.025 250);
+  --rule: oklch(0.78 0.02 250);
+  --mark-late: oklch(0.42 0.14 35);
+  --mark-ok: oklch(0.36 0.1 150);
+  --flag: oklch(0.93 0.03 85);
+  --bg: var(--paper);
+  --panel: var(--paper-strong);
+  --panel-strong: var(--paper-strong);
+  --panel-soft: var(--paper);
+  --line: var(--rule);
+  --line-soft: oklch(0.86 0.015 250);
+  --text: var(--ink);
+  --muted: var(--muted-ink);
+  --blue: var(--ink);
+  --blue-soft: oklch(0.22 0.03 250 / 0.08);
+  --green: var(--mark-ok);
+  --green-soft: oklch(0.36 0.1 150 / 0.12);
+  --amber: var(--mark-late);
+  --amber-soft: oklch(0.42 0.14 35 / 0.12);
+  --red: var(--mark-late);
+  --red-soft: oklch(0.42 0.14 35 / 0.12);
+  --purple: var(--ink);
+  --purple-soft: oklch(0.22 0.03 250 / 0.08);
+  --stone: var(--paper);
+  --charcoal: var(--ink);
+  --deep-teal: var(--ink);
+  --shadow: none;
+  --shadow-soft: none;
+  --ring: none;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --font-ui: "Outfit", "Segoe UI", sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, monospace;
+}
+
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+html,
+body {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  font-family: var(--font-ui) !important;
+  font-size: 16px !important;
+  line-height: 1.45 !important;
+}
+
+body::before {
+  display: none !important;
+}
+
+.hidden-chrome {
+  display: none !important;
+}
+
+.shell {
+  max-width: 1440px;
+  padding: 24px 20px 64px;
+}
+
+.app-header,
+.panel,
+.matter-card,
+.command-metric,
+.command-task,
+.workspace-group,
+.attorney-health-card,
+.notice,
+.dashboard-tabs,
+.filters,
+.queue-panel,
+.stat {
+  animation: none !important;
+  backdrop-filter: none !important;
+  background: var(--paper-strong) !important;
+  border: 1px solid var(--ink) !important;
+  box-shadow: none !important;
+  color: var(--ink) !important;
+}
+
+.app-header::before,
+.app-header::after {
+  display: none !important;
+}
+
+.title h1,
+.matter-card h3,
+.command-task strong,
+.ongoing-action-card h4,
+.case-manager-task h3,
+.workspace-row strong {
+  color: var(--ink) !important;
+  font-family: var(--font-ui) !important;
+  font-weight: 700 !important;
+  text-wrap: balance;
+}
+
+.title h1 {
+  font-size: 2rem !important;
+  line-height: 1.15 !important;
+  margin: 0 0 8px !important;
+}
+
+.title p,
+.muted,
+.muted.small,
+.label,
+.step-label,
+.stat span,
+.eyebrow,
+.command-metric span,
+.command-metric small {
+  color: var(--muted-ink) !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+button,
+.button,
+input,
+select,
+textarea {
+  align-items: center !important;
+  background: var(--paper-strong) !important;
+  border: 2px solid var(--ink) !important;
+  box-shadow: none !important;
+  color: var(--ink) !important;
+  display: inline-flex !important;
+  font-family: var(--font-ui) !important;
+  font-size: 16px !important;
+  justify-content: center !important;
+  line-height: 1.2 !important;
+  min-height: 44px !important;
+  text-decoration: none !important;
+  transform: none !important;
+}
+
+button.primary,
+.button.primary,
+.primary {
+  background: var(--ink) !important;
+  border-color: var(--ink) !important;
+  color: var(--paper) !important;
+}
+
+button:hover,
+.button:hover,
+.panel:hover,
+.matter-card:hover,
+.workspace-group:hover,
+.command-metric:hover,
+.command-task:hover {
+  transform: none !important;
+}
+
+a {
+  color: var(--ink) !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+a.button,
+button {
+  text-decoration: none !important;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink) !important;
+  outline-offset: 3px !important;
+}
+
+.dashboard-tabs {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0 !important;
+  padding: 0 !important;
+}
+
+.dashboard-tab {
+  background: var(--paper) !important;
+  border: 1px solid var(--ink) !important;
+  color: var(--ink) !important;
+  font-size: 16px !important;
+  margin: -1px 0 0 -1px !important;
+  min-height: 48px !important;
+  padding: 10px 14px !important;
+}
+
+.dashboard-tab span {
+  display: none !important;
+}
+
+.dashboard-tab.active {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+}
+
+.dashboard-tab.active strong {
+  color: var(--paper) !important;
+}
+
+.command-metric-grid {
+  border: 1px solid var(--ink);
+  display: grid;
+  gap: 0 !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.command-metric,
+.command-metric.needs {
+  background: var(--paper-strong) !important;
+  border: 0 !important;
+  border-right: 1px solid var(--ink) !important;
+  box-shadow: none !important;
+  color: var(--ink) !important;
+  padding: 16px !important;
+  text-decoration: underline !important;
+}
+
+.command-metric:last-child {
+  border-right: 0 !important;
+}
+
+.command-metric strong {
+  color: var(--ink) !important;
+  font-family: var(--font-num) !important;
+  font-size: 1.75rem !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600 !important;
+}
+
+.command-task-list,
+.matter-list,
+.workspace-board {
+  display: grid;
+  gap: 12px;
+}
+
+.command-task,
+.matter-card,
+.ongoing-action-card,
+.case-manager-task {
+  display: grid;
+  gap: 12px;
+  padding: 16px !important;
+}
+
+.command-task small,
+.matter-card p,
+.workspace-row small {
+  color: var(--muted-ink) !important;
+  font-size: 16px !important;
+}
+
+.badge {
+  align-items: center;
+  background: var(--paper) !important;
+  border: 1px solid var(--ink) !important;
+  color: var(--ink) !important;
+  display: inline-flex !important;
+  font-family: var(--font-ui) !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 10px !important;
+}
+
+.mark-shape {
+  background: transparent;
+  border: 2px solid currentColor;
+  flex: 0 0 12px;
+  height: 12px;
+  width: 12px;
+}
+
+.mark-on-time .mark-shape {
+  background: currentColor;
+}
+
+.mark-late .mark-shape {
+  background: currentColor;
+  transform: rotate(45deg);
+}
+
+.mark-missing .mark-shape {
+  background: transparent;
+  border-color: transparent transparent currentColor;
+  border-style: solid;
+  border-width: 0 7px 12px;
+  height: 0;
+  width: 0;
+}
+
+.mark-not-due .mark-shape {
+  background: transparent;
+}
+
+.mark-no-activity .mark-shape {
+  background: transparent;
+  border-style: dashed;
+}
+
+.mark-other .mark-shape {
+  border-bottom-width: 6px;
+  height: 6px;
+}
+
+.mark-late {
+  color: var(--mark-late) !important;
+}
+
+.mark-on-time {
+  color: var(--mark-ok) !important;
+}
+
+.next-action-card {
+  background: var(--flag) !important;
+  border: 2px solid var(--ink) !important;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.next-action-card strong,
+.next-action-card p {
+  color: var(--ink) !important;
+  font-size: 16px !important;
+}
+
+.next-action-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filters,
+.workspace-filter-tabs,
+.workspace-focus-tabs,
+.quick-filters {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.workspace-filter,
+.workspace-focus {
+  background: var(--paper) !important;
+  border: 1px solid var(--ink) !important;
+  color: var(--ink) !important;
+  font-size: 16px !important;
+  min-height: 44px;
+  padding: 8px 12px !important;
+  text-decoration: none !important;
+}
+
+.workspace-filter.active,
+.workspace-focus.active {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+}
+
+.workspace-row {
+  background: var(--paper-strong) !important;
+  box-shadow: none !important;
+  grid-template-columns: minmax(140px, 1.2fr) minmax(110px, 0.8fr) minmax(140px, 1fr) minmax(120px, 0.7fr) minmax(140px, 1fr) minmax(80px, 0.5fr) !important;
+  transform: none !important;
+}
+
+.workspace-row-head {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+}
+
+.priority-row,
+.workspace-row,
+.command-task,
+.review-item,
+.status-row-Missing,
+.status-row-Late,
+.status-row-Unknown,
+.status-row-Needs-Review,
+.status-row-Pending,
+.status-row-On-Track {
+  box-shadow: none !important;
+}
+
+.matter-head {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+.matter-head .label + strong,
+.matter-head h3 + p {
+  font-variant-numeric: tabular-nums;
+}
+
+.matter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.step-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.step-block,
+.step-cell {
+  background: var(--paper) !important;
+  border: 1px solid var(--rule) !important;
+  padding: 10px;
+}
+
+.stat strong,
+.case-manager-stats strong,
+.filter-summary span,
+.health-stats b {
+  font-family: var(--font-num) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.notice {
+  background: var(--flag) !important;
+  color: var(--ink) !important;
+}
+
+.notice.danger {
+  background: oklch(0.93 0.04 25) !important;
+  color: var(--ink) !important;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+@media (max-width: 1050px) {
+  .command-metric-grid,
+  .matter-head,
+  .dashboard-tabs {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .command-metric:nth-child(2n) {
+    border-right: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .matter-head,
+  .workspace-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-row-head {
+    display: none !important;
+  }
+
+  .title h1 {
+    font-size: 1.75rem !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .command-metric-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
