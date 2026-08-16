@@ -173,6 +173,7 @@ type ClioClientHooks = {
 
 export class ClioClient {
   private nextAllowedAt = 0;
+  private throttleQueue: Promise<void> = Promise.resolve();
   private minIntervalMs: number;
   private readonly floorIntervalMs: number;
   private readonly apiBase?: string;
@@ -186,11 +187,20 @@ export class ClioClient {
   }
 
   private async throttle() {
-    const now = Date.now();
-    const slot = Math.max(now, this.nextAllowedAt);
-    this.nextAllowedAt = slot + this.minIntervalMs;
-    const wait = slot - now;
-    if (wait > 0) await sleep(wait);
+    let release = () => {};
+    const previous = this.throttleQueue;
+    this.throttleQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      while (Date.now() < this.nextAllowedAt) {
+        await sleep(this.nextAllowedAt - Date.now());
+      }
+      this.nextAllowedAt = Date.now() + this.minIntervalMs;
+    } finally {
+      release();
+    }
   }
 
   private noteRateLimit(response: Response) {

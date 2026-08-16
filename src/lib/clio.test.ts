@@ -42,14 +42,19 @@ function gaps(arrivals: number[]) {
 }
 
 describe("ClioClient rate limit", () => {
-  it("spaces 10 concurrent requests by the minimum interval", async () => {
+  it("spaces 10 concurrent requests by the minimum interval", async (t) => {
     const stub: Stub = { arrivals: [], paths: [], handler: (_req, res) => json(res, 200) };
     await withClient(stub, async (client) => {
       await Promise.all(Array.from({ length: 10 }, (_, i) => client.request(`/m${i}.json`)));
     });
     const intervalGaps = gaps(stub.arrivals);
+    t.diagnostic(`gaps=${intervalGaps.join(",")}`);
     const slack = 25;
     assert.equal(stub.arrivals.length, 10, `arrivals=${stub.arrivals.join(",")}`);
+    assert.ok(
+      intervalGaps[0] >= MIN_INTERVAL_MS,
+      `first gap must be >= ${MIN_INTERVAL_MS}ms, arrivals=${stub.arrivals.join(",")} gaps=${intervalGaps.join(",")}`,
+    );
     assert.ok(
       intervalGaps.every((gap) => gap >= MIN_INTERVAL_MS - slack),
       `expected >= ${MIN_INTERVAL_MS}ms, arrivals=${stub.arrivals.join(",")} gaps=${intervalGaps.join(",")}`,
