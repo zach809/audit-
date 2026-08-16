@@ -25,6 +25,7 @@ import { CopyTextButton } from "./copy-text-button";
 import { MatterAiHelp } from "./matter-ai-help";
 import { LogicAiReview } from "./logic-ai-review";
 import { RestoreMatterFocus } from "./restore-matter-focus";
+import { DashboardJobChrome } from "./dashboard-job";
 import { matterFocusId } from "@/lib/dashboard-return";
 import { complianceMark } from "@/lib/compliance-mark";
 import {
@@ -137,6 +138,12 @@ function clioMatterPath(matterId: string): string {
 
 function clioMatterSectionPath(matterId: string, section: "communications" | "calendar"): string {
   return `${clioMatterPath(matterId)}/${section}`;
+}
+
+function jobPrimaryAction(matterId: string, stepCode: string, item: DashboardItem): { href: string; label: string } {
+  const proof = evidencePath(item, true);
+  if (proof) return { href: proof, label: "Open proof" };
+  return problemClioLinks(matterId, stepCode)[0] ?? { href: clioMatterPath(matterId), label: "Open in Clio" };
 }
 
 function problemClioLinks(matterId: string, stepCode: string): Array<{ href: string; label: string }> {
@@ -637,17 +644,22 @@ const STANDARDS_GRAPHIC_WORKFLOW_CODES = new Set([
   "WEEKLY_CLIENT_CHECKIN",
 ]);
 
-const DASHBOARD_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
+const DAILY_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "command", label: "Today", description: "What is missing, who owns it, what to do" },
   { id: "matters", label: "Matters", description: "Detailed matter cards and proof links" },
+];
+const RECORDS_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
   { id: "standards", label: "Standards", description: "Excel sheet, downloads, and sync" },
   { id: "ongoing", label: "Ongoing", description: "Active case maintenance" },
   { id: "post-closure", label: "Post-Closure", description: "Closed-matter client follow-up" },
   { id: "reports", label: "Reports", description: "Exports, spreadsheets, and weekly summaries" },
-  { id: "debug", label: "Audit Debug", description: "AI logic review and rule tuning" },
   { id: "guide", label: "Guide", description: "How to read the results" },
   { id: "compliance", label: "Compliance", description: "Read-only and data-handling rules" },
 ];
+const TOOL_TABS: Array<{ id: DashboardTab; label: string; description: string }> = [
+  { id: "debug", label: "Audit Debug", description: "AI logic review and rule tuning" },
+];
+const DASHBOARD_TABS = [...DAILY_TABS, ...RECORDS_TABS, ...TOOL_TABS];
 
 const POST_CLOSURE_STATUS_FILTERS = [
   { id: "all", label: "All" },
@@ -727,6 +739,24 @@ function dashboardTab(value?: string): DashboardTab {
 
 function tabLink(filters: Record<string, string>, tab: DashboardTab): string {
   return filterLink(filters, { tab });
+}
+
+function DashboardTabLink({
+  tab,
+  href,
+  active,
+}: {
+  tab: { id: DashboardTab; label: string; description: string };
+  href: string;
+  active: boolean;
+}) {
+  return (
+    <a className={active ? "dashboard-tab active" : "dashboard-tab"} href={href}>
+      <span className="sign-picto" aria-hidden="true" />
+      <strong>{tab.label}</strong>
+      <span>{tab.description}</span>
+    </a>
+  );
 }
 
 function workspaceFocusMatches(stepCode: string, focus: string): boolean {
@@ -976,10 +1006,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     })
     .sort((a, b) => b.followUp - a.followUp || a.attorney.localeCompare(b.attorney))
     .slice(0, 12);
-  const todaysPriorities = allWorkspaceRows
+  const todaysPriorities = caseManagerWorkspaceRows
     .filter((item) => isFollowUpStatus(item.row.status))
     .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
-    .slice(0, 8);
+    .slice(0, workspaceCaseManagerFilter ? 40 : 8);
   const caseManagerTasks: CaseManagerTask[] = allWorkspaceRows
     .filter((item) => isFollowUpStatus(item.row.status) && !isClosedByReview(item.row))
     .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName));
@@ -1415,23 +1445,49 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       ) : null}
 
       <nav className="dashboard-tabs" aria-label="Dashboard sections">
-        {DASHBOARD_TABS.map((tab) => (
-          <a
-            className={activeTab === tab.id ? "dashboard-tab active" : "dashboard-tab"}
-            href={tabLink(filters, tab.id)}
-            key={tab.id}
-          >
-            <span className="sign-picto" aria-hidden="true" />
-            <strong>{tab.label}</strong>
-            <span>{tab.description}</span>
-          </a>
+        {DAILY_TABS.map((tab) => (
+          <DashboardTabLink active={activeTab === tab.id} href={tabLink(filters, tab.id)} key={tab.id} tab={tab} />
         ))}
-        <a className="dashboard-tab review-tab" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">
-          <span className="sign-picto" aria-hidden="true" />
-          <strong>Review Site</strong>
-          <span>Open Review Racer dashboard</span>
-        </a>
+        <details className="nav-group" open={RECORDS_TABS.some((tab) => tab.id === activeTab)}>
+          <summary className={RECORDS_TABS.some((tab) => tab.id === activeTab) ? "dashboard-tab active" : "dashboard-tab"}>
+            <span className="sign-picto" aria-hidden="true" />
+            <strong>Records</strong>
+            <span>Standards, reports, and the reading list</span>
+          </summary>
+          <div className="nav-group-panel">
+            {RECORDS_TABS.map((tab) => (
+              <DashboardTabLink active={activeTab === tab.id} href={tabLink(filters, tab.id)} key={tab.id} tab={tab} />
+            ))}
+          </div>
+        </details>
+        <details className="nav-group" open={activeTab === "debug"}>
+          <summary className={activeTab === "debug" ? "dashboard-tab active" : "dashboard-tab"}>
+            <span className="sign-picto" aria-hidden="true" />
+            <strong>Tools</strong>
+            <span>Audit Debug and Review Site</span>
+          </summary>
+          <div className="nav-group-panel">
+            {TOOL_TABS.map((tab) => (
+              <DashboardTabLink active={activeTab === tab.id} href={tabLink(filters, tab.id)} key={tab.id} tab={tab} />
+            ))}
+            <a className="dashboard-tab review-tab" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">
+              <span className="sign-picto" aria-hidden="true" />
+              <strong>Review Site</strong>
+              <span>Open Review Racer dashboard</span>
+            </a>
+          </div>
+        </details>
       </nav>
+
+      <DashboardJobChrome
+        caseManagers={STANDARD_CASE_MANAGERS}
+        clearHref={filterLink({ tab: activeTab }, {})}
+        cmHrefs={Object.fromEntries(STANDARD_CASE_MANAGERS.map((name) => [name, filterLink(urlState, { cm: name, page: "1" })]))}
+        currentCm={workspaceCaseManagerFilter}
+        firmCount={allWorkspaceRows.filter((item) => isFollowUpStatus(item.row.status)).length}
+        shownCount={caseManagerWorkspaceRows.filter((item) => isFollowUpStatus(item.row.status)).length}
+        wholeFirmHref={filterLink(urlState, { cm: "" })}
+      />
 
       {activeTab === "command" ? (
       <section className="command-center-layout">
@@ -1497,18 +1553,32 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             {todaysPriorities.length ? (
               <div className="command-task-list">
                 {todaysPriorities.map((item) => {
-                  const href = evidencePath(item.row as DashboardItem, true);
+                  const primary = jobPrimaryAction(item.row.matterId, item.row.stepCode, item.row as DashboardItem);
+                  const missing = complianceMark(item.row.status).kind === "missing";
                   return (
-                    <div className={`command-task status-row-${statusClass(item.row.status)}`} key={`${item.row.matterId}-${item.row.stepCode}`}>
+                    <div
+                      className={`command-task status-row-${statusClass(item.row.status)}`}
+                      data-client-name={item.row.clientName}
+                      data-job-row
+                      key={`${item.row.matterId}-${item.row.stepCode}`}
+                    >
                       <div>
                         <span className="label">{workflowLabel(item.row.stepCode)}</span>
                         <strong>{item.row.clientName}</strong>
                         <small>{item.row.matterNumber} · {item.caseManager} · {item.attorney}</small>
                       </div>
-                      <span className={`badge ${statusClass(item.row.status)}`}>{displayItemStatus(item.row)}</span>
+                      {badge(displayItemStatus(item.row))}
                       <div className="command-task-actions">
-                        <a href={clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Matter</a>
-                        {href ? <a href={href} target="_blank" rel="noreferrer">Proof</a> : <a href={problemClioLinks(item.row.matterId, item.row.stepCode)[0]?.href ?? clioMatterPath(item.row.matterId)} target="_blank" rel="noreferrer">Clio Tab</a>}
+                        <a
+                          className={missing ? "button compact primary act-here" : "button compact primary"}
+                          data-job-primary
+                          href={primary.href}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {primary.label}
+                        </a>
+                        <a className="button compact" href={clioMatterPath(item.row.matterId)} rel="noreferrer" target="_blank">Matter</a>
                       </div>
                     </div>
                   );
@@ -2739,7 +2809,7 @@ Items Still Needing Action
             <input name="to" type="date" defaultValue={filters.to} />
           </label>
           <button type="submit">Apply</button>
-          <a className="button" href="/">Clear</a>
+          <a className="button" data-clear-filters href={filterLink({ tab: activeTab }, {})}>Clear</a>
         </form>
         <div className="quick-filters">
           <a className="button" href={filterLink(urlState, { from: today, to: today, page: "1" })}>Today</a>
@@ -2747,9 +2817,11 @@ Items Still Needing Action
           <a className="button" href={filterLink(urlState, { from: monthStart, to: today, page: "1" })}>This Month</a>
           <a className="button" href={filterLink(urlState, { from: "", to: "", page: "1" })}>All Dates</a>
         </div>
-        {hasFilters ? (
+        {hasFilters || workspaceCaseManagerFilter ? (
           <p className="filter-alert">
-            Filtered view is on. Clear filters to see all attorneys and all matching matters.
+            {workspaceCaseManagerFilter
+              ? `Showing ${workspaceCaseManagerFilter} only. ${caseManagerWorkspaceRows.filter((item) => isFollowUpStatus(item.row.status)).length} items need work, of ${allWorkspaceRows.filter((item) => isFollowUpStatus(item.row.status)).length} for the whole firm.`
+              : "Filtered view is on. These counts are for the current filters, not the whole firm."}
           </p>
         ) : null}
         <div className="filter-summary">
@@ -3012,7 +3084,13 @@ Items Still Needing Action
           const nextAction = attentionItems[0];
           const matterStatus = matterCardStatus(items, String(m.display_overall_status ?? m.overall_status));
           return (
-            <article className="matter-card" id={matterFocusId(String(m.matter_id)) ?? undefined} key={m.matter_id}>
+            <article
+              className="matter-card"
+              data-client-name={`${m.client_first_name ?? ""} ${m.client_last_name ?? ""}`.trim() || m.matter_number}
+              data-job-row
+              id={matterFocusId(String(m.matter_id)) ?? undefined}
+              key={m.matter_id}
+            >
               <div className="matter-head">
                 <div>
                   <MatterSelect
@@ -3053,7 +3131,7 @@ Items Still Needing Action
                     restoreLabel="Restore to Standards"
                     showBadges
                   />
-                  <a className="button compact" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
+                  <a className="button compact primary" data-job-primary href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
                   <form action="/api/audit/run" method="post">
                     <input type="hidden" name="matter_id" value={m.matter_id} />
                     <input type="hidden" name="attorney" value={filters.attorney} />
