@@ -73,8 +73,9 @@ describe("dashboard return after a mutation", () => {
     assert.match(card, /standardsCaseManagerFor\(/);
 
     const controls = source("../app/matter-review-controls.tsx");
-    assert.match(controls, /matterFocusId/);
     assert.equal(controls.includes("location.reload()"), false);
+    assert.equal(controls.includes("location.assign"), false);
+    assert.equal(controls.includes("router.refresh"), false);
   });
 
   it("filter forms still carry every load-bearing query key", () => {

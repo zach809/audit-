@@ -418,6 +418,29 @@ button {
   gap: 8px;
 }
 
+.row-write {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.row-write-error,
+.matter-review-summary small.error {
+  color: var(--mark-late) !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  margin: 0;
+  max-width: 100%;
+  text-wrap: pretty;
+  white-space: normal !important;
+}
+
+.row-write[data-pending="true"] button {
+  opacity: 0.72;
+}
+
 .step-grid {
   display: grid;
   gap: 8px;

@@ -20,6 +20,7 @@ import { TEMPLATE_REGISTRY } from "@/lib/template-registry";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
 import { MatterBulkBar, MatterSelect } from "./matter-bulk-bar";
+import { MatterExclusionControl } from "./matter-row-write";
 import { CopyTextButton } from "./copy-text-button";
 import { MatterAiHelp } from "./matter-ai-help";
 import { LogicAiReview } from "./logic-ai-review";
@@ -2229,21 +2230,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                         </form>
                         <a className="button compact" href={caseManagerPortalLink(item.caseManager)}>Open CM Task Page</a>
                         {proofHref ? <a className="button compact" href={proofHref} target="_blank" rel="noreferrer">Open Saved Proof</a> : null}
-                        <form action="/api/metrics/exclusion" method="post">
-                          <input type="hidden" name="action" value={item.row.metricExcluded ? "restore" : "exclude"} />
-                          <input type="hidden" name="matter_id" value={item.row.matterId} />
-                          <input type="hidden" name="reason" value={`Admin removed ${workflowLabel(item.row.stepCode)} from Standards scoring from the Ongoing follow-up list.`} />
-                          <input type="hidden" name="tab" value="ongoing" />
-                          <input type="hidden" name="attorney" value={filters.attorney} />
-                          <input type="hidden" name="overall" value={filters.overall} />
-                          <input type="hidden" name="from" value={filters.from} />
-                          <input type="hidden" name="to" value={filters.to} />
-                          <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
-                          <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
-                          <button className="button compact warning" type="submit">
-                            {item.row.metricExcluded ? "Restore to Score" : "Remove from Score"}
-                          </button>
-                        </form>
+                        <MatterExclusionControl
+                          matterId={item.row.matterId}
+                          excluded={Boolean(item.row.metricExcluded)}
+                          reason={`Admin removed ${workflowLabel(item.row.stepCode)} from Standards scoring from the Ongoing follow-up list.`}
+                          excludeLabel="Remove from Score"
+                          restoreLabel="Restore to Score"
+                          buttonClassName="button compact warning"
+                        />
                       </div>
                     </article>
                   );
@@ -3044,8 +3038,15 @@ Items Still Needing Action
                 </div>
                 <div className="matter-actions">
                   {badge(matterStatus)}
-                  {m.metric_excluded ? <span className="badge Pending">Excluded from Standards</span> : null}
-                  {!m.metric_excluded && m.metric_exclusion_requested_by ? <span className="badge Late">CM requested exclusion</span> : null}
+                  <MatterExclusionControl
+                    matterId={String(m.matter_id)}
+                    excluded={Boolean(m.metric_excluded)}
+                    requestedBy={m.metric_exclusion_requested_by}
+                    reason={m.metric_exclusion_reason || "Admin removed this matter from Standards scoring."}
+                    excludeLabel="Remove from Standards"
+                    restoreLabel="Restore to Standards"
+                    showBadges
+                  />
                   <a className="button compact" href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
                   <form action="/api/audit/run" method="post">
                     <input type="hidden" name="matter_id" value={m.matter_id} />
@@ -3062,27 +3063,6 @@ Items Still Needing Action
                     <input type="hidden" name="dir" value={matterDir} />
                     <input type="hidden" name="page" value={String(matterPage)} />
                     <button type="submit">Recheck Matter</button>
-                  </form>
-                  <form action="/api/metrics/exclusion" method="post">
-                    <input type="hidden" name="action" value={m.metric_excluded ? "restore" : "exclude"} />
-                    <input type="hidden" name="matter_id" value={m.matter_id} />
-                    <input type="hidden" name="reason" value={m.metric_exclusion_reason || "Admin removed this matter from Standards scoring."} />
-                    <input type="hidden" name="requested_by" value={m.metric_exclusion_requested_by || ""} />
-                    <input type="hidden" name="attorney" value={filters.attorney} />
-                    <input type="hidden" name="overall" value={filters.overall} />
-                    <input type="hidden" name="from" value={filters.from} />
-                    <input type="hidden" name="to" value={filters.to} />
-                    <input type="hidden" name="tab" value={activeTab} />
-                    <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
-                    <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
-                    <input type="hidden" name="wstep" value={workspaceStepFilter} />
-                    <input type="hidden" name="cm" value={workspaceCaseManagerFilter} />
-                    <input type="hidden" name="sort" value={matterSort} />
-                    <input type="hidden" name="dir" value={matterDir} />
-                    <input type="hidden" name="page" value={String(matterPage)} />
-                    <button className="metric-exclusion-button" type="submit">
-                      {m.metric_excluded ? "Restore to Standards" : "Remove from Standards"}
-                    </button>
                   </form>
                 </div>
               </div>

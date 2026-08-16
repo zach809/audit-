@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useRef, useState } from "react";
 import {
   NEXT_STEPS,
   REVIEW_DECISIONS,
@@ -10,7 +9,7 @@ import {
   type ReviewDecision,
   type ReviewNextStep,
 } from "@/lib/review-shared";
-import { matterFocusId } from "@/lib/dashboard-return";
+import { saveMatterReview } from "./matter-actions";
 
 type MatterReviewControlsProps = {
   matterId: string;
@@ -49,68 +48,68 @@ export function MatterReviewControls({
   existingProofUrl,
   mode = "auditor",
 }: MatterReviewControlsProps) {
-  const router = useRouter();
   const initialDecision = useMemo(() => normalizeReviewDecision(currentDecision), [currentDecision]);
   const initialNextStep = useMemo(
     () => normalizeNextStep(currentNextStep) || suggestedNextStep(initialDecision),
     [currentNextStep, initialDecision],
   );
-  const [decision, setDecision] = useState<ReviewDecision>(initialDecision);
-  const [note, setNote] = useState(currentNote ?? "");
-  const [nextStep, setNextStep] = useState<ReviewNextStep>(initialNextStep);
-  const [reviewedBy, setReviewedBy] = useState(currentReviewedBy ?? "");
-  const [caseManagerName, setCaseManagerName] = useState(currentCaseManagerName ?? "");
-  const [proofReference, setProofReference] = useState(currentProofReference ?? "");
+  const [committed, setCommitted] = useState({
+    decision: initialDecision,
+    note: currentNote ?? "",
+    nextStep: initialNextStep,
+    reviewedBy: currentReviewedBy ?? "",
+    caseManagerName: currentCaseManagerName ?? "",
+    proofReference: currentProofReference ?? "",
+  });
+  const [decision, setDecision] = useState<ReviewDecision>(committed.decision);
+  const [note, setNote] = useState(committed.note);
+  const [nextStep, setNextStep] = useState<ReviewNextStep>(committed.nextStep);
+  const [reviewedBy, setReviewedBy] = useState(committed.reviewedBy);
+  const [caseManagerName, setCaseManagerName] = useState(committed.caseManagerName);
+  const [proofReference, setProofReference] = useState(committed.proofReference);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
   const [expanded, setExpanded] = useState(false);
-  const hasReview = Boolean(currentDecision || currentNote || currentReviewedBy);
+  const saveRef = useRef<HTMLButtonElement>(null);
+  const hasReview = Boolean(
+    currentDecision ||
+    currentNote ||
+    currentReviewedBy ||
+    committed.note ||
+    committed.reviewedBy ||
+    committed.decision !== "Needs Review",
+  );
 
   async function saveReview() {
+    if (saveState === "saving") return;
     setSaveState("saving");
     setMessage("");
-    try {
-      const response = await fetch("/api/reviews", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          matterId,
-          stepCode,
-          decision,
-          resultsDetails: note,
-          note,
-          proofType: "Clio Check",
-          proofReference,
-          nextStep,
-          reportSummary: note,
-          internalNotes: "",
-          includeInReport: true,
-          caseManagerName,
-          reviewedBy,
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Could not save this review.");
-      setSaveState("saved");
-      setMessage("Saved to CWCA. Updating this card...");
-      setExpanded(false);
-      const focusId = matterFocusId(matterId);
-      const next = new URL(window.location.href);
-      if (focusId) next.hash = focusId;
-      if (focusId && window.location.hash === `#${focusId}`) {
-        router.refresh();
-        const card = document.getElementById(focusId);
-        if (card instanceof HTMLElement) {
-          card.tabIndex = -1;
-          card.focus({ preventScroll: true });
-        }
-        return;
-      }
-      window.location.assign(next.toString());
-    } catch (error) {
+    const result = await saveMatterReview({
+      matterId,
+      stepCode,
+      decision,
+      note,
+      nextStep,
+      reviewedBy,
+      caseManagerName,
+      proofReference,
+    });
+    if (!result.ok) {
+      setDecision(committed.decision);
+      setNote(committed.note);
+      setNextStep(committed.nextStep);
+      setReviewedBy(committed.reviewedBy);
+      setCaseManagerName(committed.caseManagerName);
+      setProofReference(committed.proofReference);
       setSaveState("error");
-      setMessage(error instanceof Error ? error.message : "Could not save this review.");
+      setMessage(result.error);
+      saveRef.current?.focus({ preventScroll: true });
+      return;
     }
+    setCommitted({ decision, note, nextStep, reviewedBy, caseManagerName, proofReference });
+    setSaveState("saved");
+    setMessage("Saved.");
+    saveRef.current?.focus({ preventScroll: true });
   }
 
   return (
@@ -182,7 +181,14 @@ export function MatterReviewControls({
               Reviewed By
               <input value={reviewedBy} onChange={(event) => setReviewedBy(event.target.value)} placeholder="Name" />
             </label>
-            <button type="button" onClick={saveReview} disabled={saveState === "saving"}>
+            <button
+              ref={saveRef}
+              type="button"
+              aria-busy={saveState === "saving"}
+              onClick={() => {
+                void saveReview();
+              }}
+            >
               {saveState === "saving" ? "Saving..." : "Save Status"}
             </button>
           </div>

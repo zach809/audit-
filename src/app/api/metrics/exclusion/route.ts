@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
+import { writeMetricExclusion } from "@/lib/metric-exclusion";
 import { caseManagerSession, isValidSessionCookie } from "@/lib/session";
 import { dashboardReturnUrl, matterFocusId } from "@/lib/dashboard-return";
 import { rejectNonProductionWrite } from "@/lib/write-guard";
@@ -90,20 +91,33 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  if (action === "exclude") {
-    await sql`
-      insert into audit_metric_exclusion (
-        matter_id, active, requested_by, request_reason, approved_by, approved_at, updated_at
-      ) values (
-        ${matterId}, true, ${String(form.get("requested_by") ?? "")}, ${reason || "Excluded by admin."}, 'Admin', now(), now()
-      )
-      on conflict (matter_id) do update set
-        active = true,
-        request_reason = excluded.request_reason,
-        approved_by = 'Admin',
-        approved_at = now(),
-        updated_at = now()
-    `;
+  if (action === "exclude" || action === "restore") {
+    try {
+      await writeMetricExclusion({
+        action,
+        matterId,
+        reason,
+        requestedBy: String(form.get("requested_by") ?? ""),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Metric update failed.";
+      return redirectBack(request, "/", {
+        tab,
+        from,
+        to,
+        attorney,
+        overall,
+        wstatus,
+        wfocus,
+        wstep,
+        cm,
+        sort,
+        dir,
+        page,
+        metrics: "failed",
+        notice: message,
+      }, matterId);
+    }
     return redirectBack(request, "/", {
       tab,
       from,
@@ -117,35 +131,8 @@ export async function POST(request: NextRequest) {
       sort,
       dir,
       page,
-      metrics: "excluded",
-      notice: "Matter excluded from Standards metrics.",
-    }, matterId);
-  }
-
-  if (action === "restore") {
-    await sql`
-      update audit_metric_exclusion
-      set active = false,
-          approved_by = '',
-          approved_at = null,
-          updated_at = now()
-      where matter_id = ${matterId}
-    `;
-    return redirectBack(request, "/", {
-      tab,
-      from,
-      to,
-      attorney,
-      overall,
-      wstatus,
-      wfocus,
-      wstep,
-      cm,
-      sort,
-      dir,
-      page,
-      metrics: "restored",
-      notice: "Matter restored to Standards metrics.",
+      metrics: action === "exclude" ? "excluded" : "restored",
+      notice: action === "exclude" ? "Matter excluded from Standards metrics." : "Matter restored to Standards metrics.",
     }, matterId);
   }
 
