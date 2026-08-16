@@ -967,12 +967,17 @@ function isStandardsStep(stepCode: string): boolean {
   return stepCode === "SETUP_WELCOME" || stepCode === "SETUP_ATTY_CALL" || stepCode === "SETUP_COURT_DATE";
 }
 
-function isParkCityMatter(item: WorkspaceAuditItem): boolean {
+export type CaseManagerMapItem = Pick<
+  WorkspaceAuditItem,
+  "responsible_attorney_name" | "case_manager_name" | "matter_number" | "client_first_name" | "client_last_name"
+>;
+
+function isParkCityMatter(item: CaseManagerMapItem): boolean {
   const text = normalizeOwnerName(`${item.matter_number} ${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`);
   return text.includes("park city") || text.includes("parkcity");
 }
 
-export function standardsCaseManagerFor(item: WorkspaceAuditItem): string {
+export function standardsCaseManagerFor(item: CaseManagerMapItem): string {
   const attorney = normalizeOwnerName(item.responsible_attorney_name);
   const manualCaseManager = canonicalCaseManagerName(item.case_manager_name);
   if (attorney.includes("andrew hans")) return "Alessandra";
