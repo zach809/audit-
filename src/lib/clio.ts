@@ -271,10 +271,15 @@ export class ClioClient {
     return JSON.parse(text) as T;
   }
 
-  async list<T>(path: string, query: Query): Promise<T[]> {
+  async list<T>(path: string, query: Query, maxPages?: number): Promise<T[]> {
     const results: T[] = [];
     let pageToken: string | undefined;
+    let pages = 0;
     do {
+      pages += 1;
+      if (maxPages !== undefined && pages > maxPages) {
+        throw new Error(`Clio list ${path} exceeded ${maxPages} pages; the audit watermark will not advance`);
+      }
       const response = await this.request<ListResponse<T>>(path, {
         ...query,
         limit: 200,

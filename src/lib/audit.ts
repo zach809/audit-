@@ -100,10 +100,19 @@ type EvidenceErrors = {
   communications?: string;
   calendars?: string;
 };
-type EvidenceBundle = {
+export type EvidenceBundle = {
   communications: ClioCommunication[];
   calendars: ClioCalendarEntry[];
   errors: EvidenceErrors;
+};
+export type AuditRunStamp = {
+  status: string;
+  finished_at?: Date | string | null;
+};
+export type EvidenceSweepWindow = {
+  since: Date;
+  until: Date;
+  kind: "initial" | "incremental";
 };
 type AuditBatchFilters = {
   attorney?: string;
@@ -525,16 +534,148 @@ async function discoverRecentMattersFirst(client: ClioClient, lookbackDays: numb
   return discoverMatters(client, recentWindowDays);
 }
 
-async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<EvidenceBundle> {
+export const SWEEP_OVERLAP_MS = 15 * 60 * 1000;
+export const INITIAL_SWEEP_MAX_PAGES = 40;
+const COMMUNICATION_FIELDS =
+  "id,subject,body,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}";
+const CALENDAR_FIELDS =
+  "id,summary,description,start_at,end_at,created_at,all_day,matter{id},calendar_owner{id,name},calendar_entry_event_type{id,name}";
+
+type EvidenceClient = Pick<ClioClient, "list">;
+
+function nestedMatterId(item: { matter?: { id?: number } | null }): string | null {
+  const id = item.matter?.id;
+  return typeof id === "number" && Number.isFinite(id) ? String(id) : null;
+}
+
+export function lastCompletedFinishedAt(runs: AuditRunStamp[]): Date | null {
+  let latest: Date | null = null;
+  for (const run of runs) {
+    if (run.status !== "completed" || run.finished_at == null) continue;
+    const at = run.finished_at instanceof Date ? run.finished_at : new Date(run.finished_at);
+    if (Number.isNaN(at.getTime())) continue;
+    if (!latest || at > latest) latest = at;
+  }
+  return latest;
+}
+
+export function evidenceSweepWindow(args: {
+  runs: AuditRunStamp[];
+  now?: Date;
+  lookbackDays: number;
+  overlapMs?: number;
+  fullLookback?: boolean;
+}): EvidenceSweepWindow {
+  const now = args.now ?? new Date();
+  const overlap = args.overlapMs ?? SWEEP_OVERLAP_MS;
+  const completed = lastCompletedFinishedAt(args.runs);
+  if (!completed || args.fullLookback) {
+    return {
+      since: new Date(now.getTime() - args.lookbackDays * 24 * 60 * 60 * 1000),
+      until: now,
+      kind: "initial",
+    };
+  }
+  return {
+    since: new Date(completed.getTime() - overlap),
+    until: now,
+    kind: "incremental",
+  };
+}
+
+export function groupEvidenceByMatter(
+  communications: ClioCommunication[],
+  calendars: ClioCalendarEntry[],
+  errors: EvidenceErrors = {},
+): Map<string, EvidenceBundle> {
+  const grouped = new Map<string, EvidenceBundle>();
+  const bundle = (id: string) => {
+    const existing = grouped.get(id);
+    if (existing) return existing;
+    const created: EvidenceBundle = { communications: [], calendars: [], errors: { ...errors } };
+    grouped.set(id, created);
+    return created;
+  };
+  for (const comm of communications) {
+    const id = nestedMatterId(comm);
+    if (id) bundle(id).communications.push(comm);
+  }
+  for (const cal of calendars) {
+    const id = nestedMatterId(cal);
+    if (id) bundle(id).calendars.push(cal);
+  }
+  return grouped;
+}
+
+export function pickEvidenceForMatters(
+  grouped: Map<string, EvidenceBundle>,
+  matterIds: Iterable<string>,
+): Map<string, EvidenceBundle> {
+  const allow = new Set(matterIds);
+  const picked = new Map<string, EvidenceBundle>();
+  for (const [id, bundle] of grouped) {
+    if (allow.has(id)) picked.set(id, bundle);
+  }
+  return picked;
+}
+
+export function shouldWriteSweepAudit(args: {
+  kind: EvidenceSweepWindow["kind"];
+  communicationCount: number;
+  calendarCount: number;
+  hasPriorItems: boolean;
+}): "audit" | "keep-prior" {
+  const hits = args.communicationCount + args.calendarCount > 0;
+  if (hits) return "audit";
+  if (args.hasPriorItems || args.kind === "incremental") return "keep-prior";
+  return "audit";
+}
+
+export function mergeSweepItems(fresh: AuditItemResult[], prior: AuditItemResult[]): AuditItemResult[] {
+  const byStep = new Map(prior.map((item) => [item.stepCode, item]));
+  return fresh.map((item) => {
+    if (item.evidenceRefId) return item;
+    const prev = byStep.get(item.stepCode);
+    return prev?.evidenceRefId ? prev : item;
+  });
+}
+
+function itemFromRow(row: {
+  step_code: StepCode;
+  status: AuditStatus;
+  operational_state: string;
+  deadline_at: Date | null;
+  corrective_deadline_at: Date | null;
+  evidence_at: Date | null;
+  evidence_source: AuditItemResult["evidenceSource"];
+  evidence_ref_id: string | null;
+  evidence_url: string | null;
+  reason_code: string | null;
+}): AuditItemResult {
+  return {
+    stepCode: row.step_code,
+    status: row.status,
+    operationalState: row.operational_state,
+    deadlineAt: row.deadline_at,
+    correctiveDeadlineAt: row.corrective_deadline_at,
+    evidenceAt: row.evidence_at,
+    evidenceSource: row.evidence_source,
+    evidenceRefId: row.evidence_ref_id,
+    evidenceUrl: row.evidence_url,
+    reasonCode: row.reason_code,
+  };
+}
+
+export async function fetchEvidence(client: EvidenceClient, matter: MatterRecord): Promise<EvidenceBundle> {
   const calendarFrom = new Date(matter.matter_created_at.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const calendarTo = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const [communicationsResult, calendarsResult] = await Promise.allSettled([
     client.list<ClioCommunication>("/communications.json", {
-      fields: "id,subject,body,type,date,created_at,received_at,matter{id},user{id,name},senders{id,name,type},receivers{id,name,type},external_properties{name,value}",
+      fields: COMMUNICATION_FIELDS,
       matter_id: matter.matter_id,
     }),
     client.list<ClioCalendarEntry>("/calendar_entries.json", {
-      fields: "id,summary,description,start_at,end_at,created_at,all_day,matter{id},calendar_owner{id,name},calendar_entry_event_type{id,name}",
+      fields: CALENDAR_FIELDS,
       matter_id: matter.matter_id,
       from: calendarFrom,
       to: calendarTo,
@@ -548,6 +689,47 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
     calendars: calendarsResult.status === "fulfilled" ? calendarsResult.value : [],
     errors,
   };
+}
+
+export async function sweepFirmEvidence(
+  client: EvidenceClient,
+  window: EvidenceSweepWindow,
+): Promise<{ grouped: Map<string, EvidenceBundle>; errors: EvidenceErrors }> {
+  const calendarQuery =
+    window.kind === "initial"
+      ? {
+          fields: CALENDAR_FIELDS,
+          from: new Date(window.since.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+          to: new Date(window.until.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        }
+      : {
+          fields: CALENDAR_FIELDS,
+          updated_since: window.since.toISOString(),
+        };
+  const [communicationsResult, calendarsResult] = await Promise.allSettled([
+    client.list<ClioCommunication>(
+      "/communications.json",
+      { fields: COMMUNICATION_FIELDS, updated_since: window.since.toISOString() },
+      INITIAL_SWEEP_MAX_PAGES,
+    ),
+    client.list<ClioCalendarEntry>("/calendar_entries.json", calendarQuery, INITIAL_SWEEP_MAX_PAGES),
+  ]);
+  const errors: EvidenceErrors = {};
+  if (communicationsResult.status === "rejected") {
+    if (isSweepPageBound(communicationsResult.reason)) throw communicationsResult.reason;
+    errors.communications = apiReason(communicationsResult.reason, "communications");
+  }
+  if (calendarsResult.status === "rejected") {
+    if (isSweepPageBound(calendarsResult.reason)) throw calendarsResult.reason;
+    errors.calendars = apiReason(calendarsResult.reason, "calendars");
+  }
+  const communications = communicationsResult.status === "fulfilled" ? communicationsResult.value : [];
+  const calendars = calendarsResult.status === "fulfilled" ? calendarsResult.value : [];
+  return { grouped: groupEvidenceByMatter(communications, calendars, errors), errors };
+}
+
+function isSweepPageBound(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("exceeded") && error.message.includes("pages");
 }
 
 export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
@@ -1093,14 +1275,74 @@ export async function auditNextBatch(
               m.matter_created_at desc
             limit ${batchSize}
           `;
+    const priorCountRows =
+      matters.length === 0
+        ? []
+        : await sql<{ matter_id: string; count: number }[]>`
+            select matter_id, count(*)::int as count
+            from audit_item
+            where matter_id in ${sql(matters.map((row) => row.matter_id))}
+            group by matter_id
+          `;
+    const priorCounts = new Map(priorCountRows.map((row) => [String(row.matter_id), Number(row.count)]));
+    const priorRuns = await sql<AuditRunStamp[]>`
+      select status, finished_at
+      from audit_run
+      where id <> ${runId}
+    `;
+    const window = evidenceSweepWindow({
+      runs: priorRuns,
+      lookbackDays: config.initialLookbackDays,
+      fullLookback: matters.some((row) => (priorCounts.get(row.matter_id) ?? 0) === 0),
+    });
+    const sweep =
+      matters.length === 0
+        ? { grouped: new Map<string, EvidenceBundle>(), errors: {} }
+        : await sweepFirmEvidence(client, window);
+    const scoped = pickEvidenceForMatters(
+      sweep.grouped,
+      matters.map((row) => row.matter_id),
+    );
     for (const matter of matters) {
       if (options.maxRunMs && audited > 0 && Date.now() - startedAt > options.maxRunMs) {
         break;
       }
       try {
-        const evidence = await fetchEvidence(client, matter);
-        const result = auditMatter(matter, evidence);
-        await upsertItems(matter.matter_id, result.items, result.overallStatus, result.court);
+        const swept = scoped.get(matter.matter_id) ?? {
+          communications: [],
+          calendars: [],
+          errors: sweep.errors,
+        };
+        const hasPriorItems = (priorCounts.get(matter.matter_id) ?? 0) > 0;
+        const decision = shouldWriteSweepAudit({
+          kind: window.kind,
+          communicationCount: swept.communications.length,
+          calendarCount: swept.calendars.length,
+          hasPriorItems,
+        });
+        if (decision === "keep-prior") {
+          await sql`update audit_matter set last_audited_at = now() where matter_id = ${matter.matter_id}`;
+          audited += 1;
+          continue;
+        }
+        const result = auditMatter(matter, swept);
+        let items = result.items;
+        let overallStatus = result.overallStatus;
+        const court =
+          result.court.last || result.court.next
+            ? result.court
+            : { last: matter.last_court_date, next: matter.next_court_date };
+        if (hasPriorItems) {
+          const priorRows = await sql<Parameters<typeof itemFromRow>[0][]>`
+            select step_code, status, operational_state, deadline_at, corrective_deadline_at,
+                   evidence_at, evidence_source, evidence_ref_id, evidence_url, reason_code
+            from audit_item
+            where matter_id = ${matter.matter_id}
+          `;
+          items = mergeSweepItems(items, priorRows.map(itemFromRow));
+          overallStatus = overall(items);
+        }
+        await upsertItems(matter.matter_id, items, overallStatus, court);
         audited += 1;
       } catch (error) {
         const status = apiReason(error, "matter");

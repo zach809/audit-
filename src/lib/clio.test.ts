@@ -143,6 +143,21 @@ describe("ClioClient rate limit", () => {
     assert.ok(gap >= 300, `expected remaining-based pause, gap=${gap} arrivals=${stub.arrivals.join(",")}`);
   });
 
+  it("stops a first-run list after the page bound so the watermark can stay put", async () => {
+    const stub: Stub = {
+      arrivals: [],
+      paths: [],
+      handler: (_req, res) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ data: [{ id: stub.arrivals.length }], meta: { paging: { next: "http://x/list.json?page_token=more" } } }));
+      },
+    };
+    await withClient(stub, async (client) => {
+      await assert.rejects(() => client.list("/list.json", {}, 2), /exceeded 2 pages/);
+    });
+    assert.equal(stub.arrivals.length, 2);
+  });
+
   it("uses a more conservative X-RateLimit-Limit and will not go faster than the configured floor", async () => {
     const stub: Stub = {
       arrivals: [],
