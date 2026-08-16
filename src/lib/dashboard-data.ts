@@ -6,12 +6,44 @@ import { reviewResult } from "./review-shared";
 import { APP_VERSION } from "./version";
 import { buildStandardsScorecard } from "./standards-scorecard";
 
+export const MATTER_SORTS = ["date", "attorney", "case_manager", "compliance"] as const;
+export type MatterSort = (typeof MATTER_SORTS)[number];
+export type MatterDir = "asc" | "desc";
+
+export const DEFAULT_MATTER_PAGE_SIZE = 25;
+export const EXPORT_MATTER_PAGE_SIZE = 10_000;
+
 export type DashboardFilters = {
   attorney?: string;
   overall?: string;
   from?: string;
   to?: string;
+  page?: number;
+  pageSize?: number;
+  sort?: string;
+  dir?: string;
 };
+
+export function parseMatterPage(value: unknown): number {
+  if (typeof value !== "string" && typeof value !== "number") return 1;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return 1;
+  return n;
+}
+
+export function parseMatterSort(value: unknown): MatterSort {
+  if (value === "date" || value === "attorney" || value === "case_manager" || value === "compliance") return value;
+  return "compliance";
+}
+
+export function parseMatterDir(value: unknown): MatterDir {
+  return value === "asc" ? "asc" : "desc";
+}
+
+function matterPageSize(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return DEFAULT_MATTER_PAGE_SIZE;
+  return Math.min(value, EXPORT_MATTER_PAGE_SIZE);
+}
 
 type ActionCsvRow = {
   matter_id: string;
@@ -186,6 +218,11 @@ export function logicIssueNextStep(row: LogicIssueRow): string {
 export async function getDashboardData(filters: DashboardFilters = {}) {
   await initDb();
   const sql = db();
+  const page = parseMatterPage(filters.page ?? 1);
+  const pageSize = matterPageSize(filters.pageSize);
+  const sort = parseMatterSort(filters.sort);
+  const dir = filters.dir === "asc" || filters.dir === "desc" ? filters.dir : sort === "compliance" ? "asc" : "desc";
+  const offset = (page - 1) * pageSize;
   const attorneyCondition =
     filters.attorney === "__unassigned"
       ? sql`(m.responsible_attorney_id is null or m.responsible_attorney_id = '')`
@@ -302,8 +339,34 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       else i.reason_code
     end
   `;
+  const complianceRank = sql`
+    case
+      when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 6
+      when count(*) filter (where (${normalizedItemStatus}) = 'Unknown') > 0 then 5
+      when count(*) filter (where (${normalizedItemStatus}) = 'Missing') > 0 then 4
+      when count(*) filter (where (${normalizedItemStatus}) = 'Late') > 0 then 3
+      when count(*) filter (where (${normalizedItemStatus}) = 'Pending') > 0 then 2
+      else 1
+    end
+  `;
+  const matterOrder =
+    sort === "date"
+      ? dir === "asc"
+        ? sql`m.matter_created_at asc nulls last, m.matter_id asc`
+        : sql`m.matter_created_at desc nulls last, m.matter_id desc`
+      : sort === "attorney"
+        ? dir === "asc"
+          ? sql`coalesce(m.responsible_attorney_name, '') asc, m.matter_id asc`
+          : sql`coalesce(m.responsible_attorney_name, '') desc, m.matter_id desc`
+        : sort === "case_manager"
+          ? dir === "asc"
+            ? sql`coalesce(max(nullif(r.case_manager_name, '')), 'Unassigned') asc, m.matter_id asc`
+            : sql`coalesce(max(nullif(r.case_manager_name, '')), 'Unassigned') desc, m.matter_id desc`
+          : dir === "asc"
+            ? sql`${complianceRank} asc, m.matter_created_at desc, m.matter_id asc`
+            : sql`${complianceRank} desc, m.matter_created_at desc, m.matter_id desc`;
 
-  const [matters, attorneys, summary, lastRun, metrics, workspaceItems] = await Promise.all([
+  const [matters, attorneys, summary, lastRun, metrics, workspaceItems, matterCount] = await Promise.all([
     sql`
     select
       m.*,
@@ -343,26 +406,6 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
           'reviewedBy', r.reviewed_by,
           'reviewCompletedAt', r.review_completed_at,
           'reviewUpdatedAt', r.updated_at,
-          'reviewHistory', coalesce((
-            select json_agg(
-              json_build_object(
-                'historyId', h.history_id,
-                'updatedAt', h.updated_at,
-                'updatedBy', h.updated_by,
-                'previousDecision', h.previous_decision,
-                'decision', h.review_decision,
-                'resultsDetails', h.results_details,
-                'caseManagerName', h.case_manager_name,
-                'proofType', h.proof_type,
-                'proofReference', h.proof_reference,
-                'nextStep', h.next_step,
-                'reportSummary', h.report_summary
-              )
-              order by h.updated_at desc, h.history_id desc
-            )
-            from audit_review_history h
-            where h.matter_id = i.matter_id and h.step_code = i.step_code
-          ), '[]'::json),
           'reasonCode', ${normalizedReasonCode}
         )
         order by i.step_code
@@ -378,10 +421,9 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         where visible_item.matter_id = m.matter_id
       )
     group by m.matter_id, mex.active, mex.requested_by, mex.request_reason, mex.updated_at
-    order by
-      case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
-      m.matter_created_at desc
-    limit 150
+    order by ${matterOrder}
+    limit ${pageSize}
+    offset ${offset}
   `,
     sql`
     select responsible_attorney_id as id, responsible_attorney_name as name, count(*)::int as count
@@ -514,6 +556,16 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       i.step_code
     limit 1000
   `,
+    sql`
+    select count(*)::int as matter_total
+    from audit_matter m
+    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
+      and exists (
+        select 1
+        from audit_item visible_item
+        where visible_item.matter_id = m.matter_id
+      )
+  `,
   ]);
 
   return {
@@ -523,11 +575,12 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     lastRun: lastRun[0] ?? null,
     metrics,
     workspaceItems,
+    matterTotal: matterCount[0]?.matter_total ?? 0,
   };
 }
 
 export async function dashboardCsv(filters: DashboardFilters = {}): Promise<string> {
-  const { matters } = await getDashboardData(filters);
+  const { matters } = await getDashboardData({ ...filters, page: 1, pageSize: EXPORT_MATTER_PAGE_SIZE });
   const headers = [
     "Client Name",
     "Matter Number",
