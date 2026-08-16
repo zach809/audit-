@@ -22,6 +22,8 @@ import { MatterReviewControls } from "./matter-review-controls";
 import { CopyTextButton } from "./copy-text-button";
 import { MatterAiHelp } from "./matter-ai-help";
 import { LogicAiReview } from "./logic-ai-review";
+import { RestoreMatterFocus } from "./restore-matter-focus";
+import { matterFocusId } from "@/lib/dashboard-return";
 import {
   actionFor,
   auditItemPriority,
@@ -110,6 +112,7 @@ type WorkspaceRow = {
 
 type CaseManagerTask = {
   attorney: string;
+  caseManager: string;
   row: WorkspaceRow;
 };
 
@@ -1324,6 +1327,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
 
   return (
     <main className="shell">
+      <RestoreMatterFocus />
       <div className="topbar app-header">
         <div className="title">
           <div className="eyebrow-row">
@@ -2151,7 +2155,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   const clioLinks = problemClioLinks(item.row.matterId, item.row.stepCode);
                   const proofHref = evidencePath(item.row as DashboardItem, true);
                   return (
-                    <article className={`ongoing-action-card status-row-${statusClass(item.row.status)}`} key={`${item.row.matterId}-${item.row.stepCode}`}>
+                    <article className={`ongoing-action-card status-row-${statusClass(item.row.status)}`} id={matterFocusId(item.row.matterId) ?? undefined} key={`${item.row.matterId}-${item.row.stepCode}`}>
                       <div className="ongoing-action-main">
                         <div>
                           <span className="label">{workflowLabel(item.row.stepCode)}</span>
@@ -2327,7 +2331,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               {postClosureData.rows.map((row) => {
                 const clientName = `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim() || "Unnamed Client";
                 return (
-                  <details className={`post-closure-card status-row-${statusClass(row.display_status)}`} key={`${row.matter_id}-${row.touchpoint_months}`}>
+                  <details className={`post-closure-card status-row-${statusClass(row.display_status)}`} id={matterFocusId(row.matter_id) ?? undefined} key={`${row.matter_id}-${row.touchpoint_months}`}>
                     <summary className="post-closure-card-head">
                       <div>
                         <span className="label">{row.touchpoint_label} Follow-Up</span>
@@ -2872,7 +2876,7 @@ Items Still Needing Action
             caseManagerTasks.map((item) => {
               const href = evidencePath(item.row as DashboardItem, true);
               return (
-                <article className={`panel case-manager-task status-row-${statusClass(item.row.status)}`} key={`${item.row.matterId}-${item.row.stepCode}`}>
+                <article className={`panel case-manager-task status-row-${statusClass(item.row.status)}`} id={matterFocusId(item.row.matterId) ?? undefined} key={`${item.row.matterId}-${item.row.stepCode}`}>
                   <div className="case-manager-task-head">
                     <div>
                       <span className="label">{workflowLabel(item.row.stepCode)}</span>
@@ -2882,6 +2886,8 @@ Items Still Needing Action
                     <div>
                       <span className="label">Attorney</span>
                       <strong>{item.attorney}</strong>
+                      <span className="label">Case Manager</span>
+                      <strong>{item.caseManager}</strong>
                     </div>
                     <div>
                       <span className="label">Status</span>
@@ -2931,7 +2937,7 @@ Items Still Needing Action
           const nextAction = attentionItems[0];
           const matterStatus = matterCardStatus(items, String(m.display_overall_status ?? m.overall_status));
           return (
-            <article className="matter-card" key={m.matter_id}>
+            <article className="matter-card" id={matterFocusId(String(m.matter_id)) ?? undefined} key={m.matter_id}>
               <div className="matter-head">
                 <div>
                   <h3>{`${m.client_first_name} ${m.client_last_name}`.trim() || "Unnamed Client"}</h3>
@@ -2940,6 +2946,14 @@ Items Still Needing Action
                 <div>
                   <span className="label">Attorney</span>
                   <strong>{m.responsible_attorney_name || "Unassigned"}</strong>
+                  <span className="label">Case Manager</span>
+                  <strong>{standardsCaseManagerFor({
+                    matter_number: m.matter_number,
+                    client_first_name: m.client_first_name,
+                    client_last_name: m.client_last_name,
+                    responsible_attorney_name: m.responsible_attorney_name,
+                    case_manager_name: items.find((item) => item.caseManagerName)?.caseManagerName ?? null,
+                  })}</strong>
                 </div>
                 <div>
                   <span className="label">Created</span>

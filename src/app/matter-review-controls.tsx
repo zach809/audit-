@@ -10,6 +10,7 @@ import {
   type ReviewDecision,
   type ReviewNextStep,
 } from "@/lib/review-shared";
+import { matterFocusId } from "@/lib/dashboard-return";
 
 type MatterReviewControlsProps = {
   matterId: string;
@@ -93,10 +94,19 @@ export function MatterReviewControls({
       setSaveState("saved");
       setMessage("Saved to CWCA. Updating this card...");
       setExpanded(false);
-      router.refresh();
-      window.setTimeout(() => {
-        window.location.reload();
-      }, 350);
+      const focusId = matterFocusId(matterId);
+      const next = new URL(window.location.href);
+      if (focusId) next.hash = focusId;
+      if (focusId && window.location.hash === `#${focusId}`) {
+        router.refresh();
+        const card = document.getElementById(focusId);
+        if (card instanceof HTMLElement) {
+          card.tabIndex = -1;
+          card.focus({ preventScroll: true });
+        }
+        return;
+      }
+      window.location.assign(next.toString());
     } catch (error) {
       setSaveState("error");
       setMessage(error instanceof Error ? error.message : "Could not save this review.");

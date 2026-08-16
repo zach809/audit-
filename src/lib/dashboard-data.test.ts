@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { getDashboardData } from "./dashboard-data";
+import { getDashboardData, standardsCaseManagerFor } from "./dashboard-data";
 
 function source(rel: string) {
   return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -116,3 +116,42 @@ describe("dashboard query batching", () => {
     assert.ok(wallMs < 200, `concurrent wall time should be near the slowest query, not the sum; got ${wallMs}ms`);
   });
 });
+
+describe("standardsCaseManagerFor", () => {
+  it("assigns Elanna Myers Park City matters to Ronald, and her other matters to Lori", () => {
+    assert.equal(
+      standardsCaseManagerFor({
+        matter_number: "PC-88",
+        client_first_name: "Park City",
+        client_last_name: "Holdings",
+        responsible_attorney_name: "Elanna Myers",
+        case_manager_name: null,
+      }),
+      "Ronald",
+    );
+    assert.equal(
+      standardsCaseManagerFor({
+        matter_number: "2026-440",
+        client_first_name: "Jordan",
+        client_last_name: "Reyes",
+        responsible_attorney_name: "Elanna Myers",
+        case_manager_name: null,
+      }),
+      "Lori",
+    );
+  });
+
+  it("shows Unassigned when no attorney map or manual name exists", () => {
+    assert.equal(
+      standardsCaseManagerFor({
+        matter_number: "2026-001",
+        client_first_name: "Sam",
+        client_last_name: "Lee",
+        responsible_attorney_name: "Someone New",
+        case_manager_name: null,
+      }),
+      "Unassigned",
+    );
+  });
+});
+

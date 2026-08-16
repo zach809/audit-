@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { caseManagerSession, isValidSessionCookie } from "@/lib/session";
+import { dashboardReturnUrl, matterFocusId } from "@/lib/dashboard-return";
 import { rejectNonProductionWrite } from "@/lib/write-guard";
 
-function redirectBack(request: NextRequest, path: string, params: Record<string, string>) {
+function redirectBack(request: NextRequest, path: string, params: Record<string, string>, matterId?: string) {
+  if (path === "/") {
+    return NextResponse.redirect(new URL(dashboardReturnUrl(params, matterId), request.url), 303);
+  }
   const url = new URL(path, request.url);
   for (const [key, value] of Object.entries(params)) {
     if (value) url.searchParams.set(key, value);
   }
+  const focus = matterFocusId(matterId);
+  if (focus) url.hash = focus;
   return NextResponse.redirect(url, 303);
 }
 
@@ -67,7 +73,7 @@ export async function POST(request: NextRequest) {
       attorney,
       metrics: "requested",
       message: "Request sent. This item is protected while admin reviews whether it should count.",
-    });
+    }, matterId);
   }
 
   if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
@@ -98,7 +104,7 @@ export async function POST(request: NextRequest) {
       wfocus,
       metrics: "excluded",
       notice: "Matter excluded from Standards metrics.",
-    });
+    }, matterId);
   }
 
   if (action === "restore") {
@@ -120,7 +126,7 @@ export async function POST(request: NextRequest) {
       wfocus,
       metrics: "restored",
       notice: "Matter restored to Standards metrics.",
-    });
+    }, matterId);
   }
 
   return redirectBack(request, action === "request" ? "/case-manager" : "/", {
@@ -133,5 +139,5 @@ export async function POST(request: NextRequest) {
     wfocus,
     metrics: "failed",
     notice: "Unknown metric action.",
-  });
+  }, matterId);
 }
