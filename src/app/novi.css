@@ -606,3 +606,133 @@ body:has(.novi) .command-task-actions {
     transition-duration: 0.01ms;
   }
 }
+
+/* ============================================================================
+   THE OTHER FOUR PAGES
+
+   `novi.css` was loaded globally but only styled the dashboard's own classes
+   (.today-*), so /login, /case-manager, /case-manager/login and
+   /evidence/[type]/[id] still rendered on the old light stylesheet. Four
+   surfaces on a five-page product, each one a different world from the one
+   next to it.
+
+   The world is applied at the BODY, not per container — scoping it to a single
+   root is what previously left table text inheriting the light theme's dark ink
+   and rendering invisible.
+   ========================================================================= */
+body {
+  background: #050505;
+  color: #ffffff;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+h1, h2, h3 {
+  font-family: "Bricolage Grotesque", Inter, system-ui, sans-serif;
+  font-weight: 300; letter-spacing: -0.025em; color: #ffffff;
+}
+::selection { background: #00e5ff; color: #050505; }
+:where(a, button, input, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid #00e5ff; outline-offset: 2px;
+}
+
+/* ---------- the shell of every page becomes one framed instrument ---------- */
+.shell, .cm-portal-shell, .cm-login-shell, .login {
+  position: relative; z-index: 1;
+  max-width: 1280px; margin: 0 auto; padding: 40px 32px 72px;
+  background: rgba(10,10,10,0.72);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.60);
+}
+.shell::before, .cm-portal-shell::before, .cm-login-shell::before, .login::before,
+.shell::after,  .cm-portal-shell::after,  .cm-login-shell::after,  .login::after {
+  content: ""; position: absolute; width: 24px; height: 24px; pointer-events: none;
+  border-color: rgba(0,229,255,0.40); border-style: solid; border-width: 0;
+}
+.shell::before, .cm-portal-shell::before, .cm-login-shell::before, .login::before {
+  top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px;
+}
+.shell::after, .cm-portal-shell::after, .cm-login-shell::after, .login::after {
+  bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px;
+}
+
+/* ---------- the two login screens: centred, not a stray form on a black field ---------- */
+.login, .cm-login-shell {
+  min-height: auto; margin: 8vh auto; max-width: 460px;
+  display: grid; align-content: start; gap: 20px;
+}
+.login h1, .cm-login-shell h1 { margin: 0; font-size: clamp(2rem, 6vw, 3rem); line-height: 1.02; }
+.login form, .cm-login-shell form { display: grid; gap: 12px; width: 100%; }
+.login label, .cm-login-shell label { display: grid; gap: 6px; width: 100%; }
+.login input, .cm-login-shell input { width: 100%; }
+.login button, .cm-login-shell button { justify-self: start; }
+
+/* ---------- shared controls, matching the dashboard exactly ---------- */
+input, select, textarea {
+  font: inherit; min-height: 42px; padding: 10px 14px; border-radius: 0;
+  background: #0a0a0a; color: #ffffff;
+  border: 1px solid rgba(0,229,255,0.14);
+}
+input::placeholder, textarea::placeholder { color: #6a6a6a; }
+button, .button {
+  font: inherit; font-weight: 500; min-height: 42px; padding: 10px 18px;
+  border-radius: 0; cursor: pointer;
+  background: #0a0a0a; color: #ffffff;
+  border: 1px solid rgba(0,229,255,0.14);
+  transition: background 90ms linear, border-color 90ms linear;
+}
+button:hover, .button:hover { border-color: rgba(0,229,255,0.35); background: #0d1416; }
+button.primary, .button.primary {
+  background: #00e5ff; color: #050505; border-color: #00e5ff;
+  font-family: "JetBrains Mono", monospace; text-transform: uppercase;
+  letter-spacing: 0.12em; font-size: 12px;
+}
+button.primary:hover, .button.primary:hover { background: #6ff0ff; border-color: #6ff0ff; }
+button.compact, .button.compact { min-height: 34px; padding: 6px 14px; font-size: 12px; }
+a { color: #00e5ff; text-decoration: none; }
+a:not([class]), p a { text-decoration: underline; text-underline-offset: 3px; }
+a:hover { color: #ffffff; }
+
+/* ---------- panels and tables on every page ---------- */
+.panel, .cm-clear-first-panel, .cm-complete-details, .card, .report-card {
+  background: #0a0a0a; border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 0; padding: 24px; margin-bottom: 24px;
+}
+table { width: 100%; border-collapse: collapse; background: #0a0a0a; }
+th {
+  background: #050505; color: #8a8a8a;
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 14px 16px; text-align: left;
+  border-bottom: 1px solid #00e5ff;
+}
+td { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); font-variant-numeric: tabular-nums; }
+tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+tbody tr:hover { background: #0d1416; }
+
+/* ---------- utility, kept consistent with the dashboard ---------- */
+.muted, .small, .cm-assignment-note, .cm-active-filter-notice { color: #8a8a8a; }
+.attention { color: #ffb020; }
+.danger, .error { color: #ff4d5e; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.eyebrow, .label {
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  letter-spacing: 0.18em; text-transform: uppercase; color: #8a8a8a;
+}
+
+/* Chrome paints autofilled inputs with its own yellow and ignores background-color.
+   The only lever is an inset shadow the size of the field, plus text-fill-color. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0a0a0a inset;
+  box-shadow: 0 0 0 1000px #0a0a0a inset;
+  -webkit-text-fill-color: #ffffff;
+  caret-color: #00e5ff;
+  transition: background-color 9999s ease-in-out 0s;
+}
