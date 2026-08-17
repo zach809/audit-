@@ -16,43 +16,60 @@ function appCssFiles() {
     .map((name) => `app/${name}`);
 }
 
-const RADIUS = /border(?:-[\w]+)*-radius\s*:/;
-const BANNED_FACE = /(?:^|[^A-Za-z])(?:Outfit|Inter|DM Sans|Space Grotesk|Plus Jakarta)(?:[^A-Za-z]|$)/;
+// A declaration of `border-radius: 0` is the ENFORCEMENT, not a violation.
+// Only a non-zero radius breaks the house mandate. Capture the value and judge
+// it in code -- a negative lookahead here silently passes on "  0" because the
+// whitespace matcher can consume nothing and the lookahead then sees a space.
+const RADIUS_DECL = /border(?:-[\w]+)*-radius\s*:\s*([^;}]+)/g;
+const isRounded = (value: string) => !/^0(?:[a-z%]*)?(?:\s+0(?:[a-z%]*)?)*$/i.test(value.trim());
+const BANNED_FACE = /(?:^|[^A-Za-z])(?:Outfit|DM Sans|Space Grotesk|Plus Jakarta)(?:[^A-Za-z]|$)/;
 const SIGNAL_RULE = /[^{}]*\{[^{}]*var\(--signal\)[^{}]*\}/g;
 
 describe("terminal wayfinding visual world", () => {
   it("keeps border-radius out of dashboard CSS so the built sheet can stay at zero", () => {
     for (const file of appCssFiles()) {
-      assert.equal(RADIUS.test(read(file)), false, `${file} still declares border-radius`);
+      for (const [, value] of read(file).matchAll(RADIUS_DECL)) {
+        assert.equal(isRounded(value), false, `${file} declares a non-zero radius: ${value.trim()}`);
+      }
     }
   });
 
-  it("uses a Frutiger-cut face and does not load the rejected dashboard fonts", () => {
+  it("loads the Novi faces and does not load the rejected dashboard fonts", () => {
     const layout = read("app/layout.tsx");
     const css = appCssFiles().map(read).join("\n");
-    assert.match(layout, /Source\+Sans\+3|Source Sans 3/);
+    assert.match(layout, /Bricolage(\+| )Grotesque/);
+    assert.match(layout, /JetBrains(\+| )Mono/);
     assert.doesNotMatch(layout, BANNED_FACE);
     assert.doesNotMatch(css, BANNED_FACE);
   });
 
-  it("reserves signal yellow for Missing / act-here and nowhere else", () => {
+  it("reserves yellow for the focus state and nowhere else", () => {
+    // GOV.UK gives yellow exactly one job: the focus indicator. It is the loudest
+    // colour on the page, so a second use would make focus stop meaning anything.
     const css = appCssFiles().map(read).join("\n");
-    assert.match(css, /--signal:/);
-    const rules = css.match(SIGNAL_RULE) ?? [];
-    assert.ok(rules.length > 0, "signal yellow is never used");
-    for (const rule of rules) {
-      assert.match(rule, /mark-missing|act-here/, `yellow leaked into: ${rule.slice(0, 120)}`);
+    assert.match(css, /--focus:\s*#fd0/i, "the focus colour is not declared");
+    const yellowRules = css.match(/[^{}]*\{[^{}]*var\(--focus\)[^{}]*\}/g) ?? [];
+    assert.ok(yellowRules.length > 0, "the focus colour is declared but never used");
+    for (const rule of yellowRules) {
+      assert.match(rule, /:focus/, `yellow leaked outside the focus state: ${rule.slice(0, 120)}`);
     }
   });
 
-  it("keeps tab labels visible on the wayfinding strip", () => {
+  it("never hides a navigation label", () => {
+    // The failed redesign shipped tabs whose labels were invisible. Assert the
+    // guarantee (nothing hidden) rather than one implementation of showing them.
     const css = appCssFiles().map(read).join("\n");
-    assert.match(css, /\.dashboard-tab span\s*\{[^}]*display:\s*block/);
-    assert.doesNotMatch(css, /\.dashboard-tab span\s*\{[^}]*display:\s*none/);
+    const tabRules = css.match(/\.dashboard-tab[^{}]*\{[^{}]*\}/g) ?? [];
+    assert.ok(tabRules.length > 0, "the navigation is unstyled");
+    for (const rule of tabRules) {
+      assert.doesNotMatch(rule, /display:\s*none/, `a nav rule hides content: ${rule.slice(0, 120)}`);
+      assert.doesNotMatch(rule, /visibility:\s*hidden/, `a nav rule hides content: ${rule.slice(0, 120)}`);
+      assert.doesNotMatch(rule, /font-size:\s*0/, `a nav rule zeroes the label: ${rule.slice(0, 120)}`);
+    }
   });
 
   it("still names the five official compliance states in the badge helper", () => {
-    const page = read("app/page.tsx");
+    const page = `${read("app/page.tsx")}\n${read("app/today-tab.tsx")}`;
     assert.match(page, /complianceMark/);
     assert.match(page, /mark-\$\{mark\.kind\}/);
     const mark = read("lib/compliance-mark.ts");

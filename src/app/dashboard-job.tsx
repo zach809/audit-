@@ -9,6 +9,8 @@ import {
   prefsFromSearch,
 } from "@/lib/dashboard-prefs";
 import { jobShortcut, nextRowIndex, prevRowIndex } from "@/lib/dashboard-shortcuts";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type DashboardJobChromeProps = {
   caseManagers: readonly string[];
@@ -18,6 +20,7 @@ type DashboardJobChromeProps = {
   cmHrefs: Record<string, string>;
   wholeFirmHref: string;
   clearHref: string;
+  skin?: "legacy" | "today";
 };
 
 function jobRows(): HTMLElement[] {
@@ -38,6 +41,7 @@ export function DashboardJobChrome({
   cmHrefs,
   wholeFirmHref,
   clearHref,
+  skin = "legacy",
 }: DashboardJobChromeProps) {
   const findRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -120,6 +124,63 @@ export function DashboardJobChrome({
   const filtered = Boolean(currentCm);
   const findActive = query.trim().length > 0;
 
+  const banner = filtered ? (
+    <p className={skin === "today" ? "today-banner" : "job-filter-banner"} role="status">
+      Showing <strong>{currentCm}</strong> only. {shownCount} items need work, of {firmCount} for the whole firm.
+      <a href={wholeFirmHref}>Show the whole firm</a>
+    </p>
+  ) : (
+    <p className={skin === "today" ? "today-note" : "job-firm-note"}>
+      Whole firm. {firmCount} items need work. Pick your name to keep that list next time.
+    </p>
+  );
+  const findBanner = findActive ? (
+    <p className={skin === "today" ? "today-banner" : "job-filter-banner"} role="status">
+      Showing clients matching <strong>{query.trim()}</strong>. Hidden rows are still in the firm list.
+    </p>
+  ) : null;
+
+  if (skin === "today") {
+    return (
+      <section aria-label="Your work" className="today-chrome">
+        <ToggleGroup className="today-cm" type="single" value={currentCm || "firm"}>
+          <ToggleGroupItem asChild value="firm">
+            <a href={wholeFirmHref}>Whole firm</a>
+          </ToggleGroupItem>
+          {caseManagers.map((name) => (
+            <ToggleGroupItem asChild key={name} value={name}>
+              <a href={cmHrefs[name]}>{name}</a>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <div className="today-find">
+          <label>
+            Find a client
+            <Input
+              autoComplete="off"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Type a client name"
+              ref={findRef}
+              type="search"
+              value={query}
+            />
+          </label>
+          <p className="today-keys">
+            <kbd>j</kbd> <kbd>k</kbd> move
+            <span aria-hidden="true"> · </span>
+            <kbd>Enter</kbd> open the Clio tab
+            <span aria-hidden="true"> · </span>
+            <kbd>/</kbd> find
+            <span aria-hidden="true"> · </span>
+            <kbd>0</kbd> clear filters
+          </p>
+        </div>
+        {banner}
+        {findBanner}
+      </section>
+    );
+  }
+
   return (
     <section className="job-chrome" aria-label="Your work">
       <div className="job-cm-row">
@@ -158,19 +219,8 @@ export function DashboardJobChrome({
           <kbd>0</kbd> clear filters
         </p>
       </div>
-      {filtered ? (
-        <p className="job-filter-banner" role="status">
-          Showing <strong>{currentCm}</strong> only. {shownCount} items need work, of {firmCount} for the whole firm.
-          <a href={wholeFirmHref}>Show the whole firm</a>
-        </p>
-      ) : (
-        <p className="job-firm-note">Whole firm. {firmCount} items need work. Pick your name to keep that list next time.</p>
-      )}
-      {findActive ? (
-        <p className="job-filter-banner" role="status">
-          Showing clients matching <strong>{query.trim()}</strong>. Hidden rows are still in the firm list.
-        </p>
-      ) : null}
+      {banner}
+      {findBanner}
     </section>
   );
 }

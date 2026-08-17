@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
-import type { CSSProperties } from "react";
+import { Fragment, type CSSProperties } from "react";
+import { Owner, WorkStep } from "@/components/work-icons";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getDashboardData, DEFAULT_MATTER_PAGE_SIZE, parseMatterDir, parseMatterPage, parseMatterSort, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, standardsReportRows, weeklyComplianceComparisonRows, type MatterSort, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
@@ -16,7 +19,6 @@ import {
   POST_CLOSURE_TOUCHPOINTS,
 } from "@/lib/post-closure";
 import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-rules";
-import { TEMPLATE_REGISTRY } from "@/lib/template-registry";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
 import { MatterBulkBar, MatterSelect } from "./matter-bulk-bar";
@@ -26,6 +28,8 @@ import { MatterAiHelp } from "./matter-ai-help";
 import { LogicAiReview } from "./logic-ai-review";
 import { RestoreMatterFocus } from "./restore-matter-focus";
 import { DashboardJobChrome } from "./dashboard-job";
+import { TodayTab } from "./today-tab";
+import { DashboardNav } from "./dashboard-nav";
 import { matterFocusId } from "@/lib/dashboard-return";
 import { complianceMark } from "@/lib/compliance-mark";
 import {
@@ -47,10 +51,9 @@ export const dynamic = "force-dynamic";
 function badge(value: string | null | undefined) {
   const mark = complianceMark(value);
   return (
-    <span className={`badge mark-${mark.kind} ${statusClass(mark.label)}`}>
-      <span className="mark-shape" aria-hidden="true" />
+    <Badge className={`mark-${mark.kind}`} kind={mark.kind}>
       {mark.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -770,7 +773,7 @@ function workspaceFocusLabel(focus: string): string {
 
 function DashboardUnavailable({ message, connected }: { message: string; connected: boolean }) {
   return (
-    <main className="shell">
+    <main className="shell novi">
       <section className="app-header topbar">
         <div className="title">
           <div className="eyebrow-row">
@@ -1076,10 +1079,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   const maxAttorneyFollowUp = Math.max(1, ...topAttorneyChart.map((section) => section.needsFollowUp));
   const healthPct = totalCount ? Math.round((num(dashboardData.summary.pass) / totalCount) * 100) : 0;
   const donutSegments = [
-    { color: "oklch(0.2 0.014 250)", value: needsFollowUpCount },
-    { color: "oklch(0.17 0.012 250)", value: num(dashboardData.summary.pass) },
-    { color: "oklch(0.84 0.012 250)", value: num(dashboardData.summary.pending) },
-    { color: "oklch(0.38 0.02 250)", value: uncheckedCount },
+    { color: "#ff4d5e", value: needsFollowUpCount },
+    { color: "#00e5ff", value: num(dashboardData.summary.pass) },
+    { color: "#8a8a8a", value: num(dashboardData.summary.pending) },
+    { color: "#3a3a3a", value: uncheckedCount },
   ];
   let donutCursor = 0;
   const donutGradient = statusChartRawTotal
@@ -1090,7 +1093,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           return `${segment.color} ${start}% ${donutCursor}%`;
         })
         .join(", ")
-    : "oklch(0.38 0.02 250) 0% 100%";
+    : "#3a3a3a 0% 100%";
   const issueBreakdown = [
     { label: "Needs Action", value: num(dashboardData.summary.missing_items), className: "red" },
     { label: "Late Timing", value: num(dashboardData.summary.late_items), className: "amber" },
@@ -1402,7 +1405,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
   })();
 
   return (
-    <main className="shell">
+    <main className="shell novi">
       <RestoreMatterFocus />
       <div className="topbar app-header">
         <div className="title">
@@ -1444,41 +1447,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         </section>
       ) : null}
 
-      <nav className="dashboard-tabs" aria-label="Dashboard sections">
-        {DAILY_TABS.map((tab) => (
-          <DashboardTabLink active={activeTab === tab.id} href={tabLink(filters, tab.id)} key={tab.id} tab={tab} />
-        ))}
-        <details className="nav-group" open={RECORDS_TABS.some((tab) => tab.id === activeTab)}>
-          <summary className={RECORDS_TABS.some((tab) => tab.id === activeTab) ? "dashboard-tab active" : "dashboard-tab"}>
-            <span className="sign-picto" aria-hidden="true" />
-            <strong>Records</strong>
-            <span>Standards, reports, and the reading list</span>
-          </summary>
-          <div className="nav-group-panel">
-            {RECORDS_TABS.map((tab) => (
-              <DashboardTabLink active={activeTab === tab.id} href={tabLink(filters, tab.id)} key={tab.id} tab={tab} />
-            ))}
-          </div>
-        </details>
-        <details className="nav-group" open={activeTab === "debug"}>
-          <summary className={activeTab === "debug" ? "dashboard-tab active" : "dashboard-tab"}>
-            <span className="sign-picto" aria-hidden="true" />
-            <strong>Tools</strong>
-            <span>Audit Debug and Review Site</span>
-          </summary>
-          <div className="nav-group-panel">
-            {TOOL_TABS.map((tab) => (
-              <DashboardTabLink active={activeTab === tab.id} href={tabLink(filters, tab.id)} key={tab.id} tab={tab} />
-            ))}
-            <a className="dashboard-tab review-tab" href={REVIEW_SITE_URL} target="_blank" rel="noreferrer">
-              <span className="sign-picto" aria-hidden="true" />
-              <strong>Review Site</strong>
-              <span>Open Review Racer dashboard</span>
-            </a>
-          </div>
-        </details>
-      </nav>
-
+      <DashboardNav
+        activeTab={activeTab}
+        dailyTabs={DAILY_TABS.map((tab) => ({ ...tab, href: tabLink(filters, tab.id) }))}
+        recordsTabs={RECORDS_TABS.map((tab) => ({ ...tab, href: tabLink(filters, tab.id) }))}
+        reviewHref={REVIEW_SITE_URL}
+        toolsTabs={TOOL_TABS.map((tab) => ({ ...tab, href: tabLink(filters, tab.id) }))}
+      />
       <DashboardJobChrome
         caseManagers={STANDARD_CASE_MANAGERS}
         clearHref={filterLink({ tab: activeTab }, {})}
@@ -1486,156 +1461,38 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
         currentCm={workspaceCaseManagerFilter}
         firmCount={allWorkspaceRows.filter((item) => isFollowUpStatus(item.row.status)).length}
         shownCount={caseManagerWorkspaceRows.filter((item) => isFollowUpStatus(item.row.status)).length}
+        skin="today"
         wholeFirmHref={filterLink(urlState, { cm: "" })}
       />
 
       {activeTab === "command" ? (
-      <section className="command-center-layout">
-        <section className="panel command-hero">
-          <div>
-            <h2>Start with what is missing</h2>
-            <p className="muted">Open the matter, see who owns it, and do the next step in Clio. Nothing here is hover-only.</p>
-          </div>
-          <div className="command-actions">
-            <a className="button primary compact" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>Review Matters</a>
-            <a className="button compact" href="/case-manager">CM Task Page</a>
-            <a className="button compact" href={tabLink(filters, "standards")}>Standards</a>
-            <a className="button compact" href={tabLink(filters, "debug")}>Audit Debug</a>
-          </div>
-        </section>
-
-        <section className="command-metric-grid">
-          <a className="command-metric needs" href={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}>
-            <span>Needs Review</span>
-            <strong>{needsFollowUpCount}</strong>
-            <small>Items needing proof, timing review, or visibility review.</small>
-          </a>
-          <a className="command-metric" href={tabLink(filters, "standards")}>
-            <span>Standards score</span>
-            <strong>{kpiScore}%</strong>
-            <small>{kpiFollowUp} setup item{kpiFollowUp === 1 ? "" : "s"} still need proof.</small>
-          </a>
-          <a className="command-metric" href={tabLink(filters, "ongoing")}>
-            <span>Ongoing Cases</span>
-            <strong>{ongoingTotals.followUp}</strong>
-            <small>Client contact, weekly check-ins, and court reminder emails.</small>
-          </a>
-          <a className="command-metric" href={tabLink(filters, "post-closure")}>
-            <span>Post-Closure</span>
-            <strong>{postClosureNeedsOutreach}</strong>
-            <small>Closed-matter follow-ups needing review.</small>
-          </a>
-        </section>
-
-        <section className="panel demo-readiness-panel hidden-chrome">
-          <div>
-            <span className="label">Boss Demo Ready</span>
-            <h2>How To Read This Fast</h2>
-            <p className="muted small">CWCA is a read-only coaching tool. It does not change Clio. Scores improve only when proof is found in Clio or an approved exception is saved.</p>
-          </div>
-          <div className="demo-readiness-grid">
-            <a href={tabLink(filters, "matters")}><strong>1. Review Matters</strong><span>Open the exact client and proof links.</span></a>
-            <a href={tabLink(filters, "standards")}><strong>2. Check Standards</strong><span>See setup completion by case manager.</span></a>
-            <a href="/case-manager"><strong>3. CM Task Page</strong><span>Case managers clear tasks by proving them in Clio.</span></a>
-            <a href={tabLink(filters, "debug")}><strong>4. Audit Debug</strong><span>Use AI to spot matcher or stale-data issues.</span></a>
-          </div>
-        </section>
-
-        <section className="command-grid">
-          <div className="panel command-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Do these first</h2>
-              <p className="muted small">Highest-priority items in the selected date range. Client name, owner, and the Clio link are on the row.</p>
-            </div>
-              <a className="button compact" href={tabLink(filters, "matters")}>All Matters</a>
-            </div>
-            {todaysPriorities.length ? (
-              <div className="command-task-list">
-                {todaysPriorities.map((item) => {
-                  const primary = jobPrimaryAction(item.row.matterId, item.row.stepCode, item.row as DashboardItem);
-                  const missing = complianceMark(item.row.status).kind === "missing";
-                  return (
-                    <div
-                      className={`command-task status-row-${statusClass(item.row.status)}`}
-                      data-client-name={item.row.clientName}
-                      data-job-row
-                      key={`${item.row.matterId}-${item.row.stepCode}`}
-                    >
-                      <div>
-                        <span className="label">{workflowLabel(item.row.stepCode)}</span>
-                        <strong>{item.row.clientName}</strong>
-                        <small>{item.row.matterNumber} · {item.caseManager} · {item.attorney}</small>
-                      </div>
-                      {badge(displayItemStatus(item.row))}
-                      <div className="command-task-actions">
-                        <a
-                          className={missing ? "button compact primary act-here" : "button compact primary"}
-                          data-job-primary
-                          href={primary.href}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          {primary.label}
-                        </a>
-                        <a className="button compact" href={clioMatterPath(item.row.matterId)} rel="noreferrer" target="_blank">Matter</a>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="chart-empty">
-                <strong>No urgent items found.</strong>
-                <p>Run Audit Batch if this week has not been checked yet.</p>
-              </div>
-            )}
-          </div>
-
-          <div className="panel command-panel hidden-chrome">
-            <div className="panel-heading">
-              <div>
-                <span className="label">Template Proof</span>
-                <h2>Accepted Clio Email Subjects</h2>
-                <p className="muted small">CWCA checks Communications for these template subject patterns.</p>
-              </div>
-              <a className="button compact" href={tabLink(filters, "debug")}>Tune Rules</a>
-            </div>
-            <div className="template-registry-list">
-              {TEMPLATE_REGISTRY.map((entry) => (
-                <details className="template-registry-card" key={entry.category}>
-                  <summary>
-                    <strong>{entry.label}</strong>
-                    <span>{entry.subjects.length} subject pattern{entry.subjects.length === 1 ? "" : "s"}</span>
-                  </summary>
-                  <p>{entry.purpose}</p>
-                  <ul>
-                    {entry.subjects.slice(0, 8).map((subject) => <li key={subject}>{subject}</li>)}
-                  </ul>
-                </details>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="panel command-panel hidden-chrome">
-          <div className="panel-heading">
-            <div>
-              <span className="label">Product Map</span>
-              <h2>Where To Go Next</h2>
-              <p className="muted small">One job per area so the app does not feel like one endless page.</p>
-            </div>
-          </div>
-          <div className="command-route-grid">
-            <a href={tabLink(filters, "matters")}><strong>Matters</strong><span>Review proof for individual matters.</span></a>
-            <a href={tabLink(filters, "standards")}><strong>Standards</strong><span>Excel sheet, downloads, and sync.</span></a>
-            <a href={tabLink(filters, "ongoing")}><strong>Ongoing</strong><span>Client contact, weekly check-ins, court reminders.</span></a>
-            <a href={tabLink(filters, "reports")}><strong>Reports</strong><span>Exports, weekly comparisons, Google Sheets.</span></a>
-            <a href={tabLink(filters, "debug")}><strong>Audit Debug</strong><span>AI review, stale rows, matcher issues.</span></a>
-            <a href="/case-manager"><strong>CM Portal</strong><span>Case managers clear their own assigned tasks.</span></a>
-          </div>
-        </section>
-      </section>
+        <TodayTab
+          firmCount={allWorkspaceRows.filter((item) => isFollowUpStatus(item.row.status)).length}
+          kpiFollowUp={kpiFollowUp}
+          kpiScore={kpiScore}
+          mattersHref={filterLink({ ...filters, tab: "matters", overall: "Flag" }, {})}
+          ongoingFollowUp={ongoingTotals.followUp}
+          ongoingHref={tabLink(filters, "ongoing")}
+          postClosureCount={postClosureNeedsOutreach}
+          postClosureHref={tabLink(filters, "post-closure")}
+          rows={caseManagerWorkspaceRows
+            .filter((item) => isFollowUpStatus(item.row.status))
+            .sort((a, b) => auditItemPriority(a.row.status) - auditItemPriority(b.row.status) || a.attorney.localeCompare(b.attorney) || a.row.clientName.localeCompare(b.row.clientName))
+            .map((item) => {
+              const primary = jobPrimaryAction(item.row.matterId, item.row.stepCode, item.row as DashboardItem);
+              return {
+                actionHref: primary.href,
+                actionLabel: primary.label,
+                caseManager: item.caseManager,
+                clientName: item.row.clientName,
+                matterId: item.row.matterId,
+                matterNumber: item.row.matterNumber,
+                status: displayItemStatus(item.row),
+                stepLabel: workflowLabel(item.row.stepCode),
+              };
+            })}
+          standardsHref={tabLink(filters, "standards")}
+        />
       ) : null}
 
       {false ? (
@@ -2185,39 +2042,39 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             {excelWorkbookUrl ? <a className="button compact" href={excelWorkbookUrl} target="_blank" rel="noreferrer">Open Excel</a> : null}
             {googleSheetUrl ? <a className="button compact" href={googleSheetUrl} target="_blank" rel="noreferrer">Open Sheet</a> : null}
           </div>
-          <div className="standards-sheet-scroll">
-            <table className="standards-sheet-table">
-              <thead>
-                <tr>
-                  <th>Case Manager</th>
-                  <th>Date</th>
-                  <th>ATC / new matters #</th>
-                  <th>Initial Meeting set - Phone call</th>
-                  <th>Welcome letters sent</th>
-                  <th>Court date event made</th>
-                  <th>Weekly check-ins completed</th>
-                  <th>Workflow completion %</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="today-table-wrap">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Case Manager</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>ATC / new matters #</TableHead>
+                  <TableHead>Initial Meeting set - Phone call</TableHead>
+                  <TableHead>Welcome letters sent</TableHead>
+                  <TableHead>Court date event made</TableHead>
+                  <TableHead>Weekly check-ins completed</TableHead>
+                  <TableHead>Workflow completion %</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {standardsSheetPreviewRows.length ? standardsSheetPreviewRows.map((row) => (
-                  <tr key={`${row.caseManager}-${row.sortDate}`}>
-                    <td>{row.caseManager}</td>
-                    <td>{row.date}</td>
-                    <td>{row.newMatters}</td>
-                    <td>{row.attorneyCall}</td>
-                    <td>{row.welcome}</td>
-                    <td>{row.courtDate}</td>
-                    <td>{row.weeklyCheckIns}</td>
-                    <td>{row.completion}</td>
-                  </tr>
+                  <TableRow key={`${row.caseManager}-${row.sortDate}`}>
+                    <TableCell><Owner name={row.caseManager} /></TableCell>
+                    <TableCell>{row.date}</TableCell>
+                    <TableCell>{row.newMatters}</TableCell>
+                    <TableCell>{row.attorneyCall}</TableCell>
+                    <TableCell>{row.welcome}</TableCell>
+                    <TableCell>{row.courtDate}</TableCell>
+                    <TableCell>{row.weeklyCheckIns}</TableCell>
+                    <TableCell>{row.completion}</TableCell>
+                  </TableRow>
                 )) : (
-                  <tr>
-                    <td colSpan={8}>No standards rows in this date range yet.</td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={8}>No standards rows in this date range yet.</TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </details>
 
@@ -2269,28 +2126,56 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             </div>
             <textarea id="ongoing-teams-reminder" className="sr-copy-source" readOnly defaultValue={ongoingReminderLines} />
             {ongoingFollowUpItems.length ? (
-              <div className="ongoing-action-list">
+              <div className="today-table-wrap">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Matter</TableHead>
+                      <TableHead>Owner</TableHead>
+                      <TableHead>What is missing</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                 {ongoingFollowUpItems.map((item) => {
                   const clioLinks = problemClioLinks(item.row.matterId, item.row.stepCode);
                   const proofHref = evidencePath(item.row as DashboardItem, true);
+                  const primary = clioLinks[0];
                   return (
-                    <article className={`ongoing-action-card status-row-${statusClass(item.row.status)}`} id={matterFocusId(item.row.matterId) ?? undefined} key={`${item.row.matterId}-${item.row.stepCode}`}>
-                      <div className="ongoing-action-main">
-                        <div>
-                          <span className="label">{workflowLabel(item.row.stepCode)}</span>
-                          <h4>{item.row.clientName}</h4>
-                          <p>{item.row.matterNumber}</p>
+                    <Fragment key={`${item.row.matterId}-${item.row.stepCode}`}>
+                    <TableRow
+                      className={`status-row-${statusClass(item.row.status)}`}
+                      data-client-name={item.row.clientName}
+                      data-job-row
+                      id={matterFocusId(item.row.matterId) ?? undefined}
+                    >
+                      <TableCell>{badge(item.row.status)}</TableCell>
+                      <TableCell>
+                        <div className="today-matter">
+                          <strong>{item.row.clientName}</strong>
+                          <small>{item.row.matterNumber}</small>
                         </div>
-                        {badge(item.row.status)}
-                      </div>
+                      </TableCell>
+                      <TableCell><Owner name={item.caseManager} /></TableCell>
+                      <TableCell>
+                        <WorkStep label={workflowLabel(item.row.stepCode)} />
+                        <small>{item.row.deadlineAt ? `Due ${formatLocal(item.row.deadlineAt)}` : "No due date"}</small>
+                      </TableCell>
+                      <TableCell>
+                        {primary ? (
+                          <a className="today-action" data-job-primary href={primary.href} target="_blank" rel="noreferrer">{primary.label}</a>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={5}>
                       <p className="ongoing-action-reminder">{ongoingReminderText(item.row.stepCode)}</p>
                       <div className="ongoing-action-meta">
-                        <span><b>Case Manager</b>{item.caseManager}</span>
-                        <span><b>Attorney</b>{item.attorney}</span>
-                        <span><b>Due</b>{item.row.deadlineAt ? formatLocal(item.row.deadlineAt) : "No due date"}</span>
+                        <span><b>Attorney</b> {item.attorney}</span>
                       </div>
                       <div className="ongoing-action-buttons">
-                        {clioLinks.map((link) => (
+                        {clioLinks.slice(1).map((link) => (
                           <a className="button compact primary" href={link.href} target="_blank" rel="noreferrer" key={link.label}>{link.label}</a>
                         ))}
                         <form action="/api/audit/recheck-items" method="post">
@@ -2315,9 +2200,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                           buttonClassName="button compact warning"
                         />
                       </div>
-                    </article>
+                      </TableCell>
+                    </TableRow>
+                    </Fragment>
                   );
                 })}
+                  </TableBody>
+                </Table>
               </div>
             ) : (
               <div className="workspace-empty compact">
@@ -2439,33 +2328,49 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
           </details>
 
           {postClosureData.rows.length ? (
-            <div className="post-closure-list">
+            <div className="today-table-wrap">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Matter</TableHead>
+                    <TableHead>Owner</TableHead>
+                    <TableHead>What is missing</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
               {postClosureData.rows.map((row) => {
                 const clientName = `${row.client_first_name ?? ""} ${row.client_last_name ?? ""}`.trim() || "Unnamed Client";
                 return (
-                  <details className={`post-closure-card status-row-${statusClass(row.display_status)}`} id={matterFocusId(row.matter_id) ?? undefined} key={`${row.matter_id}-${row.touchpoint_months}`}>
+                  <Fragment key={`${row.matter_id}-${row.touchpoint_months}`}>
+                  <TableRow
+                    className={`status-row-${statusClass(row.display_status)}`}
+                    data-client-name={clientName}
+                    data-job-row
+                    id={matterFocusId(row.matter_id) ?? undefined}
+                  >
+                    <TableCell>{badge(row.display_status)}</TableCell>
+                    <TableCell>
+                      <div className="today-matter">
+                        <strong>{clientName}</strong>
+                        <small>{row.matter_number}</small>
+                      </div>
+                    </TableCell>
+                    <TableCell><Owner name={row.responsible_attorney_name || "Unassigned"} /></TableCell>
+                    <TableCell>
+                      <WorkStep label={`${row.touchpoint_label} Follow-Up`} />
+                      <small>Due {formatLocal(row.due_at)}</small>
+                    </TableCell>
+                    <TableCell>
+                      <a className="today-action" data-job-primary href={clioMatterPath(row.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell colSpan={5}>
+                  <details className="post-closure-card" open>
                     <summary className="post-closure-card-head">
-                      <div>
-                        <span className="label">{row.touchpoint_label} Follow-Up</span>
-                        <h3>{clientName}</h3>
-                        <p>{row.matter_number}</p>
-                      </div>
-                      <div>
-                        <span className="label">Attorney</span>
-                        <strong>{row.responsible_attorney_name || "Unassigned"}</strong>
-                      </div>
-                      <div>
-                        <span className="label">Closed</span>
-                        <strong>{formatLocal(row.matter_closed_at)}</strong>
-                      </div>
-                      <div>
-                        <span className="label">Due</span>
-                        <strong>{formatLocal(row.due_at)}</strong>
-                      </div>
-                      <div className="post-closure-card-actions">
-                        {badge(row.display_status)}
-                        <a className="button compact" href={clioMatterPath(row.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
-                      </div>
+                      <span>Closed {formatLocal(row.matter_closed_at)}. Record the call.</span>
                     </summary>
                     <div className="post-closure-card-body">
                       <div className="post-closure-purpose">
@@ -2521,8 +2426,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                       </form>
                     </div>
                   </details>
+                    </TableCell>
+                  </TableRow>
+                  </Fragment>
                 );
               })}
+                </TableBody>
+              </Table>
             </div>
           ) : (
             <div className="workspace-empty">
@@ -2562,31 +2472,31 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                   <strong>Case Manager: {section.caseManager}</strong>
                   <span>{section.previousWeekLabel} vs {section.currentWeekLabel}</span>
                 </summary>
-                <div className="weekly-compliance-table-wrap">
-                  <table className="weekly-compliance-table">
-                    <thead>
-                      <tr>
-                        <th>Compliance Category</th>
-                        <th>Previous Week</th>
-                        <th>Current Week</th>
-                        <th>Change</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <div className="today-table-wrap">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Compliance Category</TableHead>
+                        <TableHead>Previous Week</TableHead>
+                        <TableHead>Current Week</TableHead>
+                        <TableHead>Change</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {section.rows.map((row) => (
-                        <tr key={`${section.caseManager}-${row.category}`}>
-                          <td>{row.category}</td>
-                          <td>{row.previousWeek}</td>
-                          <td>{row.currentWeek}</td>
-                          <td>
+                        <TableRow key={`${section.caseManager}-${row.category}`}>
+                          <TableCell>{row.category}</TableCell>
+                          <TableCell>{row.previousWeek}</TableCell>
+                          <TableCell>{row.currentWeek}</TableCell>
+                          <TableCell>
                             <span className={`weekly-change ${row.change < 0 ? "improved" : row.change > 0 ? "worse" : "same"}`}>
                               {row.change > 0 ? `+${row.change}` : row.change}
                             </span>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </details>
             ))}
@@ -3074,7 +2984,20 @@ Items Still Needing Action
             excluded: Boolean(m.metric_excluded),
           }))}
         >
-        {dashboardData.matters.length ? dashboardData.matters.map((m) => {
+        {dashboardData.matters.length ? (
+        <div className="today-table-wrap">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Status</TableHead>
+              <TableHead>Matter</TableHead>
+              <TableHead>Owner</TableHead>
+              <TableHead>What is missing</TableHead>
+              <TableHead>Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+        {dashboardData.matters.map((m) => {
           const items = m.items as DashboardItem[];
           const evidenceItems = items.filter((i) => evidencePath(i));
           const refreshNeeded = needsMatterRefresh(items);
@@ -3083,34 +3006,46 @@ Items Still Needing Action
             .sort((a, b) => auditItemPriority(a.status) - auditItemPriority(b.status));
           const nextAction = attentionItems[0];
           const matterStatus = matterCardStatus(items, String(m.display_overall_status ?? m.overall_status));
+          const clientName = `${m.client_first_name ?? ""} ${m.client_last_name ?? ""}`.trim() || m.matter_number;
           return (
-            <article
+            <Fragment key={m.matter_id}>
+            <TableRow
               className="matter-card"
-              data-client-name={`${m.client_first_name ?? ""} ${m.client_last_name ?? ""}`.trim() || m.matter_number}
+              data-client-name={clientName}
               data-job-row
               id={matterFocusId(String(m.matter_id)) ?? undefined}
-              key={m.matter_id}
             >
-              <div className="matter-head">
-                <div>
-                  <MatterSelect
-                    matterId={String(m.matter_id)}
-                    name={`${m.client_first_name ?? ""} ${m.client_last_name ?? ""}`.trim() || m.matter_number}
-                  />
-                  <h3>{`${m.client_first_name} ${m.client_last_name}`.trim() || "Unnamed Client"}</h3>
-                  <p>{m.matter_number}</p>
+              <TableCell>{badge(matterStatus)}</TableCell>
+              <TableCell>
+                <div className="today-matter">
+                  <MatterSelect matterId={String(m.matter_id)} name={clientName} />
+                  <strong>{clientName || "Unnamed Client"}</strong>
+                  <small>{m.matter_number}</small>
                 </div>
+              </TableCell>
+              <TableCell>
+                <span className="label">Case Manager</span>
+                <Owner name={standardsCaseManagerFor({
+                  matter_number: m.matter_number,
+                  client_first_name: m.client_first_name,
+                  client_last_name: m.client_last_name,
+                  responsible_attorney_name: m.responsible_attorney_name,
+                  case_manager_name: items.find((item) => item.caseManagerName)?.caseManagerName ?? null,
+                })} />
+              </TableCell>
+              <TableCell>
+                {nextAction ? <WorkStep label={workflowLabel(nextAction.stepCode)} /> : <span>Nothing owed</span>}
+              </TableCell>
+              <TableCell>
+                <a className="today-action" data-job-primary href={clioMatterPath(m.matter_id)} target="_blank" rel="noreferrer">Open in Clio</a>
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell colSpan={5}>
+              <div className="matter-head">
                 <div>
                   <span className="label">Attorney</span>
                   <strong>{m.responsible_attorney_name || "Unassigned"}</strong>
-                  <span className="label">Case Manager</span>
-                  <strong>{standardsCaseManagerFor({
-                    matter_number: m.matter_number,
-                    client_first_name: m.client_first_name,
-                    client_last_name: m.client_last_name,
-                    responsible_attorney_name: m.responsible_attorney_name,
-                    case_manager_name: items.find((item) => item.caseManagerName)?.caseManagerName ?? null,
-                  })}</strong>
                 </div>
                 <div>
                   <span className="label">Created</span>
@@ -3241,9 +3176,15 @@ Items Still Needing Action
                   </div>
                 </details>
               </div>
-            </article>
+              </TableCell>
+            </TableRow>
+            </Fragment>
           );
-        }) : (
+        })}
+          </TableBody>
+        </Table>
+        </div>
+        ) : (
           <section className="panel empty-state">
             <strong>No checked matter cards match this view yet.</strong>
             <p>{uncheckedCount > 0 ? "Click Run Audit Batch to pull the next safe batch from Clio." : "Try clearing filters or running a fresh batch."}</p>

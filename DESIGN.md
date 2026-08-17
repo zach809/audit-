@@ -1,55 +1,89 @@
 ---
 name: Clio Workflow Auditor
-description: Terminal wayfinding operate surface for a PI firm's daily owed work
+description: Novi cyber-industrial operate surface for a PI firm's daily owed work
 colors:
-  ground: "oklch(0.97 0.01 250)"
-  ink: "oklch(0.2 0.014 250)"
-  panel: "oklch(0.17 0.012 250)"
-  panel-type: "oklch(0.99 0.004 250)"
-  muted-ground: "oklch(0.38 0.02 250)"
-  muted-panel: "oklch(0.84 0.012 250)"
-  signal: "oklch(0.88 0.195 102)"
-  coral: "oklch(0.7 0.12 35)"
-  rule: "oklch(0.82 0.012 250)"
-  field: "oklch(0.99 0.004 250)"
-  field-disabled: "oklch(0.9 0.01 250)"
-  panel-rule: "oklch(0.3 0.01 250)"
+  ground: "#050505"
+  paper: "#0a0a0a"
+  ink: "#ffffff"
+  muted: "#8a8a8a"
+  cyan: "#00e5ff"
+  cyan-soft: "#062b31"
+  cyan-wash: "#0d1416"
+  cyan-hover: "#6ff0ff"
+  rule: "rgba(255,255,255,0.10)"
+  rule-soft: "rgba(255,255,255,0.06)"
+  ok: "#00e5ff"
+  ok-ink: "#7fe9f5"
+  ok-wash: "#04252a"
+  late: "#ffb020"
+  late-ink: "#ffc75a"
+  late-wash: "#2a1e04"
+  missing: "#ff4d5e"
+  missing-ink: "#ff8a95"
+  missing-wash: "#2b0910"
+  waiting: "#8a8a8a"
+  waiting-ink: "#a8a8a8"
+  waiting-wash: "#141414"
+  idle: "#3a3a3a"
+  focus: "#fd0"
+  hairline: "rgba(0,229,255,0.14)"
+  bracket: "rgba(0,229,255,0.40)"
 typography:
   ui:
-    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontFamily: "Inter, system-ui, sans-serif"
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.45
   display:
-    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontFamily: "Bricolage Grotesque, Inter, sans-serif"
     fontSize: "2rem"
-    fontWeight: 800
+    fontWeight: 300
     lineHeight: 1.15
   display-sm:
-    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontFamily: "Bricolage Grotesque, Inter, sans-serif"
     fontSize: "1.75rem"
-    fontWeight: 800
+    fontWeight: 300
     lineHeight: 1.15
   metric:
-    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontFamily: "Bricolage Grotesque, Inter, sans-serif"
     fontSize: "2.5rem"
-    fontWeight: 800
+    fontWeight: 200
     lineHeight: 1
-  metric-sm:
-    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
-    fontSize: "2rem"
-    fontWeight: 800
-    lineHeight: 1
+  label:
+    fontFamily: "JetBrains Mono, ui-monospace, monospace"
+    fontSize: "12px"
+    fontWeight: 500
+    lineHeight: 1.3
+  label-sm:
+    fontFamily: "JetBrains Mono, ui-monospace, monospace"
+    fontSize: "11px"
+    fontWeight: 500
+    lineHeight: 1.3
+  label-xs:
+    fontFamily: "JetBrains Mono, ui-monospace, monospace"
+    fontSize: "10px"
+    fontWeight: 500
+    lineHeight: 1.3
+  row:
+    fontFamily: "Inter, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    lineHeight: 1.3
+  row-sm:
+    fontFamily: "Inter, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.4
   monumental:
-    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
-    fontSize: "4.5rem"
-    fontWeight: 800
-    lineHeight: 0.9
-  monumental-sm:
-    fontFamily: "Source Sans 3, Segoe UI, sans-serif"
-    fontSize: "3.25rem"
-    fontWeight: 800
-    lineHeight: 0.9
+    fontFamily: "Bricolage Grotesque, Inter, sans-serif"
+    fontSize: "4rem"
+    fontWeight: 200
+    lineHeight: 0.98
+  title-sm:
+    fontFamily: "Bricolage Grotesque, Inter, sans-serif"
+    fontSize: "2.5rem"
+    fontWeight: 200
+    lineHeight: 0.98
 rounded:
   none: "0px"
 spacing:
@@ -60,66 +94,55 @@ spacing:
   xxl: "28px"
 components:
   button-primary:
-    backgroundColor: "{colors.field}"
-    textColor: "{colors.ink}"
+    backgroundColor: "{colors.cyan}"
+    textColor: "{colors.ground}"
     rounded: "{rounded.none}"
     padding: "10px 14px"
     height: "44px"
   button-secondary:
-    backgroundColor: "{colors.field}"
+    backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
     rounded: "{rounded.none}"
     padding: "10px 14px"
     height: "44px"
   badge:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.panel-type}"
+    backgroundColor: "{colors.ok-wash}"
+    textColor: "{colors.ok-ink}"
     rounded: "{rounded.none}"
-    padding: "4px 0"
-  matter-card:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.panel-type}"
-    rounded: "{rounded.none}"
-    padding: "16px"
+    padding: "5px 11px"
 ---
 
 # Design
 
 ## Overview
 
-CWCA is an operate docket read as an airport sign. The page is a concourse wall with near-black destination panels. A case manager glances, reads the owed count, finds a named person, and takes the labelled action on the row's trailing edge.
+CWCA is an operate docket in the Novi cyber-industrial world. Obsidian ground, cyan signal, 24px corner brackets. A case manager glances, reads the owed count, finds a named person, and takes the labelled action on the row.
 
-Direction: Terminal Wayfinding, brief-pinned by CWCA-19. Seed `cwca19-terminal`. Yellow is reserved for Missing, the only state that means a person must act now.
+Direction: Novi, brief-pinned by CWCA-22/23 from the CEO reference. Tokens live in `src/app/novi.css`. Login and the case-manager portal stay on the older GOV.UK sheet.
 
 ## Colors
 
-The room is light. Ground is a cool concourse wall. Panels are near-black. Type on panels is white. Type on ground is near-black. Signal yellow is attention only. Coral is for errors, never for status.
+The room is dark. Ground is `#050505`. Surfaces are `#0a0a0a`. Type is white. Muted type is `#8a8a8a` and never lighter than `#808080` (5.16:1 on ground). Cyan `#00e5ff` is the live signal: current tab rule, primary action, owed count. Late is amber. Missing is coral. Yellow `#fd0` is reserved for keyboard focus.
 
 ## Typography
 
-Source Sans 3 is the Frutiger-cut workhorse. One family for UI, names, and numbers. Every number is tabular. Body is 16px. Headings use `text-wrap: balance`. No tiny uppercase labels.
+Bricolage Grotesque at weight 200-300 on titles. Inter on prose. JetBrains Mono on labels, numbers, and status words. Every number is tabular. Body is 16px. Headings use `text-wrap: balance`.
 
 ## Layout
 
-First viewport: a full-width header sign with the owed-work title and a monumental tabular count, then a strip of destination tabs, then dark rows. Each row is client name, owner, official status mark, and a labelled action locked to the trailing edge. Filters stay in the URL. Content uses the available width.
+One contained frame. Header, tabs, and the work table share 1px rules. Lists are tables: Status, Matter, Owner, What is missing, Action. Filters stay in the URL.
 
-## Elevation & Depth
+## Elevation and depth
 
-No glass, no drop shadow, no hover lift. Separation is the panel sitting on the wall. The current tab is the same dark sign with an inverted pictogram and a white baseline.
+The shell sits on a faint cyan glow with 24px brackets at 40% cyan. Interactive edges use a cyan hairline. No rounded corners.
 
 ## Shapes
 
-No `border-radius` declarations. Status marks are shapes, not pills:
-
-- On Time: filled square
-- Late: diamond
-- Missing: triangle, the only yellow mark
-- Not Due Yet: empty square
-- No activity: dashed empty square
+No `border-radius` declarations. Status is a word plus a `mark-${kind}` shape, never the printed label as a class.
 
 ## Components
 
-Buttons are 44px tall, labelled in words, and look like controls at rest. Matter cards keep an `#matter-{id}` anchor so a status save returns to the same card.
+Buttons are 44px tall and labelled in words. Primary is a filled cyan block with black type. People get a monogram. Work types get a Lucide icon matched on the real step label.
 
 ## Do's and Don'ts
 
@@ -131,4 +154,4 @@ Do not hide an action behind hover or a closed disclosure.
 
 Do not use color as the only difference between states.
 
-Do not use yellow for headers, branding, or the current tab.
+Do not key a status style to the visible label.

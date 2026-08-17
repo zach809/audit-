@@ -1,5 +1,6 @@
+import { dirname, join } from "node:path";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import {readFileSync, readdirSync} from "node:fs";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -86,7 +87,7 @@ describe("remembered dashboard filters", () => {
 
 describe("fewer-steps dashboard surface", () => {
   it("groups the ten destinations and keeps every one reachable", () => {
-    const page = source("../app/page.tsx");
+    const page = `${source("../app/page.tsx")}\n${source("../app/dashboard-nav.tsx")}`;
     assert.match(page, /DAILY_TABS/);
     assert.match(page, /RECORDS_TABS/);
     assert.match(page, /TOOL_TABS/);
@@ -119,7 +120,15 @@ describe("fewer-steps dashboard surface", () => {
   });
 
   it("does not hide the secondary row action behind hover", () => {
-    const css = source("../app/docket.css");
+    // Read every stylesheet the app ships rather than one filename. The rule is
+    // "no row action may be hover-only"; which file carries the styling is an
+    // implementation detail that has already changed once.
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "../app");
+    const css = readdirSync(dir)
+      .filter((name) => name.endsWith(".css"))
+      .map((name) => readFileSync(join(dir, name), "utf8"))
+      .join("\n");
+    assert.ok(css.length > 0, "the app ships no stylesheet");
     assert.doesNotMatch(css, /command-task-actions[^}]*display:\s*none/);
     assert.doesNotMatch(css, /:hover[^{]*\{[^}]*command-task-actions/);
   });

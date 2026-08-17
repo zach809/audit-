@@ -51,7 +51,7 @@ Open / inferred: live data volume is large (~1.6 MB per load). Anything on scree
 - Product name: Clio Workflow Auditor / CWCA.
 - Firm context in the repo: Hirsch Law Group (README). Illinois business time, America/Chicago.
 - Voice: plain, specific, no filler. Controls name the action. Errors name the problem and the fix.
-- House visual constraints (CWCA-19): sharp corners; Terminal Wayfinding (cool concourse wall, near-black sign panels, Source Sans 3); yellow only for Missing.
+- House visual constraints (CWCA-23): sharp corners; Novi cyber-industrial (obsidian ground, cyan signal, Bricolage Grotesque / Inter / JetBrains Mono). Yellow `#fd0` is keyboard focus only.
 
 ## Evidence on Hand
 

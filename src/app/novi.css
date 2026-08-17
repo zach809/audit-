@@ -1,0 +1,608 @@
+@tailwind components;
+@tailwind utilities;
+
+/* NOVI — shared cyber-industrial layer.
+   One token source for Today, Matters, Records and Tools.
+   Tokens live here only. today.css must not redeclare --today-ground. */
+
+.novi {
+  /* NOVI — cyber-industrial. Obsidian ground, cyan signal, corner brackets.
+     Pinned by the CEO 2026-08-16 from the supplied DESIGN.md + reference page.
+     Contrast measured, not assumed:
+       cyan #00e5ff on #050505 ....... 13.25:1
+       white on #050505 .............. 20.38:1
+       black on the cyan button ...... 13.25:1
+       muted #808080 on #050505 ......  5.16:1   (never lighter than this) */
+  --today-ground: #050505; --today-paper: #0a0a0a; --today-ink: #ffffff; --today-ink-2: #8a8a8a;
+  --today-blue: #00e5ff; --today-blue-soft: #062b31; --today-blue-wash: #0d1416;
+  --today-rule: rgba(255,255,255,0.10); --today-rule-soft: rgba(255,255,255,0.06);
+  --today-ok: #00e5ff;      --today-ok-ink: #7fe9f5;      --today-ok-wash: #04252a;
+  --today-late: #ffb020;    --today-late-ink: #ffc75a;    --today-late-wash: #2a1e04;
+  --today-missing: #ff4d5e; --today-missing-ink: #ff8a95; --today-missing-wash: #2b0910;
+  --today-waiting: #8a8a8a; --today-waiting-ink: #a8a8a8; --today-waiting-wash: #141414;
+  --ink: var(--today-ink); --paper: var(--today-paper); --secondary: var(--today-ink-2);
+  --link: var(--today-blue); --grey: var(--today-blue-wash); --grey-mid: var(--today-rule);
+  --font-newsreader: "Bricolage Grotesque", "Inter", system-ui, sans-serif;
+}
+.novi * { border-radius: 0; }
+.novi ::selection { background: var(--today-blue-soft); color: var(--today-ink); }
+
+.today-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--today-rule); margin: 0 0 32px; }
+.today-tab, .today-tab-link, .today-pop-trigger {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px;
+  border: 0; background: transparent; color: var(--today-blue);
+  font: inherit; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.today-tab[data-state="active"], .today-tab-link[aria-current="page"], .today-pop-trigger[data-state="open"] {
+  background: var(--today-ink); color: var(--today-paper);
+}
+
+.today-chrome { display: flex; flex-direction: column; gap: 12px; margin: 0 0 40px; }
+.today-cm { display: flex; flex-wrap: wrap; gap: 4px; }
+.today-toggle {
+  min-height: 40px; padding: 6px 10px; border: 1px solid var(--today-rule);
+  background: var(--today-paper); color: var(--today-ink); text-decoration: none; cursor: pointer;
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.today-toggle[data-state="on"], .today-toggle[aria-pressed="true"] { background: var(--today-ink); color: var(--today-paper); }
+
+.today-find { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; }
+.today-find label {
+  display: flex; flex-direction: column; gap: 4px; color: var(--today-ink-2);
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.today-input {
+  min-height: 44px; min-width: min(100%, 22rem); padding: 8px 10px;
+  border: 1px solid var(--today-rule); background: var(--today-paper); color: var(--today-ink);
+  font: inherit; font-size: 16px; text-transform: none; letter-spacing: 0;
+}
+.today-input::placeholder { color: var(--today-ink-2); opacity: 1; }
+.today-keys { margin: 0; color: var(--today-ink-2); font-size: 13px; }
+.today-keys kbd {
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 12px; padding: 0 4px; border: 1px solid var(--today-rule-soft); background: var(--today-paper);
+}
+.today-banner, .today-note { margin: 0; font-size: 16px; }
+.today-banner a { margin-left: 0.6em; }
+
+.today-work { margin: 0 0 48px; }
+.today-work-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: baseline; margin: 0 0 12px; }
+.today-work-head h2 {
+  font-family: var(--font-newsreader), "Newsreader", ui-serif, serif;
+  font-size: 1.75rem; font-weight: 600; margin: 0; text-wrap: balance;
+}
+.today-count {
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 13px; font-variant-numeric: tabular-nums; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--today-ink-2);
+}
+
+.today-table-wrap { max-height: min(70dvh, 720px); overflow: auto; border: 1px solid var(--today-rule); background: var(--today-paper); min-width: 0; }
+.today-table { width: 100%; min-width: 640px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.today-thead th { position: sticky; top: 0; z-index: 1; background: var(--today-ink); color: var(--today-paper); }
+.today-th, .today-td { padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--today-rule-soft); }
+.today-th {
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.today-tr:nth-child(even) { background: var(--today-blue-wash); }
+.today-tr:nth-child(odd) { background: var(--today-paper); }
+.today-matter { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.today-matter strong { font-weight: 600; }
+.today-matter small { color: var(--today-ink-2); font-size: 13px; }
+.today-action {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 6px 10px;
+  border: 1px solid var(--today-rule); background: var(--today-paper); color: var(--today-ink);
+  font-size: 16px; font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.today-action:hover { background: var(--today-blue-soft); }
+.today-empty { padding: 20px; background: var(--today-blue-wash); color: var(--today-ink-2); }
+
+.today-dist { margin: 0 0 48px; }
+.today-dist-bar { display: flex; height: 16px; border: 1px solid var(--today-rule); background: var(--today-paper); }
+.today-dist-bar > span { min-width: 2px; }
+.today-dist-bar > .mark-on-time { background: var(--today-ok); }
+.today-dist-bar > .mark-late { background: var(--today-late); }
+.today-dist-bar > .mark-missing { background: var(--today-missing); }
+.today-dist-bar > .mark-not-due, .today-dist-bar > .mark-no-activity, .today-dist-bar > .mark-other { background: var(--today-waiting); }
+.today-dist figcaption { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; }
+.today-legend {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.today-legend b { font-variant-numeric: tabular-nums; }
+
+.today-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.today-metric {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px;
+  border: 1px solid var(--today-rule-soft); background: var(--today-paper); color: var(--today-ink); text-decoration: none;
+}
+.today-metric span {
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--today-ink-2);
+}
+.today-metric strong { font-variant-numeric: tabular-nums; font-size: 1.75rem; line-height: 1; }
+.today-metric small { font-size: 12px; color: var(--today-ink-2); }
+
+.today-progress { position: relative; overflow: hidden; height: 8px; background: var(--today-blue-soft); border: 1px solid var(--today-rule); }
+.today-progress-fill { height: 100%; width: 100%; background: var(--today-ok); transition: transform 180ms ease-out; }
+
+.today-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
+  font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  white-space: nowrap; border: 1px solid transparent;
+}
+.today-badge.mark-on-time { background: var(--today-ok-wash); color: var(--today-ok-ink); border-color: var(--today-ok); }
+.today-badge.mark-late { background: var(--today-late-wash); color: var(--today-late-ink); border-color: var(--today-late); }
+.today-badge.mark-missing { background: var(--today-missing-wash); color: var(--today-missing-ink); border-color: var(--today-missing); }
+.today-badge.mark-not-due, .today-badge.mark-no-activity, .today-badge.mark-other {
+  background: var(--today-waiting-wash); color: var(--today-waiting-ink); border-color: var(--today-waiting);
+}
+.today-mark { display: inline-block; width: 0.7em; height: 0.7em; flex: 0 0 auto; background: currentColor; }
+.mark-late .today-mark { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.mark-missing .today-mark { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.mark-not-due .today-mark { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+.mark-no-activity .today-mark, .mark-other .today-mark {
+  background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; outline: 1px dashed currentColor; outline-offset: 1px;
+}
+
+.today-tip, .today-pop {
+  z-index: 40; max-width: 22rem; padding: 10px 12px; border: 1px solid var(--today-rule);
+  background: var(--today-paper); color: var(--today-ink); font-size: 16px; line-height: 1.45;
+}
+.today-pop { display: flex; flex-direction: column; min-width: 14rem; padding: 0; }
+.today-pop a { padding: 10px 12px; color: var(--today-ink); text-decoration: none; }
+.today-pop a:hover, .today-pop a[aria-current="page"] { background: var(--today-blue-wash); }
+
+@media (max-width: 640px) {
+  .today-input { min-width: 100%; }
+  .today-action { width: 100%; justify-content: center; }
+  .today-cm { flex-wrap: nowrap; overflow-x: auto; }
+  .today-toggle { flex: 0 0 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .today-progress-fill { transition-duration: 0.01ms; }
+}
+
+
+/* ============================================================================
+   NOVI signature — the corner bracket. This is the one detail that makes the
+   world recognisable, and it is drawn, not decorated: 1px rules meeting at the
+   extremities of a container. No glass, no gradient, no glow.
+   ========================================================================= */
+.novi .today-panel,
+.novi .today-table-wrap,
+.novi .today-statusbar {
+  position: relative;
+  background: var(--today-paper);
+  border: 1px solid var(--today-rule);
+}
+.novi .today-panel::before, .novi .today-panel::after,
+.novi .today-table-wrap::before, .novi .today-table-wrap::after {
+  content: ""; position: absolute; width: 14px; height: 14px; pointer-events: none;
+  border-color: var(--today-blue); border-style: solid; border-width: 0;
+}
+.novi .today-panel::before, .novi .today-table-wrap::before {
+  top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px;
+}
+.novi .today-panel::after, .novi .today-table-wrap::after {
+  bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px;
+}
+
+/* the primary action is a filled cyan block with black type — the reference's one loud element */
+.novi .today-primary,
+.novi button[data-primary], .novi .today-run {
+  background: var(--today-blue); color: #050505; border: 1px solid var(--today-blue);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  text-transform: uppercase; letter-spacing: 0.12em; font-size: 12px;
+}
+.novi .today-primary:hover { background: #6ff0ff; border-color: #6ff0ff; }
+
+/* section tags read as machine output: // FEATURES */
+.novi .today-eyebrow::before { content: "// "; color: var(--today-blue); }
+
+/* the table is the instrument: dark rows, cyan header rule, hairline separators */
+.novi thead th {
+  background: var(--today-ground); color: var(--today-ink-2);
+  border-bottom: 1px solid var(--today-blue);
+}
+.novi tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+.novi tbody tr:hover { background: var(--today-blue-wash); }
+.novi tbody td { border-bottom: 1px solid var(--today-rule-soft); }
+
+/* metrics: a bordered 4-up strip, numbers large and light, one of them cyan */
+.novi .today-stats { border: 1px solid var(--today-rule); display: grid; }
+.novi .today-stats > * { border-right: 1px solid var(--today-rule); padding: 20px 24px; }
+.novi .today-stats > :last-child { border-right: 0; }
+.novi .today-stats strong { font-weight: 300; font-size: 2rem; letter-spacing: -0.02em; }
+
+
+/* ============================================================================
+   The theme has to own the whole page, not an island.
+   Scoping Novi to .novi left the masthead, the notice and the prose on
+   the old light stylesheet — and, worse, table cells kept inheriting the light
+   theme's dark ink, so client names rendered dark-on-dark and vanished.
+   Caught by rendering; invisible in the diff.
+   ========================================================================= */
+body:has(.novi) {
+  background: #050505;
+  color: #ffffff;
+}
+body:has(.novi) .shell { background: transparent; }
+
+/* every text node inside the tab belongs to this theme, not the old one */
+.novi, .novi * { color: inherit; }
+.novi { color: var(--today-ink); }
+.novi .today-muted, .novi .muted, .novi small { color: var(--today-ink-2); }
+.novi a { color: var(--today-blue); }
+.novi strong, .novi b, .novi td, .novi th { color: inherit; }
+
+/* the page frame outside the tab */
+body:has(.novi) h1, body:has(.novi) h2 { color: #ffffff; }
+body:has(.novi) .notice,
+body:has(.novi) .app-header, body:has(.novi) .topbar {
+  background: #0a0a0a; border-color: rgba(255,255,255,0.10); color: #ffffff;
+}
+body:has(.novi) .muted, body:has(.novi) .small { color: #8a8a8a; }
+body:has(.novi) .primary {
+  background: #00e5ff; color: #050505; border-color: #00e5ff;
+}
+
+
+/* the typeface is half the world; globals.css owns body font, so override there */
+body:has(.novi) {
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+body:has(.novi) h1, body:has(.novi) h2, body:has(.novi) h3,
+.novi h1, .novi h2, .novi h3 {
+  font-family: "Bricolage Grotesque", Inter, system-ui, sans-serif;
+  font-weight: 300; letter-spacing: -0.02em;
+}
+body:has(.novi) .eyebrow, body:has(.novi) th,
+.novi .today-eyebrow, .novi th, .novi kbd, .novi .today-keys {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.16em;
+}
+
+/* leftovers from the light theme that survived inside the frame */
+body:has(.novi) .badge:not([class*="mark-"]),
+body:has(.novi) .Pass, body:has(.novi) .Pending {
+  background: #04252a; color: #00e5ff; border: 1px solid rgba(0,229,255,0.35);
+  font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.12em;
+}
+body:has(.novi) .app-header, body:has(.novi) .topbar { border-bottom-color: #00e5ff; }
+
+
+/* ============================================================================
+   WHY THE REFERENCE LOOKS BUILT AND THIS LOOKED ASSEMBLED
+
+   The Novi page is not "dark with cyan". It is a CONTAINED GRID: one outer
+   frame, sections divided by shared 1px rules, brackets at the extremities.
+   Nothing floats. That containment is the whole effect — the palette is just
+   the paint. Everything below builds that frame.
+   ========================================================================= */
+
+/* 1 · the page becomes one instrument panel, with its own frame and brackets */
+body:has(.novi) .shell {
+  max-width: 1280px;
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 0;
+  position: relative;
+  box-shadow: 0 24px 80px -32px rgba(0,0,0,0.9);
+}
+body:has(.novi) .shell::before,
+body:has(.novi) .shell::after {
+  content: ""; position: absolute; width: 22px; height: 22px; pointer-events: none;
+  border-color: #00e5ff; border-style: solid; border-width: 0; z-index: 2;
+}
+body:has(.novi) .shell::before { top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px; }
+body:has(.novi) .shell::after  { bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px; }
+body:has(.novi) { padding: 40px 24px; }
+
+/* 2 · sections stop floating: they share rules, like cells of one grid */
+body:has(.novi) .app-header,
+body:has(.novi) .topbar,
+body:has(.novi) .notice,
+body:has(.novi) .novi > * {
+  border-left: 0; border-right: 0; border-top: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  margin: 0;
+  padding: 28px 32px;
+}
+body:has(.novi) .app-header, body:has(.novi) .topbar {
+  border-bottom-color: rgba(255,255,255,0.10);
+}
+body:has(.novi) .notice { background: #080808; }
+
+/* 3 · the title carries the weight the reference gives it: large and LIGHT */
+body:has(.novi) .app-header h1, body:has(.novi) .topbar h1 {
+  font-size: clamp(2.5rem, 5.5vw, 4rem);
+  font-weight: 200;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+body:has(.novi) .owed-count {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 300; letter-spacing: -0.02em; color: #00e5ff;
+}
+
+/* 4 · a dot-grid whisper behind the frame — the reference's industrial texture,
+      at an intensity you notice only if you look for it */
+body:has(.novi)::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+body:has(.novi) .shell { position: relative; z-index: 1; background: #050505; }
+
+/* 5 · the table becomes the instrument readout: full-bleed inside its section */
+.novi .today-table-wrap { border-left: 0; border-right: 0; }
+.novi thead th {
+  font-size: 10px; letter-spacing: 0.2em; padding: 14px 16px;
+  border-bottom: 1px solid #00e5ff;
+}
+.novi tbody td { padding: 14px 16px; }
+.novi tbody tr { transition: background 90ms linear; }
+
+/* 6 · the cyan is a signal, not a coat of paint: it marks the live row edge */
+.novi tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 0 #00e5ff; }
+
+
+/* ============================================================================
+   FIDELITY PASS — the HTML reference and its DESIGN.md are the only source.
+   Values lifted from the reference markup, not approximated:
+     glow      radial-gradient(circle at 50% 0%,  rgba(0,229,255,0.09), transparent 36rem)
+               radial-gradient(circle at 12% 20%, rgba(0,229,255,0.08), transparent 24rem)
+               radial-gradient(circle at 88% 70%, rgba(0,229,255,0.045), transparent)
+     bracket   h-6 w-6 border-l border-t border-[#00e5ff]/40   → 24px, 40% cyan
+     glass     backdrop-blur-md
+     lift      shadow-2xl shadow-black/60
+     hairline  rgba(0,229,255,0.14) on interactive edges
+   ========================================================================= */
+
+/* the ambient cyan glow the reference lays under its sections */
+body:has(.novi) {
+  background-color: #050505;
+  background-image:
+    radial-gradient(circle at 50% 0%,  rgba(0,229,255,0.09),  transparent 36rem),
+    radial-gradient(circle at 12% 20%, rgba(0,229,255,0.08),  transparent 24rem),
+    radial-gradient(circle at 88% 70%, rgba(0,229,255,0.045), transparent 30rem);
+  background-attachment: fixed;
+}
+
+/* the frame lifts off that glow, exactly as the reference does */
+body:has(.novi) .shell {
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.60);
+  background: rgba(10,10,10,0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* brackets at the reference's own size and opacity: 24px, cyan at 40% */
+body:has(.novi) .shell::before,
+body:has(.novi) .shell::after {
+  width: 24px; height: 24px; border-color: rgba(0,229,255,0.40);
+}
+.novi .today-panel::before, .novi .today-panel::after,
+.novi .today-table-wrap::before, .novi .today-table-wrap::after {
+  width: 24px; height: 24px; border-color: rgba(0,229,255,0.40);
+}
+
+/* interactive edges carry the reference's exact hairline */
+.novi .today-toggle, .novi .today-input,
+body:has(.novi) .badge, body:has(.novi) button {
+  border-color: rgba(0,229,255,0.14);
+}
+.novi .today-toggle:hover, body:has(.novi) button:hover {
+  border-color: rgba(0,229,255,0.35);
+}
+
+/* the section tag, numbered, as the reference writes it */
+.novi .today-eyebrow { color: #00e5ff; }
+
+/* the primary action glows, because in this world it is the only lit thing */
+body:has(.novi) .today-primary, body:has(.novi) .primary {
+  box-shadow: 0 0 24px -4px rgba(0,229,255,0.55);
+}
+
+
+/* ============================================================================
+   AN ICON SYSTEM, DRAWN — not emoji, not a font, not a decorative flourish.
+
+   Each compliance state gets a SHAPE, so the status column can be scanned
+   pre-attentively instead of read word by word. The shapes are authored SVG
+   delivered as masks, one consistent 1.5px stroke, currentColor throughout —
+   so they inherit each state's colour automatically and never desync from it.
+
+   Shape logic is semantic, not arbitrary:
+     missing     ! in a circle   — something is absent and you must act
+     late        clock           — it exists, it is overdue
+     on-time     check           — done
+     not-due     calendar        — scheduled, not yet your problem
+     no-activity minus           — nothing has happened at all
+   ========================================================================= */
+.novi .mark-shape {
+  width: 14px; height: 14px; background: currentColor;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+  clip-path: none; border-radius: 0;
+}
+.novi .mark-missing .mark-shape {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v6'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v6'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+}
+.novi .mark-late .mark-shape {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+}
+.novi .mark-on-time .mark-shape {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12.5l5 5L20 6.5'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12.5l5 5L20 6.5'/%3E%3C/svg%3E");
+}
+.novi .mark-not-due .mark-shape {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Crect x='3' y='5' width='18' height='16'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Crect x='3' y='5' width='18' height='16'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E");
+}
+.novi .mark-no-activity .mark-shape {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+}
+
+/* the badge becomes a symbol first, a word second */
+.novi .badge, .novi [class*="mark-"] {
+  gap: 8px; padding: 5px 11px;
+}
+
+/* typographic hierarchy inside the row: the client is the subject, the slug is
+   reference data. Same colour was flattening them into one block of text. */
+.novi tbody strong { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.novi tbody .today-slug, .novi tbody td span:not([class]) {
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  color: #8a8a8a; letter-spacing: 0.02em;
+}
+
+/* ---------- Lucide: one stroke weight, colour inherited, never decorative --- */
+.novi .today-step { display: inline-flex; align-items: center; gap: 9px; }
+.novi .today-step-icon { color: #00e5ff; opacity: 0.85; flex: none; }
+.novi .today-owner { display: inline-flex; align-items: center; gap: 9px; }
+.novi .today-owner-none { color: #8a8a8a; font-style: italic; }
+.novi .today-monogram {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: none;
+  font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.06em;
+  color: #00e5ff; border: 1px solid rgba(0,229,255,0.30); background: rgba(0,229,255,0.06);
+}
+
+/* ---------- the distribution bar: the firm's state, without a number -------- */
+.novi .today-dist { padding: 0 0 20px; }
+.novi .today-dist-bar { display: flex; height: 8px; width: 100%; background: rgba(255,255,255,0.05); }
+.novi .today-dist-seg { display: block; height: 100%; }
+.novi .today-dist-seg.mark-missing     { background: #ff4d5e; }
+.novi .today-dist-seg.mark-late        { background: #ffb020; }
+.novi .today-dist-seg.mark-not-due     { background: #8a8a8a; }
+.novi .today-dist-seg.mark-no-activity { background: #3a3a3a; }
+.novi .today-dist-seg.mark-on-time     { background: #00e5ff; }
+.novi .today-dist-key {
+  display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 12px;
+  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: #8a8a8a;
+}
+.novi .today-dist-item { display: inline-flex; align-items: center; gap: 7px; }
+.novi .today-dist-item b { color: #fff; font-weight: 500; }
+.novi .today-dist-dot { width: 8px; height: 8px; flex: none; }
+.novi .today-dist-item.mark-missing .today-dist-dot     { background: #ff4d5e; }
+.novi .today-dist-item.mark-late .today-dist-dot        { background: #ffb020; }
+.novi .today-dist-item.mark-not-due .today-dist-dot     { background: #8a8a8a; }
+.novi .today-dist-item.mark-no-activity .today-dist-dot { background: #3a3a3a; }
+.novi .today-dist-item.mark-on-time .today-dist-dot     { background: #00e5ff; }
+
+/* the legend is a key, not a badge — my earlier [class*="mark-"] rule was
+   painting it with the badge's chip styling and it came out light-on-dark */
+.novi .today-dist-item {
+  background: none; border: 0; padding: 0; border-radius: 0;
+  color: #8a8a8a; text-transform: uppercase;
+}
+.novi .today-dist-item .mark-shape { display: none; }
+.novi .today-dist { padding-bottom: 28px; }
+
+/* the step label is content, not metadata: it must read at full strength */
+.novi .today-step > span:last-child { color: #ffffff; font-size: 14px; letter-spacing: 0; font-family: Inter, system-ui, sans-serif; }
+.novi .today-owner > span:last-child { color: #ffffff; font-size: 14px; font-style: normal; }
+.novi .today-owner-none { color: #8a8a8a; }
+
+/* adjacent inline-flex siblings need a wrap chance at 390px */
+.novi .today-step, .novi .today-owner, .novi .today-cm { flex-wrap: wrap; max-width: 100%; }
+.novi .today-table-wrap { min-width: 0; }
+
+/* leftover GOV.UK surfaces must inherit Novi, or names go dark-on-dark */
+body:has(.novi) .panel,
+body:has(.novi) .matter-card,
+body:has(.novi) .filter-panel,
+body:has(.novi) .filters,
+body:has(.novi) .matter-bulk-bar,
+body:has(.novi) .report-card,
+body:has(.novi) .guide-card,
+body:has(.novi) .ongoing-action-card,
+body:has(.novi) .post-closure-card-body,
+body:has(.novi) .workspace-empty,
+body:has(.novi) .empty-state,
+body:has(.novi) .kpi-hero,
+body:has(.novi) .standards-sheet-panel,
+body:has(.novi) .debug-layout .panel {
+  background: #0a0a0a;
+  color: #ffffff;
+  border-color: rgba(255,255,255,0.10);
+}
+body:has(.novi) button,
+body:has(.novi) .button,
+body:has(.novi) a.button,
+body:has(.novi) input[type="submit"] {
+  background: #0a0a0a;
+  color: #ffffff;
+  border: 1px solid rgba(0,229,255,0.14);
+  box-shadow: none;
+}
+body:has(.novi) button:hover,
+body:has(.novi) .button:hover,
+body:has(.novi) a.button:hover {
+  background: #0d1416;
+  color: #ffffff;
+  border-color: rgba(0,229,255,0.35);
+}
+body:has(.novi) button.primary,
+body:has(.novi) .primary,
+body:has(.novi) a.primary,
+body:has(.novi) .button.primary {
+  background: #00e5ff;
+  color: #050505;
+  border-color: #00e5ff;
+  box-shadow: 0 0 24px -4px rgba(0,229,255,0.55);
+}
+body:has(.novi) input,
+body:has(.novi) select,
+body:has(.novi) textarea {
+  background: #0a0a0a;
+  color: #ffffff;
+  border-color: rgba(0,229,255,0.14);
+}
+body:has(.novi) label,
+body:has(.novi) .label {
+  color: #8a8a8a;
+}
+body:has(.novi) .filter-alert,
+body:has(.novi) .refresh-needed,
+body:has(.novi) .notice {
+  background: #080808;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #ffffff;
+  font-weight: 400;
+}
+body:has(.novi) .notice.danger,
+body:has(.novi) .row-write-error {
+  border-color: #ff4d5e;
+  color: #ff8a95;
+}
+body:has(.novi) table,
+body:has(.novi) th,
+body:has(.novi) td {
+  color: #ffffff;
+  border-bottom-color: rgba(255,255,255,0.06);
+}
+body:has(.novi) .matter-actions,
+body:has(.novi) .ongoing-action-buttons,
+body:has(.novi) .command-task-actions {
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body:has(.novi) .today-progress-fill,
+  body:has(.novi) tbody tr {
+    transition-duration: 0.01ms;
+  }
+}
