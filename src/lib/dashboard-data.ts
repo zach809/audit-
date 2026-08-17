@@ -302,7 +302,8 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     end
   `;
 
-  const matters = await sql`
+  const [matters, attorneys, summary, lastRun, metrics, workspaceItems] = await Promise.all([
+    sql`
     select
       m.*,
       coalesce(mex.active, false) as metric_excluded,
@@ -380,17 +381,15 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
       m.matter_created_at desc
     limit 150
-  `;
-
-  const attorneys = await sql`
+  `,
+    sql`
     select responsible_attorney_id as id, responsible_attorney_name as name, count(*)::int as count
     from audit_matter m
     where ${conditions[0]} and ${conditions[5]} and ${conditions[6]}
     group by responsible_attorney_id, responsible_attorney_name
     order by responsible_attorney_name
-  `;
-
-  const summary = await sql`
+  `,
+    sql`
     select
       count(*)::int as total,
       count(*) filter (where display_overall_status = 'Unchecked')::int as unchecked,
@@ -421,16 +420,14 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       group by m.matter_id, m.overall_status
     ) s
-  `;
-
-  const lastRun = await sql`
+  `,
+    sql`
     select *
     from audit_run
     order by started_at desc
     limit 1
-  `;
-
-  const metrics = await sql`
+  `,
+    sql`
     select *
     from (
       select distinct on (coalesce(responsible_attorney_id, ''), responsible_attorney_name)
@@ -441,9 +438,8 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       order by coalesce(responsible_attorney_id, ''), responsible_attorney_name, created_at desc, snapshot_id desc
     ) current_month
     order by responsible_attorney_name
-  `;
-
-  const workspaceItems = await sql<WorkspaceAuditItem[]>`
+  `,
+    sql<WorkspaceAuditItem[]>`
     select
       m.matter_id,
       m.matter_number,
@@ -516,7 +512,8 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       m.client_first_name,
       i.step_code
     limit 1000
-  `;
+  `,
+  ]);
 
   return {
     matters,

@@ -11,7 +11,7 @@ declare global {
 export function db() {
   if (!global.cwcaSql) {
     global.cwcaSql = postgres(appConfig().databaseUrl, {
-      max: 5,
+      max: 8,
       idle_timeout: 20,
       connect_timeout: 8,
     });
