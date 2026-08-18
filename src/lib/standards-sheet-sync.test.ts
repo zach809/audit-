@@ -5,9 +5,14 @@ import { fileURLToPath } from "node:url";
 import { STANDARDS_SHEET_HEADERS } from "./dashboard-data";
 import {
   activityCompletion,
+  chicagoDateKey,
   collectArchiveRows,
+  currentChicagoMonthRange,
+  excelSerialFromDateKey,
   formatSheetStamp,
   publishOwnerTab,
+  rowsOnOrBeforeToday,
+  sheetDateKey,
   shouldPublishPeriod,
   upsertDailyRows,
   type SheetDailyRow,
@@ -111,6 +116,34 @@ describe("standards sheet archive", () => {
     assert.deepEqual(sheet.grid[12], [...STANDARDS_SHEET_HEADERS]);
     assert.equal(result.stamp, formatSheetStamp(NOW));
     assert.ok(sheet.writes.indexOf("A1") > 0);
+  });
+});
+
+describe("sheet dates and Chicago period", () => {
+  it("reads Excel serials as real dates and converts date keys back to serials", () => {
+    assert.equal(sheetDateKey("46237"), "2026-08-03");
+    assert.equal(sheetDateKey(46238), "2026-08-04");
+    assert.equal(sheetDateKey("8/3/2026"), "2026-08-03");
+    assert.equal(excelSerialFromDateKey("2026-08-03"), 46237);
+    assert.equal(excelSerialFromDateKey("8/21/2026"), 46255);
+    assert.deepEqual(collectArchiveRows([["Lori", 46237, 1, 1, 1, 1, 0, "100%"]], "Lori").map((row) => row.sortDate), ["2026-08-03"]);
+  });
+
+  it("drops dates after today in America/Chicago and keeps today", () => {
+    const now = new Date("2026-08-15T16:00:00Z");
+    assert.equal(chicagoDateKey(now), "2026-08-15");
+    const kept = rowsOnOrBeforeToday([
+      daily("Lori", "8/15/2026", "2026-08-15"),
+      daily("Lori", "8/16/2026", "2026-08-16"),
+      daily("Lori", "8/21/2026", "2026-08-21"),
+      daily("Lori", "46262", "46262"),
+    ], now);
+    assert.deepEqual(kept.map((row) => row.sortDate), ["2026-08-15"]);
+  });
+
+  it("defaults the Excel period to the current Chicago month through today", () => {
+    const range = currentChicagoMonthRange(new Date("2026-08-15T16:00:00Z"));
+    assert.deepEqual(range, { from: "2026-08-01", to: "2026-08-15" });
   });
 });
 

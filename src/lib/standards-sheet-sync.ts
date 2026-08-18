@@ -41,11 +41,59 @@ export function formatSheetStamp(now: Date, timeZone = "America/Chicago"): strin
   return `Updated ${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timeZone}`;
 }
 
-export function sheetDateKey(value: string): string {
+export function chicagoDateKey(date: Date, timeZone = "America/Chicago"): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+export function currentChicagoMonthRange(now = new Date()): { from: string; to: string } {
+  const today = chicagoDateKey(now);
+  const monthStart = new Date(`${today}T12:00:00`);
+  monthStart.setDate(1);
+  return { from: chicagoDateKey(monthStart), to: today };
+}
+
+const EXCEL_SERIAL_EPOCH_UTC = Date.UTC(1899, 11, 30);
+
+export function dateKeyFromExcelSerial(serial: number): string {
+  const whole = Math.trunc(Number(serial));
+  if (!Number.isFinite(whole) || whole < 20000 || whole > 80000) return "";
+  const utc = new Date(EXCEL_SERIAL_EPOCH_UTC + whole * 86400000);
+  const year = utc.getUTCFullYear();
+  const month = String(utc.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(utc.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function excelSerialFromDateKey(value: string | number): number {
+  const key = sheetDateKey(value);
+  const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return 0;
+  const utc = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Math.round((utc - EXCEL_SERIAL_EPOCH_UTC) / 86400000);
+}
+
+export function sheetDateKey(value: string | number): string {
   const trimmed = String(value ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
   const us = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  return us ? `${us[3]}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}` : "";
+  if (us) return `${us[3]}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+  if (/^\d+(\.\d+)?$/.test(trimmed)) return dateKeyFromExcelSerial(Number(trimmed));
+  return "";
+}
+
+export function rowsOnOrBeforeToday<T extends { date: string; sortDate: string }>(rows: T[], now = new Date()): T[] {
+  const today = chicagoDateKey(now);
+  return rows.filter((row) => {
+    const key = sheetDateKey(row.sortDate || row.date);
+    return Boolean(key) && key <= today;
+  });
 }
 
 export function activityCompletion(row: Countable): string {

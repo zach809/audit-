@@ -2,44 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/lib/db";
 import { syncStandardsToMicrosoftExcel } from "@/lib/microsoft-excel";
 import { isAuthorizedWorkerRequest, isValidSessionCookie } from "@/lib/session";
+import { currentChicagoMonthRange } from "@/lib/standards-sheet-sync";
 
 export const maxDuration = 120;
-
-function chicagoDateInput(date: Date): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Chicago",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date).reduce<Record<string, string>>((acc, part) => {
-    if (part.type !== "literal") acc[part.type] = part.value;
-    return acc;
-  }, {});
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function currentWeekStart(): string {
-  const today = chicagoDateInput(new Date());
-  const localNoon = new Date(`${today}T12:00:00`);
-  const day = localNoon.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  localNoon.setDate(localNoon.getDate() + diff);
-  return chicagoDateInput(localNoon);
-}
-
-function addDateKeyDays(dateKey: string, days: number): string {
-  const date = new Date(`${dateKey}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return chicagoDateInput(date);
-}
-
-function lastCompletedWeekRange(): { from: string; to: string } {
-  const currentStart = currentWeekStart();
-  return {
-    from: addDateKeyDays(currentStart, -7),
-    to: addDateKeyDays(currentStart, -1),
-  };
-}
 
 function redirectBack(request: NextRequest, params: Record<string, string>) {
   const search = new URLSearchParams(params);
@@ -51,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const url = new URL(request.url);
-  const defaultRange = lastCompletedWeekRange();
+  const defaultRange = currentChicagoMonthRange();
   const filters = {
     from: url.searchParams.get("from") || defaultRange.from,
     to: url.searchParams.get("to") || defaultRange.to,
@@ -71,7 +36,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const form = await request.formData().catch(() => null);
-  const defaultRange = lastCompletedWeekRange();
+  const defaultRange = currentChicagoMonthRange();
   const filters = {
     from: form?.get("from")?.toString() || defaultRange.from,
     to: form?.get("to")?.toString() || defaultRange.to,
