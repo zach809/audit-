@@ -19,13 +19,26 @@ function chicagoDateInput(date: Date): string {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function currentMonthRange(): { from: string; to: string } {
+function currentWeekStart(): string {
   const today = chicagoDateInput(new Date());
-  const monthStart = new Date(`${today}T12:00:00`);
-  monthStart.setDate(1);
+  const localNoon = new Date(`${today}T12:00:00`);
+  const day = localNoon.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  localNoon.setDate(localNoon.getDate() + diff);
+  return chicagoDateInput(localNoon);
+}
+
+function addDateKeyDays(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return chicagoDateInput(date);
+}
+
+function lastCompletedWeekRange(): { from: string; to: string } {
+  const currentStart = currentWeekStart();
   return {
-    from: chicagoDateInput(monthStart),
-    to: today,
+    from: addDateKeyDays(currentStart, -7),
+    to: addDateKeyDays(currentStart, -1),
   };
 }
 
@@ -41,7 +54,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const url = new URL(request.url);
-  const defaultRange = currentMonthRange();
+  const defaultRange = lastCompletedWeekRange();
   const filters = {
     from: url.searchParams.get("from") || defaultRange.from,
     to: url.searchParams.get("to") || defaultRange.to,
@@ -63,7 +76,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
   const form = await request.formData().catch(() => null);
-  const defaultRange = currentMonthRange();
+  const defaultRange = lastCompletedWeekRange();
   const filters = {
     from: form?.get("from")?.toString() || defaultRange.from,
     to: form?.get("to")?.toString() || defaultRange.to,

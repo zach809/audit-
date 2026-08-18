@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { auditOneMatterById } from "@/lib/audit";
 import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
-import { dashboardReturnUrl } from "@/lib/dashboard-return";
 import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export const maxDuration = 300;
 
-function redirectBack(request: NextRequest, params: Record<string, string>, matterId?: string) {
-  return NextResponse.redirect(new URL(dashboardReturnUrl(params, matterId), request.url), 303);
+function redirectBack(request: NextRequest, params: Record<string, string>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  return NextResponse.redirect(new URL(`/?${search.toString()}`, request.url), 303);
 }
 
 export async function POST(request: NextRequest) {
@@ -32,8 +35,6 @@ export async function POST(request: NextRequest) {
     new Set(form.getAll("matter_id").map((value) => value.toString().trim()).filter(Boolean)),
   ).slice(0, 25);
 
-  const matterId = matterIds[0];
-
   if (!matterIds.length) {
     return redirectBack(request, { ...filters, audit: "failed", message: "No matters were selected for refresh." });
   }
@@ -50,9 +51,9 @@ export async function POST(request: NextRequest) {
       ...filters,
       audit: "ran",
       message: `Refreshed ${checked} matter${checked === 1 ? "" : "s"} from Clio proof. Template/email rows should clear if proof exists.`,
-    }, matterId);
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return redirectBack(request, { ...filters, audit: "failed", message: message.slice(0, 240) }, matterId);
+    return redirectBack(request, { ...filters, audit: "failed", message: message.slice(0, 240) });
   }
 }

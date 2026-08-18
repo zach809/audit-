@@ -1,8 +1,5 @@
 import "./globals.css";
-import "./novi.css";
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 
 export const metadata: Metadata = {
   title: "Clio Workflow Auditor",
@@ -11,24 +8,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html className={`${GeistSans.variable} ${GeistMono.variable}`} data-cwca-seed="cwca19-terminal" lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200;12..96,300;12..96,400&family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en">
       <body>
-        {/*
-          THESIS: An airport sign for owed work — the next destination, not a metric dashboard or exhibit sticker.
-          OWN-WORLD: Cool concourse wall, near-black sign panels, white humanist type, white pictograms on black squares, saturated yellow only when a person must act. Source Sans 3. Sharp rectangles.
-          STORY: A case manager glances, reads the monumental owed count, finds a named row, and takes the labelled action at the trailing edge.
-          FIRST VIEWPORT: Full-width header sign with title plus owed count at monumental tabular scale, then black wayfinding tabs with white type, then dark destination rows. Primary action sits on the row's trailing edge.
-          FORM: Terminal Wayfinding, brief-pinned CWCA-19, seed cwca19-terminal. No concept roll.
-          FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
-        */}
         {children}
       </body>
     </html>

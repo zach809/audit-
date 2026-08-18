@@ -1,7 +1,7 @@
+import { optionalEnv } from "./config";
 import type { DashboardFilters } from "./dashboard-data";
-import { googleSheetsConfigured, syncStandardsToGoogleSheets } from "./google-sheets";
 import { microsoftExcelConfigured, syncStandardsToMicrosoftExcel } from "./microsoft-excel";
-import { shouldPublishPeriod } from "./standards-sheet-sync";
+import { currentChicagoMonthRange, shouldPublishPeriod } from "./standards-sheet-sync";
 
 export type StandardsPublishResult = {
   google: "synced" | "skipped" | "failed";
@@ -13,45 +13,38 @@ type PublishDeps = {
   excelConfigured?: () => boolean;
   syncGoogle?: (filters?: DashboardFilters) => Promise<unknown>;
   syncExcel?: (filters?: DashboardFilters) => Promise<unknown>;
+  workbookTarget?: () => string;
   logError?: (message: string, error: unknown) => void;
 };
 
-function chicagoYmd(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(date);
-}
-
-function currentMonthRange(): DashboardFilters {
-  const to = chicagoYmd(new Date());
-  const monthStart = new Date(`${to}T12:00:00`);
-  monthStart.setDate(1);
-  return { from: chicagoYmd(monthStart), to };
+function excelWorkbookTarget(): string {
+  return (
+    optionalEnv("MICROSOFT_EXCEL_WORKBOOK_ITEM_ID").trim() ||
+    optionalEnv("MICROSOFT_EXCEL_WORKBOOK_SHARE_URL").trim() ||
+    optionalEnv("MICROSOFT_EXCEL_WORKBOOK_PATH").trim() ||
+    "unspecified"
+  );
 }
 
 export async function publishConfiguredStandardsSheets(deps: PublishDeps = {}): Promise<StandardsPublishResult> {
-  const googleOn = deps.googleConfigured ?? googleSheetsConfigured;
   const excelOn = deps.excelConfigured ?? microsoftExcelConfigured;
-  const syncGoogle = deps.syncGoogle ?? syncStandardsToGoogleSheets;
   const syncExcel = deps.syncExcel ?? syncStandardsToMicrosoftExcel;
+  const workbookTarget = deps.workbookTarget ?? excelWorkbookTarget;
   const logError = deps.logError ?? ((message, error) => console.error(message, error));
   const result: StandardsPublishResult = { google: "skipped", excel: "skipped" };
 
-  if (googleOn()) {
-    try {
-      await syncGoogle(currentMonthRange());
-      result.google = "synced";
-    } catch (error) {
-      result.google = "failed";
-      logError("[standards-publish] Google Sheets sync failed", error);
-    }
-  }
+  // On-change publishing is Excel Online only. The weekday cron still owns the other workbook.
 
   if (excelOn()) {
     try {
-      await syncExcel();
+      await syncExcel(currentChicagoMonthRange());
       result.excel = "synced";
     } catch (error) {
       result.excel = "failed";
-      logError("[standards-publish] Excel sync failed", error);
+      logError(
+        `[standards-publish] Excel Online sync failed for workbook ${workbookTarget()}`,
+        error,
+      );
     }
   }
 

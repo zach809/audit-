@@ -9,7 +9,6 @@ import {
   parseMatterDir,
   parseMatterPage,
   parseMatterSort,
-  standardsCaseManagerFor,
 } from "./dashboard-data";
 
 function source(rel: string) {
@@ -226,42 +225,3 @@ describe("matter bulk actions", () => {
     assert.match(page, /MatterBulkBar/);
   });
 });
-
-describe("standardsCaseManagerFor", () => {
-  it("assigns Elanna Myers Park City matters to Ronald, and her other matters to Lori", () => {
-    assert.equal(
-      standardsCaseManagerFor({
-        matter_number: "PC-88",
-        client_first_name: "Park City",
-        client_last_name: "Holdings",
-        responsible_attorney_name: "Elanna Myers",
-        case_manager_name: null,
-      }),
-      "Ronald",
-    );
-    assert.equal(
-      standardsCaseManagerFor({
-        matter_number: "2026-440",
-        client_first_name: "Jordan",
-        client_last_name: "Reyes",
-        responsible_attorney_name: "Elanna Myers",
-        case_manager_name: null,
-      }),
-      "Lori",
-    );
-  });
-
-  it("shows Unassigned when no attorney map or manual name exists", () => {
-    assert.equal(
-      standardsCaseManagerFor({
-        matter_number: "2026-001",
-        client_first_name: "Sam",
-        client_last_name: "Lee",
-        responsible_attorney_name: "Someone New",
-        case_manager_name: null,
-      }),
-      "Unassigned",
-    );
-  });
-});
-

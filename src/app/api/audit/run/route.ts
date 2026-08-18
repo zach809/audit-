@@ -4,13 +4,16 @@ import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
 import { appConfig } from "@/lib/config";
 import { scheduleStandardsPublish } from "@/lib/standards-publish";
-import { dashboardReturnUrl } from "@/lib/dashboard-return";
 import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export const maxDuration = 300;
 
-function redirectBack(request: NextRequest, params: Record<string, string>, matterId?: string) {
-  return NextResponse.redirect(new URL(dashboardReturnUrl(params, matterId), request.url), 303);
+function redirectBack(request: NextRequest, params: Record<string, string>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  return NextResponse.redirect(new URL(`/?${search.toString()}`, request.url), 303);
 }
 
 export async function GET(request: NextRequest) {
@@ -71,10 +74,10 @@ export async function POST(request: NextRequest) {
       try {
         const result = await auditOneMatterById(undefined, matterId);
         scheduleStandardsPublish({ auditStatus: "completed" });
-        return redirectBack(request, { ...filters, audit: "ran", message: result.message }, matterId);
+        return redirectBack(request, { ...filters, audit: "ran", message: result.message });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return redirectBack(request, { ...filters, audit: "failed", message: message.slice(0, 240) }, matterId);
+        return redirectBack(request, { ...filters, audit: "failed", message: message.slice(0, 240) });
       }
     }
     try {

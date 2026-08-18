@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { savePostClosureFollowup } from "@/lib/post-closure";
 import { isValidSessionCookie } from "@/lib/session";
-import { dashboardReturnUrl } from "@/lib/dashboard-return";
 
-function redirectBack(request: NextRequest, params: Record<string, string>, matterId?: string) {
-  return NextResponse.redirect(new URL(dashboardReturnUrl(params, matterId), request.url), 303);
+function redirectBack(request: NextRequest, params: Record<string, string>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  return NextResponse.redirect(new URL(`/?${search.toString()}`, request.url), 303);
 }
 
 export async function POST(request: NextRequest) {
@@ -21,11 +24,9 @@ export async function POST(request: NextRequest) {
     closure_window: form.get("closure_window")?.toString() ?? "current",
   };
 
-  const matterId = form.get("matter_id")?.toString();
-
   try {
     await savePostClosureFollowup({
-      matterId,
+      matterId: form.get("matter_id"),
       touchpointMonths: form.get("touchpoint_months"),
       reviewStatus: form.get("review_status"),
       contactMethod: form.get("contact_method"),
@@ -33,9 +34,9 @@ export async function POST(request: NextRequest) {
       followupNote: form.get("followup_note"),
       reviewedBy: form.get("reviewed_by"),
     });
-    return redirectBack(request, { ...filters, postClosure: "saved", message: "Post-closure follow-up saved." }, matterId);
+    return redirectBack(request, { ...filters, postClosure: "saved", message: "Post-closure follow-up saved." });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return redirectBack(request, { ...filters, postClosure: "failed", message: message.slice(0, 240) }, matterId);
+    return redirectBack(request, { ...filters, postClosure: "failed", message: message.slice(0, 240) });
   }
 }

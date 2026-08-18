@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
-import { writeMetricExclusion } from "@/lib/metric-exclusion";
 import { caseManagerSession, isValidSessionCookie } from "@/lib/session";
-import { dashboardReturnUrl, matterFocusId } from "@/lib/dashboard-return";
 import { rejectNonProductionWrite } from "@/lib/write-guard";
 
-function redirectBack(request: NextRequest, path: string, params: Record<string, string>, matterId?: string) {
-  if (path === "/") {
-    return NextResponse.redirect(new URL(dashboardReturnUrl(params, matterId), request.url), 303);
-  }
+function redirectBack(request: NextRequest, path: string, params: Record<string, string>) {
   const url = new URL(path, request.url);
   for (const [key, value] of Object.entries(params)) {
     if (value) url.searchParams.set(key, value);
   }
-  const focus = matterFocusId(matterId);
-  if (focus) url.hash = focus;
   return NextResponse.redirect(url, 303);
 }
 
@@ -84,40 +77,27 @@ export async function POST(request: NextRequest) {
       attorney,
       metrics: "requested",
       message: "Request sent. This item is protected while admin reviews whether it should count.",
-    }, matterId);
+    });
   }
 
   if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  if (action === "exclude" || action === "restore") {
-    try {
-      await writeMetricExclusion({
-        action,
-        matterId,
-        reason,
-        requestedBy: String(form.get("requested_by") ?? ""),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Metric update failed.";
-      return redirectBack(request, "/", {
-        tab,
-        from,
-        to,
-        attorney,
-        overall,
-        wstatus,
-        wfocus,
-        wstep,
-        cm,
-        sort,
-        dir,
-        page,
-        metrics: "failed",
-        notice: message,
-      }, matterId);
-    }
+  if (action === "exclude") {
+    await sql`
+      insert into audit_metric_exclusion (
+        matter_id, active, requested_by, request_reason, approved_by, approved_at, updated_at
+      ) values (
+        ${matterId}, true, ${String(form.get("requested_by") ?? "")}, ${reason || "Excluded by admin."}, 'Admin', now(), now()
+      )
+      on conflict (matter_id) do update set
+        active = true,
+        request_reason = excluded.request_reason,
+        approved_by = 'Admin',
+        approved_at = now(),
+        updated_at = now()
+    `;
     return redirectBack(request, "/", {
       tab,
       from,
@@ -131,9 +111,36 @@ export async function POST(request: NextRequest) {
       sort,
       dir,
       page,
-      metrics: action === "exclude" ? "excluded" : "restored",
-      notice: action === "exclude" ? "Matter excluded from Standards metrics." : "Matter restored to Standards metrics.",
-    }, matterId);
+      metrics: "excluded",
+      notice: "Matter excluded from Standards metrics.",
+    });
+  }
+
+  if (action === "restore") {
+    await sql`
+      update audit_metric_exclusion
+      set active = false,
+          approved_by = '',
+          approved_at = null,
+          updated_at = now()
+      where matter_id = ${matterId}
+    `;
+    return redirectBack(request, "/", {
+      tab,
+      from,
+      to,
+      attorney,
+      overall,
+      wstatus,
+      wfocus,
+      wstep,
+      cm,
+      sort,
+      dir,
+      page,
+      metrics: "restored",
+      notice: "Matter restored to Standards metrics.",
+    });
   }
 
   return redirectBack(request, action === "request" ? "/case-manager" : "/", {
@@ -151,5 +158,5 @@ export async function POST(request: NextRequest) {
     page,
     metrics: "failed",
     notice: "Unknown metric action.",
-  }, matterId);
+  });
 }
