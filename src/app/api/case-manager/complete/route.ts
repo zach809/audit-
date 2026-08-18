@@ -4,6 +4,7 @@ import { db, initDb } from "@/lib/db";
 import { saveAuditReview } from "@/lib/review-notes";
 import { caseManagerSession } from "@/lib/session";
 import { workflowLabel } from "@/lib/workflow-rules";
+import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 function portalRedirect(request: NextRequest, params: Record<string, string>) {
   const search = new URLSearchParams(params);
@@ -11,6 +12,8 @@ function portalRedirect(request: NextRequest, params: Record<string, string>) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   const caseManagerName = caseManagerSession(request.cookies.get("cwca_cm_session")?.value);
   if (!caseManagerName) {
     return NextResponse.redirect(new URL("/case-manager/login", request.url), 303);

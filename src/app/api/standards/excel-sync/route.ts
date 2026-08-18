@@ -3,6 +3,7 @@ import { initDb } from "@/lib/db";
 import { syncStandardsToMicrosoftExcel } from "@/lib/microsoft-excel";
 import { isAuthorizedWorkerRequest, isValidSessionCookie } from "@/lib/session";
 import { currentChicagoMonthRange } from "@/lib/standards-sheet-sync";
+import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export const maxDuration = 120;
 
@@ -12,6 +13,8 @@ function redirectBack(request: NextRequest, params: Record<string, string>) {
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   if (!isAuthorizedWorkerRequest(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -32,6 +35,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }

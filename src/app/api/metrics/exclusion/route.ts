@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { caseManagerSession, isValidSessionCookie } from "@/lib/session";
+import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 function redirectBack(request: NextRequest, path: string, params: Record<string, string>) {
   const url = new URL(path, request.url);
@@ -11,6 +12,8 @@ function redirectBack(request: NextRequest, path: string, params: Record<string,
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   const form = await request.formData();
   const action = String(form.get("action") ?? "").trim();
   const matterId = String(form.get("matter_id") ?? "").trim();
