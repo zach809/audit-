@@ -24,6 +24,18 @@ export class ClioApiError extends Error {
   }
 }
 
+export class ClioRateLimitError extends Error {
+  retryAfterMs: number;
+  attempts: number;
+
+  constructor(retryAfterMs: number, attempts: number) {
+    super(`Clio rate limit hit after ${attempts} retries; Clio asked us to wait ${retryAfterMs}ms`);
+    this.name = "ClioRateLimitError";
+    this.retryAfterMs = retryAfterMs;
+    this.attempts = attempts;
+  }
+}
+
 function oauthBase(): string {
   return appConfig().clioBaseUrl;
 }
@@ -112,14 +124,17 @@ async function accessToken(): Promise<string> {
   return refreshAccessToken();
 }
 
-function buildUrl(path: string, query: Query = {}): string {
-  const url = new URL(`${clioApiBase()}${path}`);
+function buildUrl(path: string, query: Query = {}, apiBase = clioApiBase()): string {
+  const url = new URL(`${apiBase}${path}`);
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue;
     url.searchParams.set(key, value instanceof Date ? value.toISOString() : String(value));
   }
   return url.toString();
 }
+
+const MAX_RATE_LIMIT_RETRIES = 5;
+const DEFAULT_RETRY_AFTER_MS = 2000;
 
 function retryAfterMs(response: Response): number | null {
   const header = response.headers.get("retry-after");
@@ -128,6 +143,13 @@ function retryAfterMs(response: Response): number | null {
   if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
   const date = Date.parse(header);
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+}
+
+function headerNumber(response: Response, name: string): number | null {
+  const raw = response.headers.get(name);
+  if (raw === null || raw === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
 }
 
 function sleep(ms: number) {
@@ -144,25 +166,77 @@ function pageTokenFromNext(next?: string | null): string | undefined {
   }
 }
 
-export class ClioClient {
-  private lastRequestAt = 0;
-  private minIntervalMs: number;
+type ClioClientHooks = {
+  apiBase?: string;
+  accessToken?: () => Promise<string>;
+};
 
-  constructor(rateLimitPerMinute = appConfig().rateLimitPerMinute) {
-    this.minIntervalMs = Math.ceil(60000 / Math.max(1, rateLimitPerMinute));
+export class ClioClient {
+  private nextAllowedAt = 0;
+  private throttleQueue: Promise<void> = Promise.resolve();
+  private minIntervalMs: number;
+  private readonly floorIntervalMs: number;
+  private readonly apiBase?: string;
+  private readonly readAccessToken?: () => Promise<string>;
+
+  constructor(rateLimitPerMinute = appConfig().rateLimitPerMinute, hooks: ClioClientHooks = {}) {
+    this.floorIntervalMs = Math.ceil(60000 / Math.max(1, rateLimitPerMinute));
+    this.minIntervalMs = this.floorIntervalMs;
+    this.apiBase = hooks.apiBase;
+    this.readAccessToken = hooks.accessToken;
   }
 
   private async throttle() {
-    const now = Date.now();
-    const wait = this.lastRequestAt + this.minIntervalMs - now;
-    if (wait > 0) await sleep(wait);
-    this.lastRequestAt = Date.now();
+    let release = () => {};
+    const previous = this.throttleQueue;
+    this.throttleQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      while (Date.now() < this.nextAllowedAt) {
+        await sleep(this.nextAllowedAt - Date.now());
+      }
+      this.nextAllowedAt = Date.now() + this.minIntervalMs;
+    } finally {
+      release();
+    }
+  }
+
+  private noteRateLimit(response: Response) {
+    const limit = headerNumber(response, "x-ratelimit-limit");
+    const remaining = headerNumber(response, "x-ratelimit-remaining");
+    const resetSec = headerNumber(response, "x-ratelimit-reset");
+
+    let interval = this.floorIntervalMs;
+    if (limit !== null && limit > 0) {
+      interval = Math.max(interval, Math.ceil(60000 / limit));
+    }
+
+    if (remaining !== null && remaining >= 0 && resetSec !== null && resetSec > 0) {
+      const resetAt = resetSec * 1000;
+      const windowMs = resetAt - Date.now();
+      if (windowMs > 0) {
+        if (remaining === 0) {
+          this.nextAllowedAt = Math.max(this.nextAllowedAt, resetAt);
+        } else {
+          interval = Math.max(interval, Math.ceil(windowMs / remaining));
+        }
+      }
+    }
+
+    this.minIntervalMs = interval;
+    this.nextAllowedAt = Math.max(this.nextAllowedAt, Date.now() + interval);
   }
 
   async request<T>(path: string, query: Query = {}, replayed = false): Promise<T> {
+    return this.send<T>(path, query, replayed, 0);
+  }
+
+  private async send<T>(path: string, query: Query, replayed: boolean, rateLimitRetries: number): Promise<T> {
     await this.throttle();
-    const token = await accessToken();
-    const response = await fetch(buildUrl(path, query), {
+    const token = this.readAccessToken ? await this.readAccessToken() : await accessToken();
+    const response = await fetch(buildUrl(path, query, this.apiBase), {
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/json",
@@ -171,20 +245,25 @@ export class ClioClient {
       cache: "no-store",
     });
 
+    this.noteRateLimit(response);
+
     if (response.status === 401 && !replayed) {
       await refreshAccessToken();
-      return this.request<T>(path, query, true);
+      return this.send<T>(path, query, true, rateLimitRetries);
     }
 
     if (response.status === 429) {
-      const wait = retryAfterMs(response) ?? 2000;
+      const wait = retryAfterMs(response) ?? DEFAULT_RETRY_AFTER_MS;
+      if (rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) {
+        throw new ClioRateLimitError(wait, rateLimitRetries);
+      }
       await sleep(wait);
-      return this.request<T>(path, query, replayed);
+      return this.send<T>(path, query, replayed, rateLimitRetries + 1);
     }
 
     if (response.status >= 500 && !replayed) {
       await sleep(2000);
-      return this.request<T>(path, query, true);
+      return this.send<T>(path, query, true, rateLimitRetries);
     }
 
     const text = await response.text();
