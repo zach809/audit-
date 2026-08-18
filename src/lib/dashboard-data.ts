@@ -4,6 +4,7 @@ import { workflowLabel } from "./workflow-rules";
 import { actionFor, displayAuditStatus, priorityFor, timingGoalFor, whyFlagged } from "./audit-display";
 import { reviewResult } from "./review-shared";
 import { APP_VERSION } from "./version";
+import { buildStandardsScorecard } from "./standards-scorecard";
 
 export type DashboardFilters = {
   attorney?: string;
@@ -1299,6 +1300,12 @@ function xmlBlankCell(style = "", extraAttrs = ""): string {
   return `<Cell${styleAttr}${attrs}/>`;
 }
 
+function coreStatusStyle(status: string): string {
+  if (status === "MET" || status === "TRACKED") return "StatusGood";
+  if (status === "REVIEW") return "StatusBad";
+  return "StatusNeutral";
+}
+
 function worksheetName(name: string): string {
   const cleaned = (name || "Unassigned").replace(/[\\/?*[\]:]/g, " ").replace(/\s+/g, " ").trim();
   return (cleaned || "Unassigned").slice(0, 31);
@@ -1309,28 +1316,10 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
   const owners = [...STANDARD_CASE_MANAGERS];
   const workbookFrom = filters.from ? csvDisplayDate(filters.from) : "";
   const workbookTo = filters.to ? csvDisplayDate(filters.to) : "";
-  const periodLabel = workbookFrom && workbookTo ? `${workbookFrom} - ${workbookTo}` : "Selected week";
   const sheets = owners.map((owner) => {
     const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
-    const totals = ownerRows.reduce(
-      (acc, row) => {
-        acc.newMatters += row.newMatters;
-        acc.attorneyCall += row.attorneyCall;
-        acc.welcome += row.welcome;
-        acc.courtDate += row.courtDate;
-        acc.weeklyCheckIns += row.weeklyCheckIns;
-        return acc;
-      },
-      { newMatters: 0, attorneyCall: 0, welcome: 0, courtDate: 0, weeklyCheckIns: 0 },
-    );
-    const requiredSetup = totals.newMatters * 3;
-    const completedSetup = totals.attorneyCall + totals.welcome + totals.courtDate;
-    const missingSetup = Math.max(0, requiredSetup - completedSetup);
-    const overallPercent = requiredSetup ? completedSetup / requiredSetup : 0;
-    const overallLabel = requiredSetup ? `${Math.round(overallPercent * 100)}%` : "No activity";
-    const standardsMetLabel = requiredSetup ? `${completedSetup} of ${requiredSetup}` : "0 of 0";
-    const statusLabel = !requiredSetup ? "NO DATA" : overallPercent >= 0.9 ? "ON TARGET" : "BELOW TARGET";
-    const statusStyle = !requiredSetup ? "StatusNeutral" : overallPercent >= 0.9 ? "StatusGood" : "StatusBad";
+    const scorecard = buildStandardsScorecard(owner, ownerRows, { from: workbookFrom, to: workbookTo });
+    const [phoneCall, welcomeLetters, courtDateEvent, weeklyCheckIns] = scorecard.coreStandards;
     const headerRows = [
       `<Row ss:Height="34">${xmlCell("CASE MANAGER STANDARDS SCORECARD", "String", "Title", 'ss:MergeAcross="7"')}</Row>`,
       `<Row ss:Height="24">${xmlCell("At-a-glance review of daily activity", "String", "Subtitle", 'ss:MergeAcross="7"')}</Row>`,
@@ -1342,10 +1331,10 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
         xmlCell("TARGET", "String", "DarkHeader", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="28">${[
-        xmlCell(owner, "String", "InputBlue", 'ss:MergeAcross="1"'),
-        xmlCell(workbookFrom || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
-        xmlCell(workbookTo || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
-        xmlCell("90%", "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.owner, "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.period.from || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.period.to || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.targetLabel, "String", "InputBlue", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
       `<Row ss:Height="28">${[
@@ -1355,15 +1344,15 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
         xmlCell("FOLLOW-UP ITEMS", "String", "TileCopper", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="54">${[
-        xmlCell(overallLabel, "String", "TileBlueBig", 'ss:MergeAcross="1"'),
-        xmlCell(standardsMetLabel, "String", "TileTealBig", 'ss:MergeAcross="1"'),
-        xmlCell(totals.newMatters, "Number", "TileNavyBig", 'ss:MergeAcross="1"'),
-        xmlCell(missingSetup, "Number", "TileCopperBig", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.overallCompliance, "String", "TileBlueBig", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.targetsMet, "String", "TileTealBig", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.casesHandled, "Number", "TileNavyBig", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.followUpItems, "Number", "TileCopperBig", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="22">${[
-        xmlCell(statusLabel, "String", "TileBlueFooter", 'ss:MergeAcross="1"'),
-        xmlCell("Target threshold: 90%", "String", "TileTealFooter", 'ss:MergeAcross="1"'),
-        xmlCell(`${totals.weeklyCheckIns} weekly check-ins`, "String", "TileNavyFooter", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.verdict, "String", "TileBlueFooter", 'ss:MergeAcross="1"'),
+        xmlCell(`Target threshold: ${scorecard.targetLabel}`, "String", "TileTealFooter", 'ss:MergeAcross="1"'),
+        xmlCell(`${scorecard.weeklyCheckIns} weekly check-ins`, "String", "TileNavyFooter", 'ss:MergeAcross="1"'),
         xmlCell("Lower is better", "String", "TileCopperFooter", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
@@ -1377,34 +1366,34 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
         xmlCell("PERIOD", "String", "SmallHeader", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell("Initial meeting set - Phone call", "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(totals.attorneyCall, "Number", "Actual"),
-        xmlCell(totals.newMatters, "Number", "Required"),
-        xmlCell(totals.attorneyCall >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.attorneyCall >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
+        xmlCell(phoneCall.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(phoneCall.actual, "Number", "Actual"),
+        xmlCell(phoneCall.required, "Number", "Required"),
+        xmlCell(phoneCall.status, "String", coreStatusStyle(phoneCall.status)),
         xmlBlankCell(),
-        xmlCell(periodLabel, "String", "Note", 'ss:MergeAcross="1"'),
+        xmlCell(scorecard.periodLabel, "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell("Welcome letters sent", "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(totals.welcome, "Number", "Actual"),
-        xmlCell(totals.newMatters, "Number", "Required"),
-        xmlCell(totals.welcome >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.welcome >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
+        xmlCell(welcomeLetters.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(welcomeLetters.actual, "Number", "Actual"),
+        xmlCell(welcomeLetters.required, "Number", "Required"),
+        xmlCell(welcomeLetters.status, "String", coreStatusStyle(welcomeLetters.status)),
         xmlBlankCell(),
         xmlCell("Each new matter should have matching proof.", "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell("Court date event made", "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(totals.courtDate, "Number", "Actual"),
-        xmlCell(totals.newMatters, "Number", "Required"),
-        xmlCell(totals.courtDate >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.courtDate >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
+        xmlCell(courtDateEvent.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(courtDateEvent.actual, "Number", "Actual"),
+        xmlCell(courtDateEvent.required, "Number", "Required"),
+        xmlCell(courtDateEvent.status, "String", coreStatusStyle(courtDateEvent.status)),
         xmlBlankCell(),
         xmlCell("Court date means the client court event was made in Clio.", "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell("Weekly check-ins completed", "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(totals.weeklyCheckIns, "Number", "Actual"),
-        xmlCell("As due", "String", "Required"),
-        xmlCell(totals.weeklyCheckIns ? "TRACKED" : "NO DATA", "String", totals.weeklyCheckIns ? "StatusGood" : "StatusNeutral"),
+        xmlCell(weeklyCheckIns.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(weeklyCheckIns.actual, "Number", "Actual"),
+        xmlCell(weeklyCheckIns.required, "String", "Required"),
+        xmlCell(weeklyCheckIns.status, "String", coreStatusStyle(weeklyCheckIns.status)),
         xmlBlankCell(),
         xmlCell("Ongoing-case check-ins are included when due.", "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
