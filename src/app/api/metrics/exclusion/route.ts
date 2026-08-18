@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
   const overall = String(form.get("overall") ?? "").trim();
   const wstatus = String(form.get("wstatus") ?? "").trim();
   const wfocus = String(form.get("wfocus") ?? "").trim();
+  const wstep = String(form.get("wstep") ?? "").trim();
+  const cm = String(form.get("cm") ?? "").trim();
+  const sort = String(form.get("sort") ?? "").trim();
+  const dir = String(form.get("dir") ?? "").trim();
+  const page = String(form.get("page") ?? "").trim();
   const window = String(form.get("window") ?? "").trim();
   const q = String(form.get("q") ?? "").trim();
   const cmname = String(form.get("cmname") ?? "").trim();
@@ -38,6 +43,11 @@ export async function POST(request: NextRequest) {
       overall,
       wstatus,
       wfocus,
+      wstep,
+      cm,
+      sort,
+      dir,
+      page,
       metrics: "failed",
       notice: "Matter details were missing.",
     });
@@ -96,6 +106,11 @@ export async function POST(request: NextRequest) {
       overall,
       wstatus,
       wfocus,
+      wstep,
+      cm,
+      sort,
+      dir,
+      page,
       metrics: "excluded",
       notice: "Matter excluded from Standards metrics.",
     });
@@ -118,6 +133,11 @@ export async function POST(request: NextRequest) {
       overall,
       wstatus,
       wfocus,
+      wstep,
+      cm,
+      sort,
+      dir,
+      page,
       metrics: "restored",
       notice: "Matter restored to Standards metrics.",
     });
@@ -131,6 +151,11 @@ export async function POST(request: NextRequest) {
     overall,
     wstatus,
     wfocus,
+    wstep,
+    cm,
+    sort,
+    dir,
+    page,
     metrics: "failed",
     notice: "Unknown metric action.",
   });

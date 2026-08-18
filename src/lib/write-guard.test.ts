@@ -152,4 +152,19 @@ describe("preview write guard", () => {
     await assertNotBlocked(await googleGet(req("/api/standards/google-sync")));
     await assertNotBlocked(await excelGet(req("/api/standards/excel-sync")));
   });
+
+  it("refuses each bulk write the same way as a single write, including a forged admin role", async () => {
+    setEnv({ VERCEL_ENV: "preview", CWCA_ALLOW_WRITES: undefined });
+    const ids = ["m-151", "m-152", "m-153"];
+    for (const matterId of ids) {
+      await assertBlocked(await auditRunPost(req("/api/audit/run", "POST", {
+        headers: { "content-type": "application/x-www-form-urlencoded", "x-app-role": "admin" },
+        body: new URLSearchParams({ matter_id: matterId, role: "admin" }).toString(),
+      })));
+      await assertBlocked(await exclusionPost(req("/api/metrics/exclusion", "POST", {
+        headers: { "content-type": "application/x-www-form-urlencoded", "x-app-role": "admin" },
+        body: new URLSearchParams({ action: "exclude", matter_id: matterId, role: "admin" }).toString(),
+      })));
+    }
+  });
 });

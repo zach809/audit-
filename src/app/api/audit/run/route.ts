@@ -64,6 +64,11 @@ export async function POST(request: NextRequest) {
       tab: form?.get("tab")?.toString() ?? "",
       wstatus: form?.get("wstatus")?.toString() ?? "",
       wfocus: form?.get("wfocus")?.toString() ?? "",
+      wstep: form?.get("wstep")?.toString() ?? "",
+      cm: form?.get("cm")?.toString() ?? "",
+      sort: form?.get("sort")?.toString() ?? "",
+      dir: form?.get("dir")?.toString() ?? "",
+      page: form?.get("page")?.toString() ?? "",
     };
     if (matterId) {
       try {
