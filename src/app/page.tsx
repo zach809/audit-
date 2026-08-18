@@ -1315,6 +1315,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     if (searchParams.metrics === "failed") return searchParams.notice || "Metric update failed.";
     if (searchParams.sheets === "synced") return searchParams.notice || "Google Sheet updated.";
     if (searchParams.sheets === "failed") return searchParams.notice || "Google Sheets sync failed.";
+    if (searchParams.excel === "synced") return searchParams.notice || "Excel workbook updated.";
+    if (searchParams.excel === "failed") return searchParams.notice || "Excel workbook sync failed.";
     if (searchParams.clio === "connected") return "Clio connected successfully.";
     if (searchParams.clio === "failed") return `Clio connection failed${searchParams.reason ? `: ${searchParams.reason}` : "."}`;
     return "";
@@ -1354,7 +1356,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       {notice ? (
-        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" || searchParams.metrics === "failed" || searchParams.sheets === "failed" ? "notice danger" : "notice"}>
+        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" || searchParams.metrics === "failed" || searchParams.sheets === "failed" || searchParams.excel === "failed" ? "notice danger" : "notice"}>
           {notice}
         </section>
       ) : null}
