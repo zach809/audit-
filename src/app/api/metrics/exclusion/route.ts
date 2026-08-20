@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { caseManagerSession, isValidSessionCookie } from "@/lib/session";
-import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 function redirectBack(request: NextRequest, path: string, params: Record<string, string>) {
   const url = new URL(path, request.url);
@@ -12,8 +11,6 @@ function redirectBack(request: NextRequest, path: string, params: Record<string,
 }
 
 export async function POST(request: NextRequest) {
-  const blocked = rejectNonProductionWrite();
-  if (blocked) return blocked;
   const form = await request.formData();
   const action = String(form.get("action") ?? "").trim();
   const matterId = String(form.get("matter_id") ?? "").trim();
@@ -25,11 +22,6 @@ export async function POST(request: NextRequest) {
   const overall = String(form.get("overall") ?? "").trim();
   const wstatus = String(form.get("wstatus") ?? "").trim();
   const wfocus = String(form.get("wfocus") ?? "").trim();
-  const wstep = String(form.get("wstep") ?? "").trim();
-  const cm = String(form.get("cm") ?? "").trim();
-  const sort = String(form.get("sort") ?? "").trim();
-  const dir = String(form.get("dir") ?? "").trim();
-  const page = String(form.get("page") ?? "").trim();
   const window = String(form.get("window") ?? "").trim();
   const q = String(form.get("q") ?? "").trim();
   const cmname = String(form.get("cmname") ?? "").trim();
@@ -43,11 +35,6 @@ export async function POST(request: NextRequest) {
       overall,
       wstatus,
       wfocus,
-      wstep,
-      cm,
-      sort,
-      dir,
-      page,
       metrics: "failed",
       notice: "Matter details were missing.",
     });
@@ -106,11 +93,6 @@ export async function POST(request: NextRequest) {
       overall,
       wstatus,
       wfocus,
-      wstep,
-      cm,
-      sort,
-      dir,
-      page,
       metrics: "excluded",
       notice: "Matter excluded from Standards metrics.",
     });
@@ -133,11 +115,6 @@ export async function POST(request: NextRequest) {
       overall,
       wstatus,
       wfocus,
-      wstep,
-      cm,
-      sort,
-      dir,
-      page,
       metrics: "restored",
       notice: "Matter restored to Standards metrics.",
     });
@@ -151,11 +128,6 @@ export async function POST(request: NextRequest) {
     overall,
     wstatus,
     wfocus,
-    wstep,
-    cm,
-    sort,
-    dir,
-    page,
     metrics: "failed",
     notice: "Unknown metric action.",
   });

@@ -1,0 +1,1051 @@
+/*
+ * CWCA Minimal Modern design system.
+ *
+ * This file is intentionally imported after globals.css. It centralizes the
+ * visual language while preserving the existing component structure and logic.
+ */
+
+:root {
+  color-scheme: light;
+  --cwca-canvas: #f8fafc;
+  --cwca-surface: #ffffff;
+  --cwca-surface-muted: #f1f5f9;
+  --cwca-surface-blue: #eff6ff;
+  --cwca-ink: #0f172a;
+  --cwca-ink-soft: #334155;
+  --cwca-muted: #64748b;
+  --cwca-border: #dbe3ee;
+  --cwca-border-strong: #c3cfdd;
+  --cwca-blue: #0052ff;
+  --cwca-blue-bright: #4d7cff;
+  --cwca-blue-dark: #003ebf;
+  --cwca-green: #137a52;
+  --cwca-green-bg: #e8f7ef;
+  --cwca-amber: #9a5b0b;
+  --cwca-amber-bg: #fff6df;
+  --cwca-red: #b42318;
+  --cwca-red-bg: #fff0ee;
+  --cwca-purple: #6d3eb8;
+  --cwca-purple-bg: #f4efff;
+  --cwca-slate: #475569;
+  --cwca-slate-bg: #eef2f7;
+  --cwca-focus: rgba(0, 82, 255, 0.22);
+  --cwca-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --cwca-shadow-sm: 0 6px 18px rgba(15, 23, 42, 0.07);
+  --cwca-shadow-md: 0 14px 34px rgba(15, 23, 42, 0.1);
+  --cwca-font-display: "Calistoga", Georgia, "Times New Roman", serif;
+  --cwca-font-ui: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --cwca-font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+
+  /* Compatibility tokens used throughout the legacy stylesheet. */
+  --bg: var(--cwca-canvas);
+  --panel: var(--cwca-surface);
+  --panel-strong: var(--cwca-surface);
+  --panel-soft: var(--cwca-surface-muted);
+  --line: var(--cwca-border);
+  --line-soft: var(--cwca-border);
+  --text: var(--cwca-ink);
+  --muted: var(--cwca-muted);
+  --blue: var(--cwca-blue);
+  --blue-soft: var(--cwca-surface-blue);
+  --green: var(--cwca-green);
+  --green-soft: var(--cwca-green-bg);
+  --amber: var(--cwca-amber);
+  --amber-soft: var(--cwca-amber-bg);
+  --red: var(--cwca-red);
+  --red-soft: var(--cwca-red-bg);
+  --purple: var(--cwca-purple);
+  --purple-soft: var(--cwca-purple-bg);
+  --stone: var(--cwca-surface-muted);
+  --charcoal: var(--cwca-ink);
+  --shadow: var(--cwca-shadow-md);
+  --shadow-soft: var(--cwca-shadow-sm);
+  --demo-bg: var(--cwca-canvas);
+  --demo-panel: var(--cwca-surface);
+  --demo-text: var(--cwca-ink);
+  --demo-muted: var(--cwca-muted);
+  --demo-line: var(--cwca-border);
+  --demo-blue: var(--cwca-blue);
+}
+
+html {
+  background: var(--cwca-canvas) !important;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(rgba(15, 23, 42, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.018) 1px, transparent 1px),
+    var(--cwca-canvas) !important;
+  background-size: 32px 32px !important;
+  color: var(--cwca-ink) !important;
+  font-family: var(--cwca-font-ui) !important;
+  font-size: 16px !important;
+  line-height: 1.55;
+  letter-spacing: 0 !important;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: #cfe0ff;
+  color: var(--cwca-ink);
+}
+
+a {
+  color: var(--cwca-blue-dark);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--cwca-blue);
+}
+
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--cwca-focus) !important;
+  outline-offset: 2px !important;
+}
+
+.shell,
+.cm-portal-shell,
+.cm-login-shell {
+  width: min(100%, 1440px) !important;
+  max-width: 1440px !important;
+  margin-inline: auto !important;
+  padding: 24px !important;
+  color: var(--cwca-ink) !important;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+span,
+strong,
+small,
+label,
+li,
+dt,
+dd,
+th,
+td {
+  letter-spacing: 0 !important;
+}
+
+h1,
+h2 {
+  color: var(--cwca-ink) !important;
+}
+
+h1 {
+  font-family: var(--cwca-font-display) !important;
+  font-weight: 400 !important;
+}
+
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--cwca-font-ui) !important;
+}
+
+.muted,
+.detail,
+.small,
+small,
+.panel p,
+.matter-card p,
+.cm-task-card p,
+.cm-section-head p,
+.app-header p,
+.cm-portal-header p {
+  color: var(--cwca-muted) !important;
+}
+
+.label,
+.eyebrow {
+  color: var(--cwca-muted) !important;
+  font-family: var(--cwca-font-mono) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  text-transform: uppercase;
+}
+
+/* Main product header: same content and placement, cleaner hierarchy. */
+.shell > .app-header.topbar,
+.app-header.topbar {
+  position: relative !important;
+  min-height: 190px !important;
+  display: grid !important;
+  grid-template-columns: minmax(320px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 32px !important;
+  padding: 32px 36px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--cwca-border) !important;
+  border-top: 4px solid var(--cwca-blue) !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(90deg, rgba(0, 82, 255, 0.04), transparent 42%),
+    var(--cwca-surface) !important;
+  box-shadow: var(--cwca-shadow-md) !important;
+  color: var(--cwca-ink) !important;
+}
+
+.shell > .app-header.topbar::before,
+.app-header.topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--cwca-blue), var(--cwca-blue-bright));
+  pointer-events: none;
+}
+
+.shell > .app-header.topbar::after,
+.app-header.topbar::after {
+  display: none !important;
+}
+
+.shell > .app-header.topbar .title,
+.app-header.topbar .title {
+  min-width: 0 !important;
+}
+
+.shell > .app-header.topbar .title h1,
+.app-header.topbar .title h1,
+.app-header h1 {
+  max-width: 700px !important;
+  margin: 16px 0 8px !important;
+  color: var(--cwca-ink) !important;
+  font-size: clamp(38px, 4vw, 58px) !important;
+  line-height: 1.02 !important;
+  letter-spacing: 0 !important;
+}
+
+.shell > .app-header.topbar .title p,
+.app-header.topbar .title p,
+.app-header p {
+  max-width: 680px !important;
+  margin: 0 !important;
+  color: var(--cwca-ink-soft) !important;
+  font-size: 16px !important;
+  line-height: 1.55 !important;
+}
+
+.eyebrow-row {
+  gap: 8px !important;
+}
+
+.eyebrow {
+  padding: 7px 10px !important;
+  border: 1px solid var(--cwca-border) !important;
+  border-radius: 999px !important;
+  background: var(--cwca-surface-muted) !important;
+  color: var(--cwca-ink-soft) !important;
+}
+
+.shell > .app-header.topbar .header-actions,
+.app-header.topbar .header-actions {
+  justify-self: end !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  padding: 8px !important;
+  border: 1px solid var(--cwca-border) !important;
+  border-radius: 8px !important;
+  background: var(--cwca-surface-muted) !important;
+  box-shadow: var(--cwca-shadow-xs) !important;
+}
+
+.shell > .app-header.topbar .header-actions form,
+.app-header.topbar .header-actions form {
+  display: flex !important;
+  width: auto !important;
+  margin: 0 !important;
+}
+
+.shell > .app-header.topbar .header-actions button.primary,
+.app-header.topbar .header-actions button.primary {
+  width: auto !important;
+  min-width: 164px !important;
+  max-width: 210px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 20px !important;
+  white-space: nowrap !important;
+}
+
+.shell > .app-header.topbar .header-actions .badge.Pass,
+.app-header.topbar .header-actions .badge.Pass {
+  width: auto !important;
+  min-width: 130px !important;
+  max-width: 170px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 16px !important;
+  white-space: nowrap !important;
+}
+
+/* Shared surfaces */
+.panel,
+.deployment-proof,
+.notice,
+.dashboard-tabs,
+.filter-panel,
+.matter-card,
+.command-hero,
+.command-metric,
+.command-panel,
+.report-panel,
+.report-card,
+.post-closure-panel,
+.case-manager-hero,
+.case-manager-task,
+.cm-portal-header,
+.cm-queue-summary,
+.cm-notification-strip,
+.cm-clear-first-panel,
+.cm-clear-first-card,
+.cm-score-card,
+.cm-task-filters,
+.cm-task-card,
+.cm-empty,
+.cm-login-card,
+.standards-weekly-graph-card,
+.weekly-compliance-section,
+.standards-sheet-panel,
+.ongoing-panel,
+.audit-debug-panel,
+.problem-item,
+.evidence-item,
+.step-cell,
+.stat,
+.summary-item {
+  color: var(--cwca-ink) !important;
+  border: 1px solid var(--cwca-border) !important;
+  border-radius: 8px !important;
+  background: var(--cwca-surface) !important;
+  box-shadow: var(--cwca-shadow-xs) !important;
+}
+
+.panel,
+.report-panel,
+.post-closure-panel,
+.standards-sheet-panel,
+.ongoing-panel,
+.audit-debug-panel {
+  padding: 24px !important;
+}
+
+.panel:hover,
+.matter-card:hover,
+.cm-task-card:hover,
+.report-card:hover,
+.command-metric:hover {
+  border-color: var(--cwca-border-strong) !important;
+  box-shadow: var(--cwca-shadow-sm) !important;
+}
+
+.deployment-proof {
+  padding: 14px 18px !important;
+  background: var(--cwca-surface-blue) !important;
+  border-left: 4px solid var(--cwca-blue) !important;
+}
+
+.notice {
+  background: #f8fbff !important;
+}
+
+.notice.danger,
+.danger {
+  color: var(--cwca-red) !important;
+  background: var(--cwca-red-bg) !important;
+  border-color: #f2b8b3 !important;
+}
+
+/* Navigation remains in its current location. */
+.dashboard-tabs {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  padding: 8px !important;
+  background: var(--cwca-surface) !important;
+  box-shadow: var(--cwca-shadow-sm) !important;
+}
+
+.dashboard-tab {
+  min-height: 56px !important;
+  padding: 12px 14px !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--cwca-ink-soft) !important;
+  box-shadow: none !important;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease !important;
+}
+
+.dashboard-tab strong,
+.dashboard-tab > span:first-child {
+  color: inherit !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+}
+
+.dashboard-tab span {
+  color: var(--cwca-muted) !important;
+  font-size: 12px !important;
+}
+
+.dashboard-tab:hover {
+  border-color: var(--cwca-border) !important;
+  background: var(--cwca-surface-muted) !important;
+  color: var(--cwca-ink) !important;
+}
+
+.dashboard-tab.active,
+.dashboard-tab.review-tab:hover {
+  border-color: var(--cwca-blue) !important;
+  background: linear-gradient(135deg, var(--cwca-blue), var(--cwca-blue-bright)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(0, 82, 255, 0.18) !important;
+}
+
+.dashboard-tab.active span {
+  color: #edf4ff !important;
+}
+
+/* Buttons and form controls */
+button,
+.button,
+.primary,
+.cm-window-tabs a {
+  min-height: 42px !important;
+  width: auto;
+  padding: 0 16px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--cwca-border-strong) !important;
+  border-radius: 6px !important;
+  background: var(--cwca-surface) !important;
+  color: var(--cwca-ink) !important;
+  box-shadow: var(--cwca-shadow-xs) !important;
+  font-family: var(--cwca-font-ui) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+  text-decoration: none !important;
+  white-space: normal;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background-color 150ms ease !important;
+}
+
+button:hover,
+.button:hover,
+.cm-window-tabs a:hover {
+  border-color: #9db5d2 !important;
+  background: var(--cwca-surface-blue) !important;
+  color: var(--cwca-blue-dark) !important;
+  box-shadow: var(--cwca-shadow-sm) !important;
+  transform: translateY(-1px);
+}
+
+button.primary,
+.button.primary,
+.primary,
+.cm-window-tabs a.active {
+  border-color: var(--cwca-blue) !important;
+  background: linear-gradient(135deg, var(--cwca-blue), var(--cwca-blue-bright)) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(0, 82, 255, 0.2) !important;
+}
+
+button.primary:hover,
+.button.primary:hover,
+.primary:hover {
+  border-color: var(--cwca-blue-dark) !important;
+  background: linear-gradient(135deg, var(--cwca-blue-dark), var(--cwca-blue)) !important;
+  color: #ffffff !important;
+}
+
+button:disabled,
+.button.disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.56 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+input,
+select,
+textarea {
+  min-height: 44px !important;
+  padding: 10px 12px !important;
+  border: 1px solid var(--cwca-border-strong) !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  color: var(--cwca-ink) !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  font-family: var(--cwca-font-ui) !important;
+  font-size: 15px !important;
+  letter-spacing: 0 !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8492a6 !important;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #9db5d2 !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--cwca-blue) !important;
+  box-shadow: 0 0 0 3px var(--cwca-focus) !important;
+  outline: 0 !important;
+}
+
+/* Status language: semantic color carries meaning consistently. */
+.badge,
+.status-pill,
+.ongoing-status,
+.ongoing-followup,
+.cm-protected-pill,
+.weekly-change {
+  min-height: 28px !important;
+  padding: 5px 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid var(--cwca-border) !important;
+  border-radius: 999px !important;
+  background: var(--cwca-slate-bg) !important;
+  color: var(--cwca-slate) !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+}
+
+.badge.On-Track,
+.badge.Pass,
+.Pass,
+.On-Time,
+.Strong,
+.On-Track,
+.Resolved,
+.Completed,
+.Clear,
+.good,
+.weekly-change.improved,
+.cm-score-head > strong.good {
+  border-color: #91d4b3 !important;
+  background: var(--cwca-green-bg) !important;
+  color: var(--cwca-green) !important;
+}
+
+.badge.Late,
+.badge.Watch,
+.Late,
+.Watch,
+.Needs-Follow-Up,
+.needs,
+.weekly-change.worse {
+  border-color: #e9c476 !important;
+  background: var(--cwca-amber-bg) !important;
+  color: var(--cwca-amber) !important;
+}
+
+.badge.Flag,
+.badge.Missing,
+.Flag,
+.Missing,
+.Overdue,
+.Needs-Focus {
+  border-color: #efaaa4 !important;
+  background: var(--cwca-red-bg) !important;
+  color: var(--cwca-red) !important;
+}
+
+.badge.Review,
+.badge.Unknown,
+.Review,
+.Unknown,
+.Needs-Review,
+.Needs-Recheck {
+  border-color: #c9afe9 !important;
+  background: var(--cwca-purple-bg) !important;
+  color: var(--cwca-purple) !important;
+}
+
+.badge.Not-Due-Yet,
+.badge.Pending,
+.badge.Not-Checked,
+.Pending,
+.Not-Due-Yet,
+.Not-Checked,
+.quiet,
+.weekly-change.same {
+  border-color: #bdc9d8 !important;
+  background: var(--cwca-slate-bg) !important;
+  color: var(--cwca-slate) !important;
+}
+
+/* Matter review */
+.matter-card {
+  overflow: hidden !important;
+  border-left: 4px solid var(--cwca-blue) !important;
+  box-shadow: var(--cwca-shadow-sm) !important;
+}
+
+.matter-card h2,
+.matter-card h3,
+.panel h2,
+.panel h3,
+.cm-task-card h2,
+.cm-clear-first-card h3 {
+  color: var(--cwca-ink) !important;
+}
+
+.step-cell {
+  min-height: 108px !important;
+  padding: 14px !important;
+  background: #fbfdff !important;
+  box-shadow: none !important;
+}
+
+.problem-list,
+.evidence-list {
+  gap: 10px !important;
+}
+
+.problem-item {
+  border-left: 4px solid var(--cwca-amber) !important;
+  background: #fffdf7 !important;
+  box-shadow: none !important;
+}
+
+.problem-item.Missing,
+.problem-item.Flag,
+.problem-item.Needs-Follow-Up {
+  border-left-color: var(--cwca-red) !important;
+  background: var(--cwca-red-bg) !important;
+}
+
+.problem-item.Unknown,
+.problem-item.Needs-Review {
+  border-left-color: var(--cwca-purple) !important;
+  background: var(--cwca-purple-bg) !important;
+}
+
+.problem-title,
+.problem-meta {
+  color: var(--cwca-ink) !important;
+}
+
+.evidence-link,
+.problem-clio-link {
+  color: var(--cwca-blue-dark) !important;
+  font-weight: 700 !important;
+}
+
+.progress-track,
+.standard-track,
+.kpi-track,
+.bar-track,
+.cm-score-bar div,
+.ongoing-progress-track {
+  overflow: hidden;
+  border-radius: 999px !important;
+  background: #dce4ee !important;
+}
+
+.queue-meter-bar,
+.standard-fill,
+.kpi-fill,
+.bar-fill,
+.cm-score-bar b,
+.ongoing-progress-fill {
+  border-radius: 999px !important;
+  background: linear-gradient(90deg, var(--cwca-blue), var(--cwca-blue-bright)) !important;
+}
+
+/* Command center and report cards retain their grid positions. */
+.command-hero {
+  min-height: auto !important;
+  padding: 26px !important;
+  background: var(--cwca-surface) !important;
+  border-left: 4px solid var(--cwca-blue) !important;
+}
+
+.command-hero h2 {
+  color: var(--cwca-ink) !important;
+  font-family: var(--cwca-font-display) !important;
+  font-size: clamp(30px, 3vw, 44px) !important;
+  font-weight: 400 !important;
+  line-height: 1.1 !important;
+}
+
+.command-metric {
+  min-height: 118px !important;
+  padding: 18px !important;
+  border-top: 3px solid var(--cwca-blue) !important;
+}
+
+.command-metric strong {
+  color: var(--cwca-ink) !important;
+  font-size: 32px !important;
+}
+
+.template-registry-card,
+details {
+  color: var(--cwca-ink) !important;
+}
+
+summary {
+  color: var(--cwca-ink) !important;
+  cursor: pointer;
+}
+
+/* Tables and spreadsheet views */
+.standards-tab .standards-sheet-panel,
+.standards-sheet-panel {
+  width: 100% !important;
+  max-width: none !important;
+  overflow: hidden !important;
+}
+
+.standards-tab .standards-sheet-scroll,
+.standards-sheet-scroll,
+.table-wrap {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: auto !important;
+  border: 1px solid var(--cwca-border-strong) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+table {
+  width: 100%;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  background: #ffffff !important;
+  color: var(--cwca-ink) !important;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 13px 12px !important;
+  border-color: #c6d3e3 !important;
+  background: #dce9fb !important;
+  color: var(--cwca-ink) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  text-align: left;
+}
+
+td {
+  padding: 12px !important;
+  border-color: var(--cwca-border) !important;
+  background: #ffffff !important;
+  color: var(--cwca-ink) !important;
+  font-size: 14px !important;
+}
+
+tbody tr:nth-child(even) td,
+.standards-tab .standards-sheet-table tbody tr:nth-child(even) td {
+  background: #f4f8fd !important;
+}
+
+tbody tr:hover td {
+  background: #eaf2ff !important;
+}
+
+.standards-tab .standards-sheet-table th {
+  background: #dce9fb !important;
+  color: var(--cwca-ink) !important;
+}
+
+.standards-tab .standards-sheet-table td {
+  background: #ffffff !important;
+  color: var(--cwca-ink) !important;
+}
+
+/* Case manager portal */
+.cm-portal-header {
+  min-height: auto !important;
+  padding: 30px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 24px !important;
+  border-top: 4px solid var(--cwca-blue) !important;
+  background: var(--cwca-surface) !important;
+  box-shadow: var(--cwca-shadow-md) !important;
+}
+
+.cm-portal-header h1 {
+  margin: 8px 0 !important;
+  color: var(--cwca-ink) !important;
+  font-family: var(--cwca-font-display) !important;
+  font-size: clamp(36px, 4.5vw, 54px) !important;
+  font-weight: 400 !important;
+  line-height: 1.05 !important;
+}
+
+.cm-portal-actions {
+  padding: 8px !important;
+  border: 1px solid var(--cwca-border) !important;
+  border-radius: 8px !important;
+  background: var(--cwca-surface-muted) !important;
+}
+
+.cm-queue-summary,
+.cm-notification-strip {
+  gap: 12px !important;
+  background: var(--cwca-surface) !important;
+}
+
+.cm-queue-summary > div,
+.cm-notification-strip > div,
+.cm-score-metrics span,
+.stat,
+.summary-item,
+.cm-simple-steps li {
+  border: 1px solid var(--cwca-border) !important;
+  border-radius: 6px !important;
+  background: var(--cwca-surface-muted) !important;
+  color: var(--cwca-ink) !important;
+}
+
+.cm-queue-summary strong,
+.cm-notification-strip strong,
+.cm-score-metrics b,
+.stat strong {
+  color: var(--cwca-ink) !important;
+}
+
+.cm-task-card {
+  padding: 20px !important;
+  border-left: 5px solid var(--cwca-blue) !important;
+  box-shadow: var(--cwca-shadow-sm) !important;
+}
+
+.cm-task-card.status-row-Missing,
+.cm-task-card.status-row-Needs-Follow-Up,
+.cm-clear-first-card.status-row-Missing,
+.cm-clear-first-card.status-row-Needs-Follow-Up {
+  border-left-color: var(--cwca-amber) !important;
+  box-shadow: var(--cwca-shadow-sm) !important;
+}
+
+.cm-task-card.status-row-On-Track,
+.cm-clear-first-card.status-row-On-Track {
+  border-left-color: var(--cwca-green) !important;
+  box-shadow: var(--cwca-shadow-sm) !important;
+}
+
+.cm-task-main,
+.cm-task-meta,
+.cm-client-reminder,
+.cm-task-opportunity,
+.cm-next-step,
+.cm-protected-notice {
+  border: 1px solid var(--cwca-border) !important;
+  border-radius: 6px !important;
+  background: var(--cwca-surface-muted) !important;
+  color: var(--cwca-ink) !important;
+}
+
+.cm-task-buttons .button,
+.cm-clear-first-card .button,
+.cm-task-filters button,
+.cm-task-filters .button {
+  width: auto !important;
+  max-width: 260px !important;
+  min-height: 42px !important;
+}
+
+.cm-task-buttons .button.primary {
+  min-width: 200px !important;
+}
+
+.cm-score-head > strong {
+  color: var(--cwca-blue-dark) !important;
+}
+
+/* Login screens */
+.login,
+.cm-login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.login > form,
+.cm-login-card {
+  width: min(100%, 520px) !important;
+  padding: 32px !important;
+  border: 1px solid var(--cwca-border) !important;
+  border-top: 4px solid var(--cwca-blue) !important;
+  border-radius: 8px !important;
+  background: var(--cwca-surface) !important;
+  box-shadow: var(--cwca-shadow-md) !important;
+}
+
+/* Motion is limited to useful feedback, never layout movement. */
+@media (prefers-reduced-motion: no-preference) {
+  .panel,
+  .matter-card,
+  .cm-task-card,
+  .command-metric,
+  .report-card {
+    transition: border-color 160ms ease, box-shadow 160ms ease !important;
+  }
+
+  .badge.Pass::before,
+  .badge.On-Track::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: cwca-status-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes cwca-status-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+/* Responsive behavior keeps the same sequence and hierarchy. */
+@media (max-width: 1050px) {
+  .shell,
+  .cm-portal-shell,
+  .cm-login-shell {
+    padding: 16px !important;
+  }
+
+  .shell > .app-header.topbar,
+  .app-header.topbar,
+  .command-hero,
+  .cm-portal-header,
+  .cm-queue-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .shell > .app-header.topbar .header-actions,
+  .app-header.topbar .header-actions {
+    justify-self: stretch !important;
+  }
+
+  .dashboard-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 700px) {
+  body {
+    background: var(--cwca-canvas) !important;
+  }
+
+  .shell,
+  .cm-portal-shell,
+  .cm-login-shell {
+    padding: 10px !important;
+  }
+
+  .shell > .app-header.topbar,
+  .app-header.topbar,
+  .panel,
+  .command-hero,
+  .cm-portal-header,
+  .cm-task-card {
+    padding: 18px !important;
+    border-radius: 8px !important;
+  }
+
+  .shell > .app-header.topbar .title h1,
+  .app-header.topbar .title h1,
+  .cm-portal-header h1 {
+    font-size: 36px !important;
+  }
+
+  .shell > .app-header.topbar .header-actions,
+  .app-header.topbar .header-actions,
+  .dashboard-tabs {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .shell > .app-header.topbar .header-actions form,
+  .app-header.topbar .header-actions form,
+  .shell > .app-header.topbar .header-actions button.primary,
+  .app-header.topbar .header-actions button.primary,
+  .shell > .app-header.topbar .header-actions .badge.Pass,
+  .app-header.topbar .header-actions .badge.Pass {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .dashboard-tab {
+    min-height: 50px !important;
+  }
+
+  .cm-task-buttons,
+  .cm-task-buttons .button,
+  .cm-clear-first-card .button,
+  .cm-task-filters button,
+  .cm-task-filters .button {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .table-wrap,
+  .standards-sheet-scroll {
+    max-height: 70vh !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

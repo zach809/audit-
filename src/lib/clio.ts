@@ -1,6 +1,5 @@
 import { appConfig } from "./config";
 import { saveClioTokens, getClioTokens } from "./token-store";
-import { writesAllowed } from "./write-guard";
 
 type QueryValue = string | number | boolean | Date | null | undefined;
 type Query = Record<string, QueryValue>;
@@ -22,18 +21,6 @@ export class ClioApiError extends Error {
     super(`Clio API error ${status}: ${body.slice(0, 200)}`);
     this.status = status;
     this.body = body;
-  }
-}
-
-export class ClioRateLimitError extends Error {
-  retryAfterMs: number;
-  attempts: number;
-
-  constructor(retryAfterMs: number, attempts: number) {
-    super(`Clio rate limit hit after ${attempts} retries; Clio asked us to wait ${retryAfterMs}ms`);
-    this.name = "ClioRateLimitError";
-    this.retryAfterMs = retryAfterMs;
-    this.attempts = attempts;
   }
 }
 
@@ -95,11 +82,7 @@ export async function exchangeClioCode(code: string, redirectUri?: string) {
   });
 }
 
-export const CLIO_REFRESH_BLOCKED_MESSAGE =
-  "Clio refresh blocked: only production refreshes Clio. This deployment reads a database branch that carries a copy of production's Clio refresh token, so refreshing here would ask Clio to reissue production's credential and would save the replacement where production cannot read it. Reconnect Clio from production, or give this deployment its own Clio application.";
-
 async function refreshAccessToken(): Promise<string> {
-  if (!writesAllowed()) throw new Error(CLIO_REFRESH_BLOCKED_MESSAGE);
   const config = appConfig();
   const tokens = await getClioTokens();
   if (!tokens?.refreshToken) throw new Error("Clio is not connected");
@@ -129,17 +112,14 @@ async function accessToken(): Promise<string> {
   return refreshAccessToken();
 }
 
-function buildUrl(path: string, query: Query = {}, apiBase = clioApiBase()): string {
-  const url = new URL(`${apiBase}${path}`);
+function buildUrl(path: string, query: Query = {}): string {
+  const url = new URL(`${clioApiBase()}${path}`);
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue;
     url.searchParams.set(key, value instanceof Date ? value.toISOString() : String(value));
   }
   return url.toString();
 }
-
-const MAX_RATE_LIMIT_RETRIES = 5;
-const DEFAULT_RETRY_AFTER_MS = 2000;
 
 function retryAfterMs(response: Response): number | null {
   const header = response.headers.get("retry-after");
@@ -148,13 +128,6 @@ function retryAfterMs(response: Response): number | null {
   if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
   const date = Date.parse(header);
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
-}
-
-function headerNumber(response: Response, name: string): number | null {
-  const raw = response.headers.get(name);
-  if (raw === null || raw === "") return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
 }
 
 function sleep(ms: number) {
@@ -171,77 +144,25 @@ function pageTokenFromNext(next?: string | null): string | undefined {
   }
 }
 
-type ClioClientHooks = {
-  apiBase?: string;
-  accessToken?: () => Promise<string>;
-};
-
 export class ClioClient {
-  private nextAllowedAt = 0;
-  private throttleQueue: Promise<void> = Promise.resolve();
+  private lastRequestAt = 0;
   private minIntervalMs: number;
-  private readonly floorIntervalMs: number;
-  private readonly apiBase?: string;
-  private readonly readAccessToken?: () => Promise<string>;
 
-  constructor(rateLimitPerMinute = appConfig().rateLimitPerMinute, hooks: ClioClientHooks = {}) {
-    this.floorIntervalMs = Math.ceil(60000 / Math.max(1, rateLimitPerMinute));
-    this.minIntervalMs = this.floorIntervalMs;
-    this.apiBase = hooks.apiBase;
-    this.readAccessToken = hooks.accessToken;
+  constructor(rateLimitPerMinute = appConfig().rateLimitPerMinute) {
+    this.minIntervalMs = Math.ceil(60000 / Math.max(1, rateLimitPerMinute));
   }
 
   private async throttle() {
-    let release = () => {};
-    const previous = this.throttleQueue;
-    this.throttleQueue = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await previous;
-    try {
-      while (Date.now() < this.nextAllowedAt) {
-        await sleep(this.nextAllowedAt - Date.now());
-      }
-      this.nextAllowedAt = Date.now() + this.minIntervalMs;
-    } finally {
-      release();
-    }
-  }
-
-  private noteRateLimit(response: Response) {
-    const limit = headerNumber(response, "x-ratelimit-limit");
-    const remaining = headerNumber(response, "x-ratelimit-remaining");
-    const resetSec = headerNumber(response, "x-ratelimit-reset");
-
-    let interval = this.floorIntervalMs;
-    if (limit !== null && limit > 0) {
-      interval = Math.max(interval, Math.ceil(60000 / limit));
-    }
-
-    if (remaining !== null && remaining >= 0 && resetSec !== null && resetSec > 0) {
-      const resetAt = resetSec * 1000;
-      const windowMs = resetAt - Date.now();
-      if (windowMs > 0) {
-        if (remaining === 0) {
-          this.nextAllowedAt = Math.max(this.nextAllowedAt, resetAt);
-        } else {
-          interval = Math.max(interval, Math.ceil(windowMs / remaining));
-        }
-      }
-    }
-
-    this.minIntervalMs = interval;
-    this.nextAllowedAt = Math.max(this.nextAllowedAt, Date.now() + interval);
+    const now = Date.now();
+    const wait = this.lastRequestAt + this.minIntervalMs - now;
+    if (wait > 0) await sleep(wait);
+    this.lastRequestAt = Date.now();
   }
 
   async request<T>(path: string, query: Query = {}, replayed = false): Promise<T> {
-    return this.send<T>(path, query, replayed, 0);
-  }
-
-  private async send<T>(path: string, query: Query, replayed: boolean, rateLimitRetries: number): Promise<T> {
     await this.throttle();
-    const token = this.readAccessToken ? await this.readAccessToken() : await accessToken();
-    const response = await fetch(buildUrl(path, query, this.apiBase), {
+    const token = await accessToken();
+    const response = await fetch(buildUrl(path, query), {
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/json",
@@ -250,25 +171,20 @@ export class ClioClient {
       cache: "no-store",
     });
 
-    this.noteRateLimit(response);
-
     if (response.status === 401 && !replayed) {
       await refreshAccessToken();
-      return this.send<T>(path, query, true, rateLimitRetries);
+      return this.request<T>(path, query, true);
     }
 
     if (response.status === 429) {
-      const wait = retryAfterMs(response) ?? DEFAULT_RETRY_AFTER_MS;
-      if (rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) {
-        throw new ClioRateLimitError(wait, rateLimitRetries);
-      }
+      const wait = retryAfterMs(response) ?? 2000;
       await sleep(wait);
-      return this.send<T>(path, query, replayed, rateLimitRetries + 1);
+      return this.request<T>(path, query, replayed);
     }
 
     if (response.status >= 500 && !replayed) {
       await sleep(2000);
-      return this.send<T>(path, query, true, rateLimitRetries);
+      return this.request<T>(path, query, true);
     }
 
     const text = await response.text();

@@ -3,8 +3,6 @@ import { auditNextBatch, auditOneMatterById } from "@/lib/audit";
 import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
 import { appConfig } from "@/lib/config";
-import { scheduleStandardsPublish } from "@/lib/standards-publish";
-import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export const maxDuration = 300;
 
@@ -17,8 +15,6 @@ function redirectBack(request: NextRequest, params: Record<string, string>) {
 }
 
 export async function GET(request: NextRequest) {
-  const blocked = rejectNonProductionWrite();
-  if (blocked) return blocked;
   if (!isAuthorizedWorkerRequest(request)) {
     if (!request.headers.get("authorization")) {
       return NextResponse.redirect(new URL("/login", request.url), 303);
@@ -43,7 +39,6 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
-  scheduleStandardsPublish({ auditStatus: "completed" });
   if (request.cookies.get("cwca_session")) {
     return NextResponse.redirect(new URL(`/?audit=ran&message=${encodeURIComponent(result.message)}`, request.url), 303);
   }
@@ -51,8 +46,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const blocked = rejectNonProductionWrite();
-  if (blocked) return blocked;
   if (request.cookies.get("cwca_session")) {
     const form = await request.formData().catch(() => null);
     const matterId = form?.get("matter_id")?.toString();
@@ -64,16 +57,10 @@ export async function POST(request: NextRequest) {
       tab: form?.get("tab")?.toString() ?? "",
       wstatus: form?.get("wstatus")?.toString() ?? "",
       wfocus: form?.get("wfocus")?.toString() ?? "",
-      wstep: form?.get("wstep")?.toString() ?? "",
-      cm: form?.get("cm")?.toString() ?? "",
-      sort: form?.get("sort")?.toString() ?? "",
-      dir: form?.get("dir")?.toString() ?? "",
-      page: form?.get("page")?.toString() ?? "",
     };
     if (matterId) {
       try {
         const result = await auditOneMatterById(undefined, matterId);
-        scheduleStandardsPublish({ auditStatus: "completed" });
         return redirectBack(request, { ...filters, audit: "ran", message: result.message });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -90,7 +77,6 @@ export async function POST(request: NextRequest) {
         selection: "recent",
         filters,
       });
-      scheduleStandardsPublish({ auditStatus: "completed" });
       return redirectBack(request, { ...filters, audit: "ran", message: result.message });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

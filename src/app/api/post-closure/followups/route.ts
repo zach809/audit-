@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { savePostClosureFollowup } from "@/lib/post-closure";
 import { isValidSessionCookie } from "@/lib/session";
-import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 function redirectBack(request: NextRequest, params: Record<string, string>) {
   const search = new URLSearchParams();
@@ -12,8 +11,6 @@ function redirectBack(request: NextRequest, params: Record<string, string>) {
 }
 
 export async function POST(request: NextRequest) {
-  const blocked = rejectNonProductionWrite();
-  if (blocked) return blocked;
   if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

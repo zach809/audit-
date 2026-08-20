@@ -4,46 +4,13 @@ import { workflowLabel } from "./workflow-rules";
 import { actionFor, displayAuditStatus, priorityFor, timingGoalFor, whyFlagged } from "./audit-display";
 import { reviewResult } from "./review-shared";
 import { APP_VERSION } from "./version";
-import { buildStandardsScorecard } from "./standards-scorecard";
-
-export const MATTER_SORTS = ["date", "attorney", "case_manager", "compliance"] as const;
-export type MatterSort = (typeof MATTER_SORTS)[number];
-export type MatterDir = "asc" | "desc";
-
-export const DEFAULT_MATTER_PAGE_SIZE = 25;
-export const EXPORT_MATTER_PAGE_SIZE = 10_000;
 
 export type DashboardFilters = {
   attorney?: string;
   overall?: string;
   from?: string;
   to?: string;
-  page?: number;
-  pageSize?: number;
-  sort?: string;
-  dir?: string;
 };
-
-export function parseMatterPage(value: unknown): number {
-  if (typeof value !== "string" && typeof value !== "number") return 1;
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < 1) return 1;
-  return n;
-}
-
-export function parseMatterSort(value: unknown): MatterSort {
-  if (value === "date" || value === "attorney" || value === "case_manager" || value === "compliance") return value;
-  return "compliance";
-}
-
-export function parseMatterDir(value: unknown): MatterDir {
-  return value === "asc" ? "asc" : "desc";
-}
-
-function matterPageSize(value: unknown): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return DEFAULT_MATTER_PAGE_SIZE;
-  return Math.min(value, EXPORT_MATTER_PAGE_SIZE);
-}
 
 type ActionCsvRow = {
   matter_id: string;
@@ -218,11 +185,6 @@ export function logicIssueNextStep(row: LogicIssueRow): string {
 export async function getDashboardData(filters: DashboardFilters = {}) {
   await initDb();
   const sql = db();
-  const page = parseMatterPage(filters.page ?? 1);
-  const pageSize = matterPageSize(filters.pageSize);
-  const sort = parseMatterSort(filters.sort);
-  const dir = filters.dir === "asc" || filters.dir === "desc" ? filters.dir : sort === "compliance" ? "asc" : "desc";
-  const offset = (page - 1) * pageSize;
   const attorneyCondition =
     filters.attorney === "__unassigned"
       ? sql`(m.responsible_attorney_id is null or m.responsible_attorney_id = '')`
@@ -339,35 +301,8 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       else i.reason_code
     end
   `;
-  const complianceRank = sql`
-    case
-      when count(i.*) = 0 or count(*) filter (where i.step_code = 'WEEKLY_CLIENT_CHECKIN') = 0 then 6
-      when count(*) filter (where (${normalizedItemStatus}) = 'Unknown') > 0 then 5
-      when count(*) filter (where (${normalizedItemStatus}) = 'Missing') > 0 then 4
-      when count(*) filter (where (${normalizedItemStatus}) = 'Late') > 0 then 3
-      when count(*) filter (where (${normalizedItemStatus}) = 'Pending') > 0 then 2
-      else 1
-    end
-  `;
-  const matterOrder =
-    sort === "date"
-      ? dir === "asc"
-        ? sql`m.matter_created_at asc nulls last, m.matter_id asc`
-        : sql`m.matter_created_at desc nulls last, m.matter_id desc`
-      : sort === "attorney"
-        ? dir === "asc"
-          ? sql`coalesce(m.responsible_attorney_name, '') asc, m.matter_id asc`
-          : sql`coalesce(m.responsible_attorney_name, '') desc, m.matter_id desc`
-        : sort === "case_manager"
-          ? dir === "asc"
-            ? sql`coalesce(max(nullif(r.case_manager_name, '')), 'Unassigned') asc, m.matter_id asc`
-            : sql`coalesce(max(nullif(r.case_manager_name, '')), 'Unassigned') desc, m.matter_id desc`
-          : dir === "asc"
-            ? sql`${complianceRank} asc, m.matter_created_at desc, m.matter_id asc`
-            : sql`${complianceRank} desc, m.matter_created_at desc, m.matter_id desc`;
 
-  const [matters, attorneys, summary, lastRun, metrics, workspaceItems, matterCount] = await Promise.all([
-    sql`
+  const matters = await sql`
     select
       m.*,
       coalesce(mex.active, false) as metric_excluded,
@@ -406,6 +341,26 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
           'reviewedBy', r.reviewed_by,
           'reviewCompletedAt', r.review_completed_at,
           'reviewUpdatedAt', r.updated_at,
+          'reviewHistory', coalesce((
+            select json_agg(
+              json_build_object(
+                'historyId', h.history_id,
+                'updatedAt', h.updated_at,
+                'updatedBy', h.updated_by,
+                'previousDecision', h.previous_decision,
+                'decision', h.review_decision,
+                'resultsDetails', h.results_details,
+                'caseManagerName', h.case_manager_name,
+                'proofType', h.proof_type,
+                'proofReference', h.proof_reference,
+                'nextStep', h.next_step,
+                'reportSummary', h.report_summary
+              )
+              order by h.updated_at desc, h.history_id desc
+            )
+            from audit_review_history h
+            where h.matter_id = i.matter_id and h.step_code = i.step_code
+          ), '[]'::json),
           'reasonCode', ${normalizedReasonCode}
         )
         order by i.step_code
@@ -421,18 +376,21 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
         where visible_item.matter_id = m.matter_id
       )
     group by m.matter_id, mex.active, mex.requested_by, mex.request_reason, mex.updated_at
-    order by ${matterOrder}
-    limit ${pageSize}
-    offset ${offset}
-  `,
-    sql`
+    order by
+      case m.overall_status when 'Review' then 1 when 'Flag' then 2 when 'Late' then 3 when 'Pending' then 4 else 5 end,
+      m.matter_created_at desc
+    limit 150
+  `;
+
+  const attorneys = await sql`
     select responsible_attorney_id as id, responsible_attorney_name as name, count(*)::int as count
     from audit_matter m
     where ${conditions[0]} and ${conditions[5]} and ${conditions[6]}
     group by responsible_attorney_id, responsible_attorney_name
     order by responsible_attorney_name
-  `,
-    sql`
+  `;
+
+  const summary = await sql`
     select
       count(*)::int as total,
       count(*) filter (where display_overall_status = 'Unchecked')::int as unchecked,
@@ -463,14 +421,16 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
       group by m.matter_id, m.overall_status
     ) s
-  `,
-    sql`
+  `;
+
+  const lastRun = await sql`
     select *
     from audit_run
     order by started_at desc
     limit 1
-  `,
-    sql`
+  `;
+
+  const metrics = await sql`
     select *
     from (
       select distinct on (coalesce(responsible_attorney_id, ''), responsible_attorney_name)
@@ -481,8 +441,9 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       order by coalesce(responsible_attorney_id, ''), responsible_attorney_name, created_at desc, snapshot_id desc
     ) current_month
     order by responsible_attorney_name
-  `,
-    sql<WorkspaceAuditItem[]>`
+  `;
+
+  const workspaceItems = await sql<WorkspaceAuditItem[]>`
     select
       m.matter_id,
       m.matter_number,
@@ -555,18 +516,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
       m.client_first_name,
       i.step_code
     limit 1000
-  `,
-    sql`
-    select count(*)::int as matter_total
-    from audit_matter m
-    where ${conditions[0]} and ${conditions[1]} and ${conditions[2]} and ${conditions[3]} and ${conditions[4]} and ${conditions[5]} and ${conditions[6]}
-      and exists (
-        select 1
-        from audit_item visible_item
-        where visible_item.matter_id = m.matter_id
-      )
-  `,
-  ]);
+  `;
 
   return {
     matters,
@@ -575,12 +525,11 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     lastRun: lastRun[0] ?? null,
     metrics,
     workspaceItems,
-    matterTotal: matterCount[0]?.matter_total ?? 0,
   };
 }
 
 export async function dashboardCsv(filters: DashboardFilters = {}): Promise<string> {
-  const { matters } = await getDashboardData({ ...filters, page: 1, pageSize: EXPORT_MATTER_PAGE_SIZE });
+  const { matters } = await getDashboardData(filters);
   const headers = [
     "Client Name",
     "Matter Number",
@@ -1020,17 +969,12 @@ function isStandardsStep(stepCode: string): boolean {
   return stepCode === "SETUP_WELCOME" || stepCode === "SETUP_ATTY_CALL" || stepCode === "SETUP_COURT_DATE";
 }
 
-export type CaseManagerMapItem = Pick<
-  WorkspaceAuditItem,
-  "responsible_attorney_name" | "case_manager_name" | "matter_number" | "client_first_name" | "client_last_name"
->;
-
-function isParkCityMatter(item: CaseManagerMapItem): boolean {
+function isParkCityMatter(item: WorkspaceAuditItem): boolean {
   const text = normalizeOwnerName(`${item.matter_number} ${item.client_first_name ?? ""} ${item.client_last_name ?? ""}`);
   return text.includes("park city") || text.includes("parkcity");
 }
 
-export function standardsCaseManagerFor(item: CaseManagerMapItem): string {
+export function standardsCaseManagerFor(item: WorkspaceAuditItem): string {
   const attorney = normalizeOwnerName(item.responsible_attorney_name);
   const manualCaseManager = canonicalCaseManagerName(item.case_manager_name);
   if (attorney.includes("andrew hans")) return "Alessandra";
@@ -1358,12 +1302,6 @@ function xmlBlankCell(style = "", extraAttrs = ""): string {
   return `<Cell${styleAttr}${attrs}/>`;
 }
 
-function coreStatusStyle(status: string): string {
-  if (status === "MET" || status === "TRACKED") return "StatusGood";
-  if (status === "REVIEW") return "StatusBad";
-  return "StatusNeutral";
-}
-
 function worksheetName(name: string): string {
   const cleaned = (name || "Unassigned").replace(/[\\/?*[\]:]/g, " ").replace(/\s+/g, " ").trim();
   return (cleaned || "Unassigned").slice(0, 31);
@@ -1374,10 +1312,28 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
   const owners = [...STANDARD_CASE_MANAGERS];
   const workbookFrom = filters.from ? csvDisplayDate(filters.from) : "";
   const workbookTo = filters.to ? csvDisplayDate(filters.to) : "";
+  const periodLabel = workbookFrom && workbookTo ? `${workbookFrom} - ${workbookTo}` : "Selected week";
   const sheets = owners.map((owner) => {
     const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
-    const scorecard = buildStandardsScorecard(owner, ownerRows, { from: workbookFrom, to: workbookTo });
-    const [phoneCall, welcomeLetters, courtDateEvent, weeklyCheckIns] = scorecard.coreStandards;
+    const totals = ownerRows.reduce(
+      (acc, row) => {
+        acc.newMatters += row.newMatters;
+        acc.attorneyCall += row.attorneyCall;
+        acc.welcome += row.welcome;
+        acc.courtDate += row.courtDate;
+        acc.weeklyCheckIns += row.weeklyCheckIns;
+        return acc;
+      },
+      { newMatters: 0, attorneyCall: 0, welcome: 0, courtDate: 0, weeklyCheckIns: 0 },
+    );
+    const requiredSetup = totals.newMatters * 3;
+    const completedSetup = totals.attorneyCall + totals.welcome + totals.courtDate;
+    const missingSetup = Math.max(0, requiredSetup - completedSetup);
+    const overallPercent = requiredSetup ? completedSetup / requiredSetup : 0;
+    const overallLabel = requiredSetup ? `${Math.round(overallPercent * 100)}%` : "No activity";
+    const standardsMetLabel = requiredSetup ? `${completedSetup} of ${requiredSetup}` : "0 of 0";
+    const statusLabel = !requiredSetup ? "NO DATA" : overallPercent >= 0.9 ? "ON TARGET" : "BELOW TARGET";
+    const statusStyle = !requiredSetup ? "StatusNeutral" : overallPercent >= 0.9 ? "StatusGood" : "StatusBad";
     const headerRows = [
       `<Row ss:Height="34">${xmlCell("CASE MANAGER STANDARDS SCORECARD", "String", "Title", 'ss:MergeAcross="7"')}</Row>`,
       `<Row ss:Height="24">${xmlCell("At-a-glance review of daily activity", "String", "Subtitle", 'ss:MergeAcross="7"')}</Row>`,
@@ -1389,10 +1345,10 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
         xmlCell("TARGET", "String", "DarkHeader", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="28">${[
-        xmlCell(scorecard.owner, "String", "InputBlue", 'ss:MergeAcross="1"'),
-        xmlCell(scorecard.period.from || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
-        xmlCell(scorecard.period.to || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
-        xmlCell(scorecard.targetLabel, "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(owner, "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(workbookFrom || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell(workbookTo || "Selected range", "String", "InputBlue", 'ss:MergeAcross="1"'),
+        xmlCell("90%", "String", "InputBlue", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
       `<Row ss:Height="28">${[
@@ -1402,15 +1358,15 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
         xmlCell("FOLLOW-UP ITEMS", "String", "TileCopper", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="54">${[
-        xmlCell(scorecard.overallCompliance, "String", "TileBlueBig", 'ss:MergeAcross="1"'),
-        xmlCell(scorecard.targetsMet, "String", "TileTealBig", 'ss:MergeAcross="1"'),
-        xmlCell(scorecard.casesHandled, "Number", "TileNavyBig", 'ss:MergeAcross="1"'),
-        xmlCell(scorecard.followUpItems, "Number", "TileCopperBig", 'ss:MergeAcross="1"'),
+        xmlCell(overallLabel, "String", "TileBlueBig", 'ss:MergeAcross="1"'),
+        xmlCell(standardsMetLabel, "String", "TileTealBig", 'ss:MergeAcross="1"'),
+        xmlCell(totals.newMatters, "Number", "TileNavyBig", 'ss:MergeAcross="1"'),
+        xmlCell(missingSetup, "Number", "TileCopperBig", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="22">${[
-        xmlCell(scorecard.verdict, "String", "TileBlueFooter", 'ss:MergeAcross="1"'),
-        xmlCell(`Target threshold: ${scorecard.targetLabel}`, "String", "TileTealFooter", 'ss:MergeAcross="1"'),
-        xmlCell(`${scorecard.weeklyCheckIns} weekly check-ins`, "String", "TileNavyFooter", 'ss:MergeAcross="1"'),
+        xmlCell(statusLabel, "String", "TileBlueFooter", 'ss:MergeAcross="1"'),
+        xmlCell("Target threshold: 90%", "String", "TileTealFooter", 'ss:MergeAcross="1"'),
+        xmlCell(`${totals.weeklyCheckIns} weekly check-ins`, "String", "TileNavyFooter", 'ss:MergeAcross="1"'),
         xmlCell("Lower is better", "String", "TileCopperFooter", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="8">${xmlBlankCell("Spacer", 'ss:MergeAcross="7"')}</Row>`,
@@ -1424,34 +1380,34 @@ export async function standardsWorkbook(filters: DashboardFilters = {}): Promise
         xmlCell("PERIOD", "String", "SmallHeader", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell(phoneCall.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(phoneCall.actual, "Number", "Actual"),
-        xmlCell(phoneCall.required, "Number", "Required"),
-        xmlCell(phoneCall.status, "String", coreStatusStyle(phoneCall.status)),
+        xmlCell("Initial meeting set - Phone call", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.attorneyCall, "Number", "Actual"),
+        xmlCell(totals.newMatters, "Number", "Required"),
+        xmlCell(totals.attorneyCall >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.attorneyCall >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
         xmlBlankCell(),
-        xmlCell(scorecard.periodLabel, "String", "Note", 'ss:MergeAcross="1"'),
+        xmlCell(periodLabel, "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell(welcomeLetters.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(welcomeLetters.actual, "Number", "Actual"),
-        xmlCell(welcomeLetters.required, "Number", "Required"),
-        xmlCell(welcomeLetters.status, "String", coreStatusStyle(welcomeLetters.status)),
+        xmlCell("Welcome letters sent", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.welcome, "Number", "Actual"),
+        xmlCell(totals.newMatters, "Number", "Required"),
+        xmlCell(totals.welcome >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.welcome >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
         xmlBlankCell(),
         xmlCell("Each new matter should have matching proof.", "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell(courtDateEvent.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(courtDateEvent.actual, "Number", "Actual"),
-        xmlCell(courtDateEvent.required, "Number", "Required"),
-        xmlCell(courtDateEvent.status, "String", coreStatusStyle(courtDateEvent.status)),
+        xmlCell("Court date event made", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.courtDate, "Number", "Actual"),
+        xmlCell(totals.newMatters, "Number", "Required"),
+        xmlCell(totals.courtDate >= totals.newMatters && totals.newMatters > 0 ? "MET" : totals.newMatters ? "REVIEW" : "NO DATA", "String", totals.courtDate >= totals.newMatters && totals.newMatters > 0 ? "StatusGood" : totals.newMatters ? "StatusBad" : "StatusNeutral"),
         xmlBlankCell(),
         xmlCell("Court date means the client court event was made in Clio.", "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,
       `<Row ss:Height="24">${[
-        xmlCell(weeklyCheckIns.name, "String", "LinkLike", 'ss:MergeAcross="1"'),
-        xmlCell(weeklyCheckIns.actual, "Number", "Actual"),
-        xmlCell(weeklyCheckIns.required, "String", "Required"),
-        xmlCell(weeklyCheckIns.status, "String", coreStatusStyle(weeklyCheckIns.status)),
+        xmlCell("Weekly check-ins completed", "String", "LinkLike", 'ss:MergeAcross="1"'),
+        xmlCell(totals.weeklyCheckIns, "Number", "Actual"),
+        xmlCell("As due", "String", "Required"),
+        xmlCell(totals.weeklyCheckIns ? "TRACKED" : "NO DATA", "String", totals.weeklyCheckIns ? "StatusGood" : "StatusNeutral"),
         xmlBlankCell(),
         xmlCell("Ongoing-case check-ins are included when due.", "String", "Note", 'ss:MergeAcross="1"'),
       ].join("")}</Row>`,

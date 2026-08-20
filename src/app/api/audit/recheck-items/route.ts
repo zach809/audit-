@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { auditOneMatterById } from "@/lib/audit";
 import { initDb } from "@/lib/db";
 import { isAuthorizedWorkerRequest } from "@/lib/session";
-import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export const maxDuration = 300;
 
@@ -15,8 +14,6 @@ function redirectBack(request: NextRequest, params: Record<string, string>) {
 }
 
 export async function POST(request: NextRequest) {
-  const blocked = rejectNonProductionWrite();
-  if (blocked) return blocked;
   if (!isAuthorizedWorkerRequest(request)) {
     return NextResponse.redirect(new URL("/login", request.url), 303);
   }

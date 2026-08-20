@@ -39,6 +39,5 @@ export function appConfig() {
     auditRunRetentionDays: numberEnv("AUDIT_RUN_RETENTION_DAYS", "90"),
     auditMetricRetentionDays: numberEnv("AUDIT_METRIC_RETENTION_DAYS", "365"),
     closedMatterRetentionDays: numberEnv("CLOSED_MATTER_RETENTION_DAYS", "30"),
-    vercelEnv: optionalEnv("VERCEL_ENV"),
   };
 }

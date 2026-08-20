@@ -25,75 +25,7 @@ import type {
   StepCode,
 } from "./types";
 import { appConfig } from "./config";
-import { standardsCaseManagerFor } from "./dashboard-data";
 import { APP_VERSION } from "./version";
-
-export type CallRole = "attorney" | "case_manager" | "unknown";
-
-const CONNECTED_CALL_MIN_SECONDS = 15;
-
-export function parseCallDurationSeconds(text: string | null | undefined): number | null {
-  if (!text) return null;
-  try {
-    const match = String(text).match(/call\s*duration\s*:\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\s*(?:(\d+)\s*s)?/i);
-    if (!match) return null;
-    const hours = match[1] == null ? 0 : Number(match[1]);
-    const minutes = match[2] == null ? 0 : Number(match[2]);
-    const seconds = match[3] == null ? 0 : Number(match[3]);
-    if (match[1] == null && match[2] == null && match[3] == null) return null;
-    if (![hours, minutes, seconds].every((value) => Number.isFinite(value))) return null;
-    return hours * 3600 + minutes * 60 + seconds;
-  } catch {
-    return null;
-  }
-}
-
-function parsedCallDurationSeconds(comm: ClioCommunication): number | null {
-  return parseCallDurationSeconds(comm.body) ?? parseCallDurationSeconds(comm.subject);
-}
-
-function isTooShortToCountAsFollowUp(comm: ClioCommunication): boolean {
-  const seconds = parsedCallDurationSeconds(comm);
-  return seconds !== null && seconds <= CONNECTED_CALL_MIN_SECONDS;
-}
-
-function dialpadDirection(comm: ClioCommunication): boolean | null {
-  const text = haystack(comm.subject, comm.body, comm.type);
-  if (text.includes("outbound via dialpad")) return true;
-  if (text.includes("inbound via dialpad")) return false;
-  return null;
-}
-
-function participantNames(comm: ClioCommunication): string[] {
-  const firmSide = dialpadDirection(comm) === false ? comm.receivers : comm.senders;
-  return [comm.user?.name, ...(firmSide ?? []).map((person) => person.name)].filter((name): name is string => Boolean(name));
-}
-
-function namesOverlap(left: string, right: string): boolean {
-  const a = left.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const b = right.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  if (!a || !b) return false;
-  return a.includes(b) || b.includes(a);
-}
-
-export function attributeCallRole(
-  comm: ClioCommunication,
-  record: Pick<MatterRecord, "responsible_attorney_name" | "matter_number" | "client_first_name" | "client_last_name">,
-): CallRole {
-  const names = participantNames(comm);
-  if (names.some((name) => namesOverlap(name, record.responsible_attorney_name))) return "attorney";
-  const assignedCm = standardsCaseManagerFor({
-    responsible_attorney_name: record.responsible_attorney_name,
-    case_manager_name: null,
-    matter_number: record.matter_number,
-    client_first_name: record.client_first_name,
-    client_last_name: record.client_last_name,
-  });
-  if (assignedCm && assignedCm !== "Unassigned" && names.some((name) => namesOverlap(name, assignedCm))) {
-    return "case_manager";
-  }
-  return "unknown";
-}
 
 type Evidence<T> = { item: T; at: Date; source: AuditItemResult["evidenceSource"]; url: string };
 type EvidenceErrors = {
@@ -162,8 +94,6 @@ function isReplySubject(subject?: string | null): boolean {
 }
 
 function isOutbound(comm: ClioCommunication, clientId: string | null): boolean | null {
-  const dialpad = dialpadDirection(comm);
-  if (dialpad !== null) return dialpad;
   const directionText = communicationDirectionText(comm);
   if (directionText.includes("inbound")) return false;
   if (directionText.includes("outbound")) return true;
@@ -190,10 +120,8 @@ function calendarSearchText(cal: ClioCalendarEntry): string {
 }
 
 function isFirmPhoneCall(comm: ClioCommunication, clientId: string | null): boolean {
-  if (!isPhoneCallCommunication(communicationSearchText(comm, true))) return false;
-  if (isOutbound(comm, clientId) === false) return false;
-  if (isTooShortToCountAsFollowUp(comm)) return false;
-  return true;
+  if (!isPhoneCallCommunication(communicationSearchText(comm))) return false;
+  return isOutbound(comm, clientId) !== false;
 }
 
 function isPettyTrafficMatter(record: MatterRecord): boolean {
@@ -219,15 +147,6 @@ function localDateDistanceDays(a: Date, b: Date): number {
   const aUtc = Date.UTC(ay, am - 1, ad);
   const bUtc = Date.UTC(by, bm - 1, bd);
   return Math.round((aUtc - bUtc) / (24 * 60 * 60 * 1000));
-}
-
-function isMoreThanOneLocalMonthAway(courtAt: Date, now: Date): boolean {
-  const nowParts = localParts(now);
-  const courtParts = localParts(courtAt);
-  const monthsAhead = (courtParts.year - nowParts.year) * 12 + (courtParts.month - nowParts.month);
-  if (monthsAhead > 1) return true;
-  if (monthsAhead < 1) return false;
-  return courtParts.day > nowParts.day;
 }
 
 function startOfLocalWeek(date: Date): Date {
@@ -550,7 +469,7 @@ async function fetchEvidence(client: ClioClient, matter: MatterRecord): Promise<
   };
 }
 
-export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
+function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now = new Date()) {
   const setup = setupDeadlines(record.matter_created_at);
   const clientDeadline = addBusinessDaysDeadline(record.effective_intake_at, 1);
   const appearanceDeadline = addWeekdayHours(record.matter_created_at, 48);
@@ -675,9 +594,7 @@ export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now 
       return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
     })
     .filter(Boolean) as Evidence<ClioCommunication>[];
-  const caseManagerWeeklyCalls = weeklyPhoneCalls.filter((call) => attributeCallRole(call.item, record) !== "attorney");
-  const attributedWeeklyCalls = caseManagerWeeklyCalls.length > 0 ? caseManagerWeeklyCalls : weeklyPhoneCalls;
-  const weeklyCheckInWeekCalls = attributedWeeklyCalls.filter((call) => isInLocalWeek(call.at, weeklyCheckInCallAnchor));
+  const weeklyCheckInWeekCalls = weeklyPhoneCalls.filter((call) => isInLocalWeek(call.at, weeklyCheckInCallAnchor));
   const weeklyCheckInCall = earliest(
     weeklyCheckInWeekCalls.filter((call) => !weeklyCheckInDeadline || call.at <= weeklyCheckInDeadline),
   );
@@ -835,7 +752,6 @@ export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now 
           state.lastInboundAt = entry.at!;
         }
         if (entry.direction === true) {
-          if (isTooShortToCountAsFollowUp(entry.comm)) return state;
           state.unansweredInboundCount = 0;
           state.firstUnansweredInboundAt = null;
           state.lastFirmResponseAt = entry.at!;
@@ -880,18 +796,12 @@ export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now 
       reasonCode: commError || "DIRECTION_UNCLEAR",
       now,
     }),
-    nextCourt &&
-    courtReminderWindowStart &&
-    now < courtReminderWindowStart &&
-    isMoreThanOneLocalMonthAway(nextCourt.at, now) &&
-    !appearanceEvidence
-      ? base("APPEARANCE_FILING", "Pending", "Not Due Yet", appearanceDeadline, null)
-      : classify("APPEARANCE_FILING", appearanceEvidence, appearanceDeadline, {
-          operationalState: "Waiting for 48-hour review window",
-          unknown: Boolean(commError && now > appearanceDeadline),
-          reasonCode: commError,
-          now,
-        }),
+    classify("APPEARANCE_FILING", appearanceEvidence, appearanceDeadline, {
+      operationalState: "Waiting for 48-hour review window",
+      unknown: Boolean(commError && now > appearanceDeadline),
+      reasonCode: commError,
+      now,
+    }),
     courtResultItem,
     postCourtCallItem,
     courtReminderItem,
