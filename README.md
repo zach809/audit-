@@ -208,7 +208,7 @@ If the refresh token is revoked or expired, sync fails with a named `invalid_gra
 
 ### Testing the Excel sync from a preview deployment
 
-Preview deployments block every write. Their database is a Neon branch and, with the variables below, their Excel workbook is a separate file, so the reason is the rule rather than a risk to production data: the Google Sheet and the Clio OAuth connection are the two systems a preview shares with production outright. The Excel sync is the one route that can be opened, and only against a separate test workbook.
+Preview deployments block every write. Their database is a Neon branch and, with the variables below, their Excel workbook is a separate file, so the reason is the rule rather than a risk to production data: the Google Sheet and the Clio OAuth connection are the two systems a preview shares with production outright. A preview still reads Clio with production's credential, but it can no longer refresh it. See "Clio on a preview deployment" below. The Excel sync is the one route that can be opened, and only against a separate test workbook.
 
 Set both of these on the Vercel **Preview** environment, never on Production:
 
@@ -222,6 +222,9 @@ The sync response names the workbook it wrote to, as `<location> (preview)` or `
 Two things to expect on preview while only part of this is configured. With no `_PREVIEW` location set, the Sync Excel Workbook button is disabled. With a `_PREVIEW` location set but no `CWCA_ALLOW_PREVIEW_EXCEL_SYNC`, the button is enabled and the click comes back 403.
 
 `CWCA_ALLOW_PREVIEW_EXCEL_SYNC` gates the `/api/standards/excel-sync` route. It does not gate the publisher that `/api/reviews` triggers after a review is saved, but `/api/reviews` now answers 403 outside production, so that publisher no longer runs there. It follows the same workbook rule in any case, writing to the `_PREVIEW` workbook or, with none set, skipping.
+
+The Excel sync never touches Clio. It reads `standardsReportRows` from the database and writes to Microsoft Graph, so the refusal below does not affect it.
+
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.
@@ -234,6 +237,22 @@ Two things to expect on preview while only part of this is configured. With no `
 - `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
 - `OPENAI_API_KEY`: optional OpenAI API key for manual AI help.
 - `AI_MODEL`: optional OpenAI model name. Default `gpt-4o-mini`.
+
+### Clio on a preview deployment
+
+A preview deployment's database is a Neon branch, and that branch carries a copy of production's Clio refresh token. Refreshing from preview would ask Clio to reissue production's credential and would save the replacement in the branch, where production cannot read it. So outside production the refresh is refused before the network call is made:
+
+> Clio refresh blocked: only production refreshes Clio. This deployment reads a database branch that carries a copy of production's Clio refresh token, so refreshing here would ask Clio to reissue production's credential and would save the replacement where production cannot read it. Reconnect Clio from production, or give this deployment its own Clio application.
+
+What this means day to day. A preview keeps reading Clio normally while the access token in its branch is still valid, which is up to 30 days from the last production refresh. Once that token is inside its last 10 minutes, anything that needs Clio fails with the message above instead of a generic error: the evidence pages, `/api/debug/recent-matters`, and any audit run. Everything that does not need Clio, including the Excel sync, is unaffected.
+
+The refusal is on the network call, not on saving the token. Letting the call through and blocking the save would be worse than doing nothing: it would exercise production's grant and then discard whatever came back.
+
+`CWCA_ALLOW_WRITES="1"` with `VERCEL_ENV` unset still refreshes, so a local checkout that has deliberately opted into writes behaves as before. No setting opens refresh on preview.
+
+Clio Manage does not rotate refresh tokens, which limits how bad a preview refresh could have been. Clio's FAQ states it plainly: "Clio Manage: Refresh tokens do not expire and can be reused across multiple refresh calls. They remain valid until explicitly revoked", against "Clio Platform: Refresh tokens do not have a time-based expiry, but they are rotated on each use" (https://docs.developers.clio.com/faq/). The Clio Manage refresh response documents no `refresh_token` field at all (https://docs.developers.clio.com/api-docs/clio-manage/authorization/), which is why `clio.ts` falls back to the stored one. Two things keep the guard worth having anyway. Clio does not document whether a refresh invalidates the access token it replaces, and `CLIO_BASE_URL` is a variable, so a future move to Clio Platform would make rotation real.
+
+Giving preview its own Clio connection is the only way to make it fully functional without borrowing production's. It needs a second application registered in the firm's Clio developer account, with the preview callback URL as its redirect URI, and `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET` and `CLIO_REDIRECT_URI` set on the Vercel Preview environment only. Someone at the firm then authorizes that application once from a preview deployment. That is a decision for the firm, because it is a second application with its own access to live matter data.
 
 ## Notes
 
