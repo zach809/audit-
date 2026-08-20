@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { optionalEnv } from "./config";
 
+// Preview has its own Neon branch and, since #42, its own Excel workbook. Neither is what this
+// protects. The Google Sheet and the Clio OAuth connection carry no environment scoping at all.
 export const WRITE_BLOCKED_MESSAGE =
-  "Write blocked: this is a preview deployment pointed at the production database.";
+  "Write blocked: only production runs write operations. This deployment has its own database branch and its own Excel workbook, but the Google Sheet and the Clio connection are production's.";
 
 export function writesAllowed(): boolean {
   const vercelEnv = optionalEnv("VERCEL_ENV");

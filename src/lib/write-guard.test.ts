@@ -66,7 +66,7 @@ async function assertBlocked(res: Response) {
   assert.equal(res.status, 403);
   const body = await res.json();
   assert.equal(body.error, WRITE_BLOCKED_MESSAGE);
-  assert.match(JSON.stringify(body), /preview deployment pointed at the production database/);
+  assert.match(JSON.stringify(body), /Google Sheet and the Clio connection/);
 }
 async function assertNotBlocked(res: Response) {
   assert.notEqual(res.status, 403);
