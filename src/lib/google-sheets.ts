@@ -35,6 +35,13 @@ export function googleSheetsConfigured(): boolean {
   );
 }
 
+// GOOGLE_SHEETS_SPREADSHEET_ID is not scoped by environment, and a Vercel preview deployment inherits
+// it from production, so every deployment resolves the firm's real Sheet. rejectNonProductionWrite()
+// on /api/standards/google-sync is the only thing standing between a preview and that Sheet. Opening
+// this sync to preview the way #42 opened Excel therefore takes a scoped destination first: give the
+// id a per-scope table like WORKBOOK_ENV_BY_SCOPE in microsoft-excel.ts, and refuse before the first
+// request when preview has no Sheet of its own. google-sheets.test.ts fails if the guard goes without
+// the scoping.
 function assertGoogleSheetsConfig() {
   const spreadsheetId = optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID").trim();
   const clientEmail = optionalEnv("GOOGLE_SERVICE_ACCOUNT_EMAIL").trim();
