@@ -14,3 +14,12 @@ export function rejectNonProductionWrite(): NextResponse | null {
   if (writesAllowed()) return null;
   return NextResponse.json({ error: WRITE_BLOCKED_MESSAGE }, { status: 403 });
 }
+
+export function previewExcelSyncAllowed(): boolean {
+  return optionalEnv("VERCEL_ENV") === "preview" && /^(1|true)$/i.test(optionalEnv("CWCA_ALLOW_PREVIEW_EXCEL_SYNC"));
+}
+
+export function rejectNonProductionExcelSync(): NextResponse | null {
+  if (previewExcelSyncAllowed()) return null;
+  return rejectNonProductionWrite();
+}

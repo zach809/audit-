@@ -205,6 +205,23 @@ To connect it:
 11. Redeploy Vercel, then use Standards -> Sync Excel Workbook.
 
 If the refresh token is revoked or expired, sync fails with a named `invalid_grant` error. A person must re-issue the token; retrying will not fix it.
+
+### Testing the Excel sync from a preview deployment
+
+Preview deployments block every write, because they point at the production database. The Excel sync is the one route that can be opened, and only against a separate test workbook.
+
+Set both of these on the Vercel **Preview** environment, never on Production:
+
+1. `CWCA_ALLOW_PREVIEW_EXCEL_SYNC="1"` lets `/api/standards/excel-sync` run. The four database routes and `/api/standards/google-sync` keep answering 403.
+2. `MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW` names the test workbook, for example `cwca-standards-test.xlsx`. `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW` and `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW` are the equivalents of the other two location variables, and `MICROSOFT_EXCEL_WORKBOOK_WEB_URL_PREVIEW` feeds the Open Excel Workbook button.
+
+A preview deployment inherits the production variables it does not override, so on preview the sync ignores `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID`, `_PATH`, `_SHARE_URL` and `_WEB_URL` entirely. With no `_PREVIEW` location set, the sync refuses with a named error rather than falling back to the production workbook. `MICROSOFT_EXCEL_USER_ID` is still inherited, so the test workbook must live in that user's drive.
+
+The sync response names the workbook it wrote to, as `<location> (preview)` or `<location> (production)`. A sharing link is reported as `shared link`, because the notice travels back in the URL.
+
+Two things to expect on preview while only part of this is configured. With no `_PREVIEW` location set, the Sync Excel Workbook button is disabled. With a `_PREVIEW` location set but no `CWCA_ALLOW_PREVIEW_EXCEL_SYNC`, the button is enabled and the click comes back 403.
+
+`CWCA_ALLOW_PREVIEW_EXCEL_SYNC` gates the `/api/standards/excel-sync` route. It does not gate the publisher that `/api/reviews` triggers after a review is saved, which has never had a write guard. On preview that publisher follows the same workbook rule as everything else, so it writes to the `_PREVIEW` workbook or, with none set, skips.
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.

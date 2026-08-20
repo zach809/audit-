@@ -7,6 +7,7 @@ import * as excel from "./microsoft-excel";
 import type { SheetDailyRow } from "./standards-sheet-sync";
 
 const ENV_KEYS = [
+  "VERCEL_ENV",
   "MICROSOFT_TENANT_ID",
   "MICROSOFT_CLIENT_ID",
   "MICROSOFT_CLIENT_SECRET",
@@ -14,6 +15,11 @@ const ENV_KEYS = [
   "MICROSOFT_EXCEL_WORKBOOK_SHARE_URL",
   "MICROSOFT_EXCEL_WORKBOOK_PATH",
   "MICROSOFT_EXCEL_WORKBOOK_ITEM_ID",
+  "MICROSOFT_EXCEL_WORKBOOK_WEB_URL",
+  "MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW",
+  "MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW",
+  "MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW",
+  "MICROSOFT_EXCEL_WORKBOOK_WEB_URL_PREVIEW",
   "MICROSOFT_EXCEL_REFRESH_TOKEN",
 ] as const;
 
@@ -180,6 +186,117 @@ describe("Microsoft Excel auth", () => {
   });
 });
 
+const PRODUCTION_TARGET = {
+  MICROSOFT_EXCEL_WORKBOOK_ITEM_ID: "prod-item-id-must-not-be-used",
+  MICROSOFT_EXCEL_WORKBOOK_PATH: "Production/real-standards.xlsx",
+  MICROSOFT_EXCEL_WORKBOOK_SHARE_URL: "https://example.com/production-workbook",
+  MICROSOFT_EXCEL_WORKBOOK_WEB_URL: "https://example.com/production-web-url",
+  MICROSOFT_EXCEL_REFRESH_TOKEN: "refresh-token-live-value",
+};
+
+function captureGraphUrls() {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes("login.microsoftonline.com")) return jsonResponse(200, { access_token: "access-token" });
+    return jsonResponse(200, {});
+  }) as typeof fetch;
+  return calls;
+}
+
+function shareId(url: string) {
+  return `u!${Buffer.from(url).toString("base64url").replace(/=+$/g, "")}`;
+}
+
+describe("Microsoft Excel preview workbook target", () => {
+  it("leaves production and local on the production workbook variables", async () => {
+    setExcelEnv({
+      ...PRODUCTION_TARGET,
+      VERCEL_ENV: "production",
+      MICROSOFT_EXCEL_WORKBOOK_ITEM_ID: "",
+      MICROSOFT_EXCEL_WORKBOOK_SHARE_URL: "",
+      MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW: "CWCA/cwca-standards-test.xlsx",
+      MICROSOFT_EXCEL_WORKBOOK_WEB_URL_PREVIEW: "https://example.com/preview-web-url",
+    });
+    assert.equal(excel.excelWorkbookScope(), "production");
+    assert.equal(excel.excelWorkbookLabel(), "Production/real-standards.xlsx (production)");
+    assert.equal(excel.microsoftExcelWorkbookUrl(), "https://example.com/production-web-url");
+    assert.equal(excel.microsoftExcelConfigured(), true);
+
+    const calls = captureGraphUrls();
+    await assert.rejects(() => excel.syncStandardsToMicrosoftExcel(), /persistent Excel workbook session/);
+    const graph = calls.filter((url) => url.includes("graph.microsoft.com"));
+    assert.equal(graph.length, 1);
+    assert.match(graph[0], /root:\/Production\/real-standards\.xlsx:\/workbook\/createSession/);
+    assert.ok(!calls.some((url) => url.includes("cwca-standards-test")));
+
+    delete process.env.VERCEL_ENV;
+    assert.equal(excel.excelWorkbookScope(), "production");
+    assert.equal(excel.microsoftExcelWorkbookUrl(), "https://example.com/production-web-url");
+  });
+
+  it("refuses a preview sync with no preview workbook and makes no HTTP call", async () => {
+    setExcelEnv({ ...PRODUCTION_TARGET, VERCEL_ENV: "preview" });
+    const calls = captureGraphUrls();
+    assert.equal(excel.excelWorkbookScope(), "preview");
+    assert.equal(excel.microsoftExcelConfigured(), false);
+    assert.equal(excel.microsoftExcelWorkbookUrl(), "");
+    assert.equal(excel.excelWorkbookLabel(), "unspecified (preview)");
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel(),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.message, excel.PREVIEW_WORKBOOK_REQUIRED_MESSAGE);
+        assert.match(error.message, /never falls back to the production workbook/);
+        assert.doesNotMatch(error.message, /Excel Online sync is not configured/);
+        assert.doesNotMatch(error.message, /prod-item-id-must-not-be-used|real-standards|production-workbook/);
+        return true;
+      },
+    );
+    assert.deepEqual(calls, []);
+  });
+
+  it("writes to the preview path even when the production item id is inherited", async () => {
+    setExcelEnv({
+      ...PRODUCTION_TARGET,
+      VERCEL_ENV: "preview",
+      MICROSOFT_EXCEL_WORKBOOK_SHARE_URL: "",
+      MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW: "CWCA/cwca-standards-test.xlsx",
+    });
+    assert.equal(process.env.MICROSOFT_EXCEL_WORKBOOK_ITEM_ID, "prod-item-id-must-not-be-used");
+    assert.equal(excel.microsoftExcelConfigured(), true);
+    assert.equal(excel.excelWorkbookLabel(), "CWCA/cwca-standards-test.xlsx (preview)");
+
+    const calls = captureGraphUrls();
+    await assert.rejects(() => excel.syncStandardsToMicrosoftExcel(), /persistent Excel workbook session/);
+    const graph = calls.filter((url) => url.includes("graph.microsoft.com"));
+    assert.equal(graph.length, 1);
+    assert.match(graph[0], /root:\/CWCA\/cwca-standards-test\.xlsx:\/workbook\/createSession/);
+    assert.ok(!calls.some((url) => url.includes("prod-item-id-must-not-be-used")));
+    assert.ok(!calls.some((url) => url.includes("real-standards")));
+  });
+
+  it("uses the preview sharing link over an inherited production sharing link", async () => {
+    setExcelEnv({
+      ...PRODUCTION_TARGET,
+      VERCEL_ENV: "preview",
+      MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW: "https://example.com/preview-workbook",
+      MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW: "preview-item-id",
+    });
+    assert.equal(excel.excelWorkbookLabel(), "shared link (preview)");
+    assert.doesNotMatch(excel.excelWorkbookLabel(), /https?:|preview-workbook|production-workbook/);
+
+    const calls = captureGraphUrls();
+    await assert.rejects(() => excel.syncStandardsToMicrosoftExcel(), /could not resolve the Excel workbook sharing link/);
+    const graph = calls.filter((url) => url.includes("graph.microsoft.com"));
+    assert.equal(graph.length, 1);
+    assert.ok(graph[0].includes(`/shares/${shareId("https://example.com/preview-workbook")}/driveItem`));
+    assert.ok(!calls.some((url) => url.includes(shareId("https://example.com/production-workbook"))));
+    assert.ok(!calls.some((url) => url.includes("prod-item-id-must-not-be-used")));
+  });
+});
+
 function daily(owner: string, date: string, sortDate: string, extras: Partial<SheetDailyRow> = {}): SheetDailyRow {
   return { owner, date, sortDate, newMatters: 0, attorneyCall: 0, welcome: 0, courtDate: 0, weeklyCheckIns: 0, completion: "No activity", ...extras };
 }
@@ -272,5 +389,14 @@ describe("excel-sync route defaults and writer guards", () => {
     assert.match(writer, /numberFormat/);
     assert.doesNotMatch(writer, /clearRows|padRows\(\[\]/);
     assert.match(writer, /collectArchiveRows|upsertDailyRows/);
+  });
+
+  it("reports the workbook it wrote to in both the JSON body and the redirect notice", () => {
+    const route = readFileSync(fileURLToPath(new URL("../app/api/standards/excel-sync/route.ts", import.meta.url)), "utf8");
+    const writer = readFileSync(fileURLToPath(new URL("./microsoft-excel.ts", import.meta.url)), "utf8");
+    assert.match(writer, /workbookTarget: config\.workbookLabel/);
+    assert.match(writer, /workbookScope: config\.workbookScope/);
+    assert.match(route, /NextResponse\.json\(\{ ok: true, \.\.\.result, filters \}\)/);
+    assert.match(route, /Excel workbook \$\{result\.workbookTarget\} updated/);
   });
 });

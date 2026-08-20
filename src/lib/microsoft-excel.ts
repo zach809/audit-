@@ -59,16 +59,67 @@ type GraphWorkbookSessionResponse = {
   id?: string;
 };
 
+export type ExcelWorkbookScope = "production" | "preview";
+
+export type ExcelWorkbookTarget = {
+  scope: ExcelWorkbookScope;
+  itemId: string;
+  path: string;
+  shareUrl: string;
+  webUrl: string;
+};
+
+const WORKBOOK_ENV_BY_SCOPE: Record<ExcelWorkbookScope, Record<"itemId" | "path" | "shareUrl" | "webUrl", string>> = {
+  production: {
+    itemId: "MICROSOFT_EXCEL_WORKBOOK_ITEM_ID",
+    path: "MICROSOFT_EXCEL_WORKBOOK_PATH",
+    shareUrl: "MICROSOFT_EXCEL_WORKBOOK_SHARE_URL",
+    webUrl: "MICROSOFT_EXCEL_WORKBOOK_WEB_URL",
+  },
+  preview: {
+    itemId: "MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW",
+    path: "MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW",
+    shareUrl: "MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW",
+    webUrl: "MICROSOFT_EXCEL_WORKBOOK_WEB_URL_PREVIEW",
+  },
+};
+
+export const PREVIEW_WORKBOOK_REQUIRED_MESSAGE =
+  "Excel sync refused: this is a preview deployment and no preview workbook is set. Add MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW (or MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW, or MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW) to the Vercel Preview environment. Preview never falls back to the production workbook.";
+
+export function excelWorkbookScope(): ExcelWorkbookScope {
+  return optionalEnv("VERCEL_ENV") === "preview" ? "preview" : "production";
+}
+
+export function excelWorkbookTarget(scope: ExcelWorkbookScope = excelWorkbookScope()): ExcelWorkbookTarget {
+  const keys = WORKBOOK_ENV_BY_SCOPE[scope];
+  return {
+    scope,
+    itemId: optionalEnv(keys.itemId).trim(),
+    path: optionalEnv(keys.path).trim().replace(/^\/+/, ""),
+    shareUrl: optionalEnv(keys.shareUrl).trim(),
+    webUrl: optionalEnv(keys.webUrl).trim(),
+  };
+}
+
+export function excelWorkbookLabel(target: ExcelWorkbookTarget = excelWorkbookTarget()): string {
+  const location = target.shareUrl ? "shared link" : target.itemId || target.path || "unspecified";
+  return `${location} (${target.scope})`;
+}
+
 function excelPrivateConfig() {
+  const target = excelWorkbookTarget();
   return {
     tenantId: optionalEnv("MICROSOFT_TENANT_ID").trim(),
     clientId: optionalEnv("MICROSOFT_CLIENT_ID").trim(),
     clientSecret: optionalEnv("MICROSOFT_CLIENT_SECRET").trim(),
     refreshToken: optionalEnv("MICROSOFT_EXCEL_REFRESH_TOKEN").trim(),
     userId: optionalEnv("MICROSOFT_EXCEL_USER_ID").trim(),
-    workbookItemId: optionalEnv("MICROSOFT_EXCEL_WORKBOOK_ITEM_ID").trim(),
-    workbookPath: optionalEnv("MICROSOFT_EXCEL_WORKBOOK_PATH").trim().replace(/^\/+/, ""),
-    workbookShareUrl: optionalEnv("MICROSOFT_EXCEL_WORKBOOK_SHARE_URL").trim(),
+    workbookScope: target.scope,
+    workbookItemId: target.itemId,
+    workbookPath: target.path,
+    workbookShareUrl: target.shareUrl,
+    workbookLabel: excelWorkbookLabel(target),
   };
 }
 
@@ -99,11 +150,14 @@ export function microsoftExcelConfigured(): boolean {
 }
 
 export function microsoftExcelWorkbookUrl(): string {
-  return optionalEnv("MICROSOFT_EXCEL_WORKBOOK_WEB_URL").trim();
+  return excelWorkbookTarget().webUrl;
 }
 
 function assertMicrosoftExcelConfig() {
   const config = excelPrivateConfig();
+  if (config.workbookScope === "preview" && !config.workbookItemId && !config.workbookPath && !config.workbookShareUrl) {
+    throw new Error(PREVIEW_WORKBOOK_REQUIRED_MESSAGE);
+  }
   if (!microsoftExcelConfigured()) {
     throw new Error(
       "Excel Online sync is not configured. Add MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_EXCEL_USER_ID, a workbook location, and either MICROSOFT_EXCEL_REFRESH_TOKEN (delegated) or MICROSOFT_CLIENT_SECRET (application) in Vercel.",
@@ -314,6 +368,8 @@ export async function syncStandardsToMicrosoftExcel(filters: DashboardFilters = 
 
     return {
       workbookUrl: microsoftExcelWorkbookUrl(),
+      workbookScope: config.workbookScope,
+      workbookTarget: config.workbookLabel,
       sheetsUpdated: STANDARD_CASE_MANAGERS.length,
       rowsSynced: rows.length,
       authMode: disclosure.authMode,
