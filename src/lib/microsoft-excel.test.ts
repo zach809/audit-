@@ -188,6 +188,7 @@ const NOW = new Date("2026-08-15T16:00:00Z");
 const MONITOR_URL = "https://hirschlawgroup.sharepoint.com/_api/v2.0/monitor/copy-1";
 const TEMPLATE_COPY = "/users/zach%40hirschlawgroup.com/drive/root:/CWCA/Standards%20Template.xlsx:/copy?@microsoft.graph.conflictBehavior=fail";
 const DATA_RANGE = "/users/zach%40hirschlawgroup.com/drive/root:/CWCA/Standards%202026-08.xlsx:/workbook/worksheets('Data')/range(address='A1:J311')";
+const PROBE_SELECT = "?$select=id,name,file,size,remoteItem";
 
 type GraphCall = { method: string; url: string; body: string; authorization: string };
 
@@ -226,12 +227,53 @@ function nameTakenCopy() {
   });
 }
 
-function installGraphDouble(plan: { copy?: (attempt: number) => Response; monitor?: (attempt: number) => Response } = {}) {
+function nestedNameTakenCopy() {
+  return jsonResponse(200, {
+    status: "failed",
+    error: { code: "generalException", message: "copy failed", innerError: { code: "nameAlreadyExists" } },
+  });
+}
+
+function genericFailedCopy() {
+  return jsonResponse(200, { status: "failed", error: { code: "generalException", message: "copy failed" } });
+}
+
+/** What the live preview sync got on 2026-08-22, once the month workbook already existed. */
+function generalExceptionCopy() {
+  return jsonResponse(500, {
+    error: {
+      code: "generalException",
+      message: "General exception while processing",
+      innerError: { date: "2026-08-22T22:14:19", "request-id": "feda9901-0000-0000-0000-000000000000" },
+    },
+  });
+}
+
+function workbookFound() {
+  return jsonResponse(200, { id: "item-1", name: "Standards 2026-08.xlsx", size: 48231, file: { mimeType: "application/vnd.ms-excel" } });
+}
+
+function workbookAbsent() {
+  return jsonResponse(404, { error: { code: "itemNotFound" } });
+}
+
+function installGraphDouble(
+  plan: {
+    copy?: (attempt: number) => Response;
+    monitor?: (attempt: number) => Response;
+    probe?: (attempt: number) => Response;
+    write?: (attempt: number) => Response;
+  } = {},
+) {
   const calls: GraphCall[] = [];
   const copy: (attempt: number) => Response = plan.copy ?? (() => acceptedCopy());
   const monitor: (attempt: number) => Response = plan.monitor ?? (() => completedCopy());
+  const probe: (attempt: number) => Response = plan.probe ?? (() => workbookFound());
+  const write: (attempt: number) => Response = plan.write ?? (() => jsonResponse(200, {}));
   let copyAttempts = 0;
   let monitorAttempts = 0;
+  let probeAttempts = 0;
+  let writeAttempts = 0;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const headers = new Headers(init?.headers ?? {});
@@ -251,7 +293,14 @@ function installGraphDouble(plan: { copy?: (attempt: number) => Response; monito
       copyAttempts += 1;
       return copy(copyAttempts);
     }
-    if (call.method === "PATCH" && url.includes("/workbook/")) return jsonResponse(200, {});
+    if (url.includes(PROBE_SELECT)) {
+      probeAttempts += 1;
+      return probe(probeAttempts);
+    }
+    if (call.method === "PATCH" && url.includes("/workbook/")) {
+      writeAttempts += 1;
+      return write(writeAttempts);
+    }
     return assert.fail(`the Excel sync made an unexpected request: ${call.method} ${url}`);
   }) as typeof fetch;
   return calls;
@@ -263,6 +312,14 @@ function graphWrites(calls: GraphCall[]) {
 
 function patchBodies(calls: GraphCall[]) {
   return calls.filter((call) => call.method === "PATCH").map((call) => call.body);
+}
+
+function probeCalls(calls: GraphCall[]) {
+  return calls.filter((call) => call.url.includes(PROBE_SELECT));
+}
+
+function copyCalls(calls: GraphCall[]) {
+  return calls.filter((call) => call.url.includes("/copy?"));
 }
 
 function delegatedEnv() {
@@ -321,6 +378,137 @@ describe("Microsoft Excel month book", () => {
     assert.ok(copies.every((call) => call.body === JSON.stringify({ name: "Standards 2026-08.xlsx" })));
     assert.equal(patchBodies(calls).length, 3);
     assert.ok(!calls.some((call) => /conflictBehavior=(rename|replace)/.test(call.url)));
+    assert.equal(probeCalls(calls).length, 1, "the 409 run has to confirm the workbook, because 409 alone does not name it");
+  });
+
+  it("keeps syncing when the copy is refused with a 500 and the month workbook is already there", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({ copy: () => generalExceptionCopy(), probe: () => workbookFound() });
+    const result = await excel.syncStandardsToMicrosoftExcel(
+      {},
+      { now: NOW, reportRows: rowsFrom([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })]) },
+    );
+
+    assert.equal(result.workbookCreated, false);
+    assert.equal(result.workbookPath, "CWCA/Standards 2026-08.xlsx");
+    assert.equal(patchBodies(calls).length, 1);
+    assert.equal(copyCalls(calls).length, 1, "a second copy would give the month a second workbook");
+    assert.equal(probeCalls(calls).length, 1);
+    assert.ok(probeCalls(calls).every((call) => call.method === "GET"));
+    assert.ok(
+      probeCalls(calls).every((call) => call.url.endsWith(`Standards%202026-08.xlsx${PROBE_SELECT}`)),
+      "the probe has to address the item itself: a trailing colon there is the relationship form, which Graph does not document before a query",
+    );
+  });
+
+  it("keeps syncing when the copy monitor reports a failure it cannot name and the workbook is already there", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({ monitor: () => genericFailedCopy(), probe: () => workbookFound() });
+    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+
+    assert.equal(result.workbookCreated, false);
+    assert.equal(patchBodies(calls).length, 1);
+    assert.equal(copyCalls(calls).length, 1, "a second copy would give the month a second workbook");
+    assert.equal(probeCalls(calls).length, 1);
+  });
+
+  it("reads a name conflict Graph nested in innerError without asking the drive at all", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({ monitor: () => nestedNameTakenCopy() });
+    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+
+    assert.equal(result.workbookCreated, false);
+    assert.equal(patchBodies(calls).length, 1);
+    assert.equal(probeCalls(calls).length, 0);
+  });
+
+  it("still fails loudly, and writes nothing, when the copy is refused and the workbook really is absent", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({ copy: () => generalExceptionCopy(), probe: () => workbookAbsent() });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelWorkbookCopyError);
+        assert.match(error.message, /Graph answered 500/);
+        assert.match(error.message, /Nothing was written/);
+        return true;
+      },
+    );
+    assert.equal(patchBodies(calls).length, 0);
+    assert.equal(probeCalls(calls).length, 1);
+  });
+
+  it("fails loudly rather than guessing when the probe itself cannot settle whether the workbook exists", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({
+      copy: () => generalExceptionCopy(),
+      probe: () => jsonResponse(503, { error: { code: "serviceNotAvailable" } }),
+    });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelWorkbookCopyError);
+        assert.match(error.message, /Graph answered 500/);
+        return true;
+      },
+    );
+    assert.equal(patchBodies(calls).length, 0);
+  });
+
+  it("fails loudly when the probe answers with something that is not a file", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({
+      copy: () => generalExceptionCopy(),
+      probe: () => jsonResponse(200, { id: "item-1", name: "Standards 2026-08.xlsx", folder: { childCount: 0 } }),
+    });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelWorkbookCopyError);
+        assert.match(error.message, /Graph answered 500/, "the original failure has to survive the probe");
+        return true;
+      },
+    );
+    assert.equal(patchBodies(calls).length, 0);
+  });
+
+  it("refuses to write through a shortcut that points at another drive's file", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({
+      copy: () => generalExceptionCopy(),
+      probe: () =>
+        jsonResponse(200, {
+          id: "item-1",
+          name: "Standards 2026-08.xlsx",
+          size: 48231,
+          file: { mimeType: "application/vnd.ms-excel" },
+          remoteItem: { id: "somewhere-else", driveId: "another-drive" },
+        }),
+    });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelWorkbookCopyError);
+        return true;
+      },
+    );
+    assert.equal(patchBodies(calls).length, 0, "an alias is not the month workbook, whatever its name says");
+  });
+
+  it("refuses to write into an empty stub left by a half-finished copy", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({
+      copy: () => generalExceptionCopy(),
+      probe: () => jsonResponse(200, { id: "item-1", name: "Standards 2026-08.xlsx", size: 0, file: { mimeType: "application/vnd.ms-excel" } }),
+    });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelWorkbookCopyError);
+        return true;
+      },
+    );
+    assert.equal(patchBodies(calls).length, 0);
   });
 
   it("rebuilds a byte-identical Data worksheet whatever order the database returns rows in", async () => {
@@ -372,6 +560,64 @@ describe("Microsoft Excel month book", () => {
       },
     );
     assert.equal(patchBodies(calls).length, 0);
+  });
+
+  it("names the open workbook when Graph refuses the write with a nested accessConflict", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({
+      write: () =>
+        jsonResponse(409, {
+          error: {
+            code: "conflict",
+            message: "The request could not be completed.",
+            innerError: { code: "accessConflict", message: "another client has locked the workbook for edit" },
+          },
+        }),
+    });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelWorkbookBusyError);
+        assert.match(error.message, /another editor has it open/);
+        assert.match(error.message, /accessConflict/i);
+        assert.match(error.message, /CWCA\/Standards 2026-08\.xlsx/);
+        assert.match(error.message, /Nothing was written/);
+        assert.match(error.message, /no numbers were lost/);
+        return true;
+      },
+    );
+    assert.equal(patchBodies(calls).length, 1);
+  });
+
+  it("reports a bare 423 as locked without claiming it knows a person is editing", async () => {
+    delegatedEnv();
+    installGraphDouble({ write: () => jsonResponse(423, { error: { code: "resourceLocked" } }) });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelWorkbookBusyError);
+        assert.match(error.message, /CWCA\/Standards 2026-08\.xlsx/);
+        assert.match(error.message, /423/);
+        assert.match(error.message, /retention hold|sensitivity label|checkout/);
+        assert.doesNotMatch(error.message, /another editor has it open/, "423 alone does not prove a live editor");
+        return true;
+      },
+    );
+  });
+
+  it("leaves an unrelated write failure reported as it is today, status and body intact", async () => {
+    delegatedEnv();
+    installGraphDouble({ write: () => jsonResponse(500, { error: { code: "internalServerError", message: "GenericFileOpenError" } }) });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.ok(!(error instanceof excel.ExcelWorkbookBusyError));
+        assert.match(error.message, /could not write the Data worksheet of CWCA\/Standards 2026-08\.xlsx: 500/);
+        assert.match(error.message, /GenericFileOpenError/);
+        return true;
+      },
+    );
   });
 
   it("resolves the month once and refuses a range that would straddle two workbooks", () => {

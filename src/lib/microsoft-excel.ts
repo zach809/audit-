@@ -45,6 +45,15 @@ export class ExcelWorkbookCopyError extends Error {
   }
 }
 
+export class ExcelWorkbookBusyError extends Error {
+  constructor(workbookPath: string, reason: string) {
+    super(
+      `Microsoft Graph would not write ${workbookPath}: ${reason}. Nothing was written. Every sync rebuilds the whole month from the database, so no numbers were lost; the next run restates them.`,
+    );
+    this.name = "ExcelWorkbookBusyError";
+  }
+}
+
 export function redactMicrosoftSecrets(text: string): string {
   return text
     .replace(/(client_secret=)[^&\s]*/gi, "$1[REDACTED]")
@@ -358,61 +367,172 @@ async function graphFetch(path: string, init: RequestInit = {}): Promise<Respons
   });
 }
 
-function driveItemPath(userId: string, itemPath: string): string {
+/** Everything the destination probe needs to decide the item is this month's workbook. */
+const PROBE_SELECT = "?$select=id,name,file,size,remoteItem";
+
+/** The item itself. Graph documents this bare form for reading an item by path, and `$select` is
+ *  documented on it. Keep it separate from driveItemPath: a trailing colon is what introduces a
+ *  relationship, and putting one immediately before a query string is not a shape Graph documents. */
+function driveItemSelfPath(userId: string, itemPath: string): string {
   const encoded = itemPath.split("/").map(encodeURIComponent).join("/");
-  return `/users/${encodeURIComponent(userId)}/drive/root:/${encoded}:`;
+  return `/users/${encodeURIComponent(userId)}/drive/root:/${encoded}`;
 }
+
+/** The item, ready for a relationship to be appended: `:/copy`, `:/workbook/...`. */
+function driveItemPath(userId: string, itemPath: string): string {
+  return `${driveItemSelfPath(userId, itemPath)}:`;
+}
+
+type GraphErrorBody = {
+  code?: string;
+  message?: string;
+  innerError?: GraphErrorBody;
+  innererror?: GraphErrorBody;
+  details?: GraphErrorBody[];
+};
 
 type GraphCopyMonitor = {
   status?: string;
-  error?: { code?: string; message?: string; details?: Array<{ code?: string }> };
+  error?: GraphErrorBody;
 };
 
+/** Every code Graph nested anywhere in one error body, lowercased. Graph's own error guidance is to
+ *  walk all the nested codes and use the most specific one understood, and it spells the nested
+ *  object both `innerError` (in its examples) and `innererror` (in its schema), so read both. */
+function graphErrorCodes(error: GraphErrorBody | undefined): string[] {
+  if (!error) return [];
+  return [
+    String(error.code ?? "").toLowerCase(),
+    ...graphErrorCodes(error.innerError),
+    ...graphErrorCodes(error.innererror),
+    ...(error.details ?? []).flatMap((detail) => graphErrorCodes(detail)),
+  ].filter((code) => code !== "");
+}
+
 function copyHitAnExistingName(monitor: GraphCopyMonitor): boolean {
-  const codes = [monitor.error?.code, ...(monitor.error?.details ?? []).map((detail) => detail.code)];
-  return codes.some((code) => String(code ?? "").toLowerCase() === "namealreadyexists");
+  return graphErrorCodes(monitor.error).includes("namealreadyexists");
+}
+
+/** Graph reports "a person has this workbook open for editing" as a SECOND-LEVEL code,
+ *  `accessConflict` nested under a 409, which is precisely the shape a top-level `error.code` check
+ *  cannot see. */
+const WORKBOOK_LOCK_CODES = ["accessconflict", "invalidsessionaccessconflict"];
+
+/** Why the workbook would not take the write, or "" if this was not a lock at all.
+ *
+ *  A matched code says a live editor. A bare 423 does not: OneDrive returns it for retention holds,
+ *  sensitivity-label locks and checkouts too, and telling the operator to go and close a file they do
+ *  not have open would send them the wrong way. Say what we actually know in each case.
+ *
+ *  Deliberately NOT treated as a lock: `genericFileOpenError`, which arrives as a 500 and is the
+ *  common shape for a corrupt, unsupported or oversized workbook as well. Nothing documents it as a
+ *  lock, so claiming one would be wrong more often than right. */
+function workbookLockReason(status: number, body: string): string {
+  let parsed: { error?: GraphErrorBody } = {};
+  try {
+    parsed = JSON.parse(body) as { error?: GraphErrorBody };
+  } catch {
+    parsed = {};
+  }
+  const matched = graphErrorCodes(parsed.error).find((code) => WORKBOOK_LOCK_CODES.includes(code));
+  if (matched) return `another editor has it open (Graph answered ${status} ${matched})`;
+  if (status === 423) {
+    return "Graph answered 423, so the workbook is locked. That is usually a live editor, but a retention hold, a sensitivity label or a checkout reports the same way and will not clear on its own";
+  }
+  return "";
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function awaitCopy(monitorUrl: string, workbookPath: string): Promise<boolean> {
+/** A copy that did not plainly succeed leaves the workbook's existence UNKNOWN, and the old code read
+ *  every such answer as "the workbook is missing". On 2026-08-22 the POST came back
+ *  `500 generalException` while the month workbook was sitting in the drive, so the run failed with
+ *  nothing wrong. Graph never said the workbook was absent; it said nothing about it at all.
+ *
+ *  Do not read the 500 as a disguised name conflict. Graph documents `generalException` as an
+ *  unspecified error, and OneDrive for Business does report a real conflict plainly, as a 409 or as a
+ *  monitor `nameAlreadyExists`. What the 500 meant is still unknown. What matters is that it is not
+ *  evidence of absence, and neither is a monitor we cannot read or a poll that ran out of time. So
+ *  resolve the unknown by asking the destination directly, and let the answer decide.
+ *
+ *  This is NOT the check-then-copy race that made the copy itself the existence check. That race
+ *  needs the check to GATE the copy: two runs both read "absent", both copy, and the month ends up
+ *  with two workbooks splitting the numbers. Here the probe runs only AFTER this run's single copy
+ *  attempt has already failed, and nothing it returns can start a copy. One run still issues exactly
+ *  one copy, so Graph's name uniqueness is still the only lock.
+ *
+ *  Absent, or an answer we cannot read, keeps the original failure: we never write into a workbook we
+ *  could not confirm. */
+async function monthWorkbookSurvivedAFailedCopy(
+  config: ExcelPrivateConfig,
+  workbookPath: string,
+  failure: string,
+): Promise<boolean> {
+  const probe = await graphFetch(`${driveItemSelfPath(config.userId, workbookPath)}${PROBE_SELECT}`);
+  if (!probe.ok) throw new ExcelWorkbookCopyError(failure);
+  const item = (await probe.json().catch(() => ({}))) as { file?: unknown; remoteItem?: unknown; size?: unknown };
+  // A real workbook sitting on this drive, not a folder, not a shortcut pointing at some other
+  // drive's file, and not an empty stub left by a half-finished copy. Anything else and we cannot say
+  // this is the month workbook, which is the one thing we must be sure of before writing into it.
+  const isTheMonthWorkbook = Boolean(item.file) && !item.remoteItem && typeof item.size === "number" && item.size > 0;
+  if (!isTheMonthWorkbook) throw new ExcelWorkbookCopyError(failure);
+  console.info(`Excel sync: the copy of ${workbookPath} reported "${failure}", but the workbook is already there, so this run used it.`);
+  return false;
+}
+
+async function awaitCopy(config: ExcelPrivateConfig, monitorUrl: string, workbookPath: string): Promise<boolean> {
   const deadline = Date.now() + COPY_POLL_TIMEOUT_MS;
   for (;;) {
     // The monitor lives on the drive's own SharePoint host, so the Graph bearer must not go with it.
     const response = await fetch(monitorUrl);
-    if (!response.ok) throw new ExcelWorkbookCopyError(`the copy monitor for ${workbookPath} answered ${response.status}`);
+    if (!response.ok) {
+      return monthWorkbookSurvivedAFailedCopy(config, workbookPath, `the copy monitor for ${workbookPath} answered ${response.status}`);
+    }
     const monitor = (await response.json().catch(() => ({}))) as GraphCopyMonitor;
     const status = String(monitor.status ?? "").toLowerCase();
     if (status === "completed") return true;
     if (status === "failed") {
       if (copyHitAnExistingName(monitor)) return false;
-      throw new ExcelWorkbookCopyError(`the copy of ${workbookPath} failed with ${monitor.error?.code ?? "an unnamed error"}`);
+      return monthWorkbookSurvivedAFailedCopy(
+        config,
+        workbookPath,
+        `the copy of ${workbookPath} failed with ${monitor.error?.code ?? "an unnamed error"}`,
+      );
     }
     if (Date.now() >= deadline) {
-      throw new ExcelWorkbookCopyError(`the copy of ${workbookPath} was still ${status || "unreported"} after ${COPY_POLL_TIMEOUT_MS / 1000}s`);
+      return monthWorkbookSurvivedAFailedCopy(
+        config,
+        workbookPath,
+        `the copy of ${workbookPath} was still ${status || "unreported"} after ${COPY_POLL_TIMEOUT_MS / 1000}s`,
+      );
     }
     await sleep(COPY_POLL_INTERVAL_MS);
   }
 }
 
-/** Returns whether this run created the workbook. The copy is the existence check: asking first and
- *  then copying is a race, and two workbooks for one month split the numbers silently. Graph's own
- *  name uniqueness is the lock, and a name that is already taken is success. */
+/** Returns whether this run created the workbook. The copy is still the existence check, and this run
+ *  still issues exactly one copy: asking first and then copying is a race, and two workbooks for one
+ *  month split the numbers silently. Graph's own name uniqueness is the lock, and a name that is
+ *  already taken is success — however Graph chooses to word that. A 404 names the template, because
+ *  the POST addresses the template's own path; every other refusal is ambiguous about the
+ *  destination, so it goes to the probe rather than straight to a hard failure. */
 async function ensureMonthWorkbook(config: ExcelPrivateConfig, workbookPath: string): Promise<boolean> {
   const response = await graphFetch(`${driveItemPath(config.userId, config.templatePath)}/copy?@microsoft.graph.conflictBehavior=fail`, {
     method: "POST",
     body: JSON.stringify({ name: fileName(workbookPath) }),
   });
   if (response.status === 404) throw new ExcelTemplateMissingError(config.templatePath);
-  if (response.status === 409) return false;
   if (!response.ok) {
-    throw new ExcelWorkbookCopyError(`Graph answered ${response.status} ${redactMicrosoftSecrets(await response.text()).slice(0, 300)}`);
+    const failure = `Graph answered ${response.status} ${redactMicrosoftSecrets(await response.text()).slice(0, 300)}`;
+    return monthWorkbookSurvivedAFailedCopy(config, workbookPath, failure);
   }
   const monitorUrl = response.headers.get("location") ?? "";
-  if (!monitorUrl) throw new ExcelWorkbookCopyError(`Graph accepted the copy of ${workbookPath} without a Location monitor URL`);
-  return awaitCopy(monitorUrl, workbookPath);
+  if (!monitorUrl) {
+    return monthWorkbookSurvivedAFailedCopy(config, workbookPath, `Graph accepted the copy of ${workbookPath} without a Location monitor URL`);
+  }
+  return awaitCopy(config, monitorUrl, workbookPath);
 }
 
 async function writeDataSheet(
@@ -425,9 +545,12 @@ async function writeDataSheet(
     { method: "PATCH", body: JSON.stringify({ values: sheet.values, numberFormat: sheet.numberFormat }) },
   );
   if (!response.ok) {
-    throw new Error(
-      `Microsoft Graph could not write the Data worksheet of ${workbookPath}: ${response.status} ${redactMicrosoftSecrets(await response.text()).slice(0, 500)}`,
-    );
+    const body = redactMicrosoftSecrets(await response.text()).slice(0, 500);
+    // The notice this reaches the operator through is cut at 240 characters, so a raw status plus a
+    // JSON blob tells them nothing. Name the cause when we can actually identify it.
+    const lockReason = workbookLockReason(response.status, body);
+    if (lockReason) throw new ExcelWorkbookBusyError(workbookPath, lockReason);
+    throw new Error(`Microsoft Graph could not write the Data worksheet of ${workbookPath}: ${response.status} ${body}`);
   }
 }
 
