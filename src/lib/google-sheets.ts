@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { optionalEnv } from "./config";
 import { STANDARD_CASE_MANAGERS, STANDARDS_SHEET_HEADERS, standardsReportRows, type DashboardFilters } from "./dashboard-data";
+import { initDb, db } from "./db";
+import { publishOwnerTab, shouldPublishPeriod, type SheetValuesClient } from "./standards-sheet-sync";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -33,6 +35,13 @@ export function googleSheetsConfigured(): boolean {
   );
 }
 
+// GOOGLE_SHEETS_SPREADSHEET_ID is not scoped by environment, and a Vercel preview deployment inherits
+// it from production, so every deployment resolves the firm's real Sheet. rejectNonProductionWrite()
+// on /api/standards/google-sync is the only thing standing between a preview and that Sheet. Opening
+// this sync to preview the way #42 opened Excel therefore takes a scoped destination first: give the
+// id a per-scope table like WORKBOOK_ENV_BY_SCOPE in microsoft-excel.ts, and refuse before the first
+// request when preview has no Sheet of its own. google-sheets.test.ts fails if the guard goes without
+// the scoping.
 function assertGoogleSheetsConfig() {
   const spreadsheetId = optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID").trim();
   const clientEmail = optionalEnv("GOOGLE_SERVICE_ACCOUNT_EMAIL").trim();
@@ -120,43 +129,66 @@ async function ensureCaseManagerSheets() {
   });
 }
 
-function rowValues(row: Awaited<ReturnType<typeof standardsReportRows>>[number]): Array<string | number> {
-  return [
-    row.owner,
-    row.date,
-    row.newMatters,
-    row.attorneyCall,
-    row.welcome,
-    row.courtDate,
-    row.weeklyCheckIns,
-    row.completion,
-  ];
+function liveSheetsClient(): SheetValuesClient {
+  return {
+    async getValues(sheetName, a1) {
+      const encoded = encodeURIComponent(sheetRange(sheetName, a1));
+      const json = await googleRequest<{ values?: string[][] }>(`/values/${encoded}`);
+      return json.values ?? [];
+    },
+    async updateValues(sheetName, data) {
+      await googleRequest("/values:batchUpdate?valueInputOption=USER_ENTERED", {
+        method: "POST",
+        body: JSON.stringify({
+          valueInputOption: "USER_ENTERED",
+          data: data.map((part) => ({
+            range: sheetRange(sheetName, part.a1),
+            values: part.values,
+          })),
+        }),
+      });
+    },
+  };
+}
+
+async function latestAuditRunStatus(): Promise<string | null> {
+  await initDb();
+  const rows = await db()`select status from audit_run order by started_at desc limit 1`;
+  return rows[0]?.status ? String(rows[0].status) : null;
+}
+
+function displayPeriodDate(value: string | undefined): string {
+  const key = String(value ?? "").trim();
+  const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return key;
+  return `${Number(match[2])}/${Number(match[3])}/${match[1]}`;
 }
 
 export async function syncStandardsToGoogleSheets(filters: DashboardFilters = {}) {
   assertGoogleSheetsConfig();
   await ensureCaseManagerSheets();
-  const rows = await standardsReportRows(filters);
-  const updates = STANDARD_CASE_MANAGERS.map((owner) => {
-    const ownerRows = rows.filter((row) => row.owner === owner).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+  const auditStatus = await latestAuditRunStatus();
+  if (!shouldPublishPeriod(auditStatus)) {
     return {
-      range: sheetRange(owner, "A1:H200"),
-      values: [STANDARDS_SHEET_HEADERS, ...ownerRows.map(rowValues)],
+      spreadsheetId: optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID").trim(),
+      sheetsUpdated: 0,
+      rowsSynced: 0,
+      skipped: "incomplete-audit" as const,
     };
-  });
-  await googleRequest("/values:batchClear", {
-    method: "POST",
-    body: JSON.stringify({
-      ranges: STANDARD_CASE_MANAGERS.map((owner) => sheetRange(owner, "A:H")),
-    }),
-  });
-  await googleRequest("/values:batchUpdate?valueInputOption=USER_ENTERED", {
-    method: "POST",
-    body: JSON.stringify({
-      valueInputOption: "USER_ENTERED",
-      data: updates,
-    }),
-  });
+  }
+  const rows = await standardsReportRows(filters);
+  const period = { from: displayPeriodDate(filters.from), to: displayPeriodDate(filters.to) };
+  const now = new Date();
+  const client = liveSheetsClient();
+  for (const owner of STANDARD_CASE_MANAGERS) {
+    await publishOwnerTab(client, {
+      owner,
+      incoming: rows.filter((row) => row.owner === owner),
+      period,
+      auditStatus,
+      now,
+    });
+  }
   return {
     spreadsheetId: optionalEnv("GOOGLE_SHEETS_SPREADSHEET_ID").trim(),
     sheetsUpdated: STANDARD_CASE_MANAGERS.length,

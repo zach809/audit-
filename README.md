@@ -160,7 +160,7 @@ Do not enable write permissions.
 - `DASHBOARD_PASSWORD`: password for the dashboard.
 - `CASE_MANAGER_USERS`: comma-separated case-manager logins for `/case-manager`. Current default CM setup uses the listed Hirsch emails with password `Hirsch12345678`.
 - `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: optional live Standards Google Sheet sync. Share the target Sheet with the service-account email as Editor, then use the Standards tab button or the weekday cron sync.
-- `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_EXCEL_USER_ID`, and `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`: optional live Standards Excel Online sync. Store the workbook in OneDrive/SharePoint, grant the Microsoft app Graph write access, paste the workbook share link, then use Standards -> Sync Excel Workbook.
+- `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_EXCEL_USER_ID`, and `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`: optional live Standards Excel Online sync. Prefer `MICROSOFT_EXCEL_REFRESH_TOKEN` (delegated `Files.ReadWrite` + `offline_access`; public client, no `client_secret`). If that env var is unset, CWCA uses application client-credentials and `MICROSOFT_CLIENT_SECRET`.
 
 ## Standards Google Sheet
 
@@ -192,19 +192,39 @@ This is one-way from CWCA to Excel. It does not write to Clio.
 
 To connect it:
 
-1. Create a Microsoft Entra / Azure App Registration.
+1. Create a Microsoft Entra / Azure App Registration. For delegated sync, register it as a public client (no client secret on the refresh grant).
 2. Copy the Directory tenant ID into `MICROSOFT_TENANT_ID`.
 3. Copy the Application client ID into `MICROSOFT_CLIENT_ID`.
-4. Create a client secret and copy its value into `MICROSOFT_CLIENT_SECRET`.
-5. Add Microsoft Graph application permission for workbook access, such as `Files.ReadWrite.All`, and have an admin grant consent.
+4. Preferred: obtain a delegated refresh token for a named user who can edit the workbook, with Graph delegated `Files.ReadWrite` and `offline_access`, and put it in `MICROSOFT_EXCEL_REFRESH_TOKEN`. Do not send a client secret with that grant.
+5. Application fallback only: if `MICROSOFT_EXCEL_REFRESH_TOKEN` is unset, create a client secret (`MICROSOFT_CLIENT_SECRET`) and use Graph application permission. That path is unchanged; this firm’s IT has already refused `Files.ReadWrite.All`.
 6. Create an Excel workbook in OneDrive or SharePoint, for example `CWCA Standards.xlsx`.
-7. Put the workbook owner email into `MICROSOFT_EXCEL_USER_ID`, for example `zach@hirschlawgroup.com`.
+7. Put the workbook owner email into `MICROSOFT_EXCEL_USER_ID`, for example `zach@hirschlawgroup.com`. Delegated writes are attributed to this named account.
 8. Easiest option: copy the workbook sharing link from OneDrive/Teams and paste it into `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL`.
 9. Optional but recommended: paste the same browser URL into `MICROSOFT_EXCEL_WORKBOOK_WEB_URL` so CWCA can show an Open Excel Workbook button.
 10. Advanced fallback: if you do not want to use a sharing link, set `MICROSOFT_EXCEL_WORKBOOK_PATH="CWCA Standards.xlsx"` for a file in that user's OneDrive root, or set `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID`.
 11. Redeploy Vercel, then use Standards -> Sync Excel Workbook.
 
-If your Microsoft tenant blocks broad application permissions, ask the Microsoft 365 admin to create/approve the app or use the regular Standards workbook download instead.
+If the refresh token is revoked or expired, sync fails with a named `invalid_grant` error. A person must re-issue the token; retrying will not fix it.
+
+### Testing the Excel sync from a preview deployment
+
+Preview deployments block every write. Their database is a Neon branch and, with the variables below, their Excel workbook is a separate file, so the reason is the rule rather than a risk to production data: the Google Sheet and the Clio OAuth connection are the two systems a preview shares with production outright. A preview still reads Clio with production's credential, but it can no longer refresh it. See "Clio on a preview deployment" below. The Excel sync is the one route that can be opened, and only against a separate test workbook.
+
+Set both of these on the Vercel **Preview** environment, never on Production:
+
+1. `CWCA_ALLOW_PREVIEW_EXCEL_SYNC="1"` lets `/api/standards/excel-sync` run. Every other write route keeps answering 403: `/api/audit/run`, `/api/audit/recheck-items`, `/api/case-manager/complete`, `/api/metrics/exclusion`, `/api/standards/google-sync`, `/api/reviews`, `/api/post-closure/sync`, `/api/post-closure/followups` and `/api/auth/clio/callback`.
+2. `MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW` names the test workbook, for example `cwca-standards-test.xlsx`. `MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW` and `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW` are the equivalents of the other two location variables, and `MICROSOFT_EXCEL_WORKBOOK_WEB_URL_PREVIEW` feeds the Open Excel Workbook button.
+
+A preview deployment inherits the production variables it does not override, so on preview the sync ignores `MICROSOFT_EXCEL_WORKBOOK_ITEM_ID`, `_PATH`, `_SHARE_URL` and `_WEB_URL` entirely. With no `_PREVIEW` location set, the sync refuses with a named error rather than falling back to the production workbook. `MICROSOFT_EXCEL_USER_ID` is still inherited, so the test workbook must live in that user's drive.
+
+The sync response names the workbook it wrote to, as `<location> (preview)` or `<location> (production)`. A sharing link is reported as `shared link`, because the notice travels back in the URL.
+
+Two things to expect on preview while only part of this is configured. With no `_PREVIEW` location set, the Sync Excel Workbook button is disabled. With a `_PREVIEW` location set but no `CWCA_ALLOW_PREVIEW_EXCEL_SYNC`, the button is enabled and the click comes back 403.
+
+`CWCA_ALLOW_PREVIEW_EXCEL_SYNC` gates the `/api/standards/excel-sync` route. It does not gate the publisher that `/api/reviews` triggers after a review is saved, but `/api/reviews` now answers 403 outside production, so that publisher no longer runs there. It follows the same workbook rule in any case, writing to the `_PREVIEW` workbook or, with none set, skipping.
+
+The Excel sync never touches Clio. It reads `standardsReportRows` from the database and writes to Microsoft Graph, so the refusal below does not affect it.
+
 - `SESSION_SECRET`: long random string for login cookies.
 - `TOKEN_ENCRYPTION_KEY`: 32-byte base64 key preferred. You can generate one with `openssl rand -base64 32`.
 - `CRON_SECRET`: random string used to secure cron/manual worker access.
@@ -217,6 +237,22 @@ If your Microsoft tenant blocks broad application permissions, ask the Microsoft
 - `CLOSED_MATTER_RETENTION_DAYS`: closed-matter audit-row retention. Default `30`.
 - `OPENAI_API_KEY`: optional OpenAI API key for manual AI help.
 - `AI_MODEL`: optional OpenAI model name. Default `gpt-4o-mini`.
+
+### Clio on a preview deployment
+
+A preview deployment's database is a Neon branch, and that branch carries a copy of production's Clio refresh token. Refreshing from preview would ask Clio to reissue production's credential and would save the replacement in the branch, where production cannot read it. So outside production the refresh is refused before the network call is made:
+
+> Clio refresh blocked: only production refreshes Clio. This deployment reads a database branch that carries a copy of production's Clio refresh token, so refreshing here would ask Clio to reissue production's credential and would save the replacement where production cannot read it. Reconnect Clio from production, or give this deployment its own Clio application.
+
+What this means day to day. A preview keeps reading Clio normally while the access token in its branch is still valid, which is up to 30 days from the last production refresh. Once that token is inside its last 10 minutes, anything that needs Clio fails with the message above instead of a generic error: the evidence pages, `/api/debug/recent-matters`, and any audit run. Everything that does not need Clio, including the Excel sync, is unaffected.
+
+The refusal is on the network call, not on saving the token. Letting the call through and blocking the save would be worse than doing nothing: it would exercise production's grant and then discard whatever came back.
+
+`CWCA_ALLOW_WRITES="1"` with `VERCEL_ENV` unset still refreshes, so a local checkout that has deliberately opted into writes behaves as before. No setting opens refresh on preview.
+
+Clio Manage does not rotate refresh tokens, which limits how bad a preview refresh could have been. Clio's FAQ states it plainly: "Clio Manage: Refresh tokens do not expire and can be reused across multiple refresh calls. They remain valid until explicitly revoked", against "Clio Platform: Refresh tokens do not have a time-based expiry, but they are rotated on each use" (https://docs.developers.clio.com/faq/). The Clio Manage refresh response documents no `refresh_token` field at all (https://docs.developers.clio.com/api-docs/clio-manage/authorization/), which is why `clio.ts` falls back to the stored one. Two things keep the guard worth having anyway. Clio does not document whether a refresh invalidates the access token it replaces, and `CLIO_BASE_URL` is a variable, so a future move to Clio Platform would make rotation real.
+
+Giving preview its own Clio connection is the only way to make it fully functional without borrowing production's. It needs a second application registered in the firm's Clio developer account, with the preview callback URL as its redirect URI, and `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET` and `CLIO_REDIRECT_URI` set on the Vercel Preview environment only. Someone at the firm then authorizes that application once from a preview deployment. That is a decision for the firm, because it is a second application with its own access to live matter data.
 
 ## Notes
 

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { getDashboardData, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, standardsReportRows, weeklyComplianceComparisonRows, type WorkspaceAuditItem } from "@/lib/dashboard-data";
+import { getDashboardData, DEFAULT_MATTER_PAGE_SIZE, parseMatterDir, parseMatterPage, parseMatterSort, STANDARD_CASE_MANAGERS, standardsCaseManagerFor, standardsReportRows, weeklyComplianceComparisonRows, type MatterSort, type WorkspaceAuditItem } from "@/lib/dashboard-data";
 import { hasDashboardSession } from "@/lib/session";
 import { hasClioConnection } from "@/lib/token-store";
 import { formatLocal } from "@/lib/business-time";
@@ -19,6 +19,7 @@ import { WORKFLOW_COLUMNS, WORKFLOW_RULES, workflowLabel } from "@/lib/workflow-
 import { TEMPLATE_REGISTRY } from "@/lib/template-registry";
 import { ReviewBuilder, type ReviewBuilderItem } from "./review-builder";
 import { MatterReviewControls } from "./matter-review-controls";
+import { MatterBulkBar, MatterSelect } from "./matter-bulk-bar";
 import { CopyTextButton } from "./copy-text-button";
 import { MatterAiHelp } from "./matter-ai-help";
 import { LogicAiReview } from "./logic-ai-review";
@@ -524,6 +525,12 @@ function filterLink(filters: Record<string, string>, next: Record<string, string
   return query ? `/?${query}` : "/";
 }
 
+function sortLink(filters: Record<string, string>, sort: MatterSort): string {
+  const active = filters.sort === sort;
+  const nextDir = active ? (filters.dir === "asc" ? "desc" : "asc") : sort === "compliance" ? "asc" : "desc";
+  return filterLink(filters, { sort, dir: nextDir, page: "1" });
+}
+
 function weeklyComplianceStepForCategory(category: string): string {
   if (category.includes("Welcome")) return "SETUP_WELCOME";
   if (category.includes("Attorney phone")) return "SETUP_ATTY_CALL";
@@ -790,26 +797,65 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     from: searchParams.from ?? defaultFrom,
     to: searchParams.to ?? defaultTo,
   };
+  const matterPage = parseMatterPage(searchParams.page);
+  const matterSort = parseMatterSort(searchParams.sort);
+  const matterDir = searchParams.dir === "asc" || searchParams.dir === "desc"
+    ? searchParams.dir
+    : matterSort === "compliance" ? "asc" : parseMatterDir(searchParams.dir);
+  const urlState = {
+    attorney: filters.attorney,
+    overall: filters.overall,
+    from: filters.from,
+    to: filters.to,
+    tab: activeTab,
+    wstatus: workspaceStatusFilter,
+    wfocus: workspaceFocusFilter,
+    wstep: workspaceStepFilter,
+    cm: workspaceCaseManagerFilter,
+    closure_status: closureStatusFilter,
+    closure_stage: closureStageFilter,
+    closure_attorney: closureAttorneyFilter,
+    closure_window: closureWindowFilter,
+    sort: matterSort,
+    dir: matterDir,
+    page: String(matterPage),
+  };
   const hasFilters = Boolean(filters.attorney || filters.overall || filters.from || filters.to);
+  const standardsDefaultFrom = lastWeekStart;
+  const standardsDefaultTo = lastWeekEnd;
+  const standardsActiveFrom = filters.from || standardsDefaultFrom;
+  const standardsActiveTo = filters.to || standardsDefaultTo;
   let data: Awaited<ReturnType<typeof getDashboardData>> | null = null;
   let postClosure: Awaited<ReturnType<typeof getPostClosureData>> | null = null;
+  let standardsRows: Awaited<ReturnType<typeof standardsReportRows>> | null = null;
   let dataError = "";
   try {
-    [data, postClosure] = await Promise.all([
-      getDashboardData(filters),
+    [data, postClosure, standardsRows] = await Promise.all([
+      getDashboardData({
+        ...filters,
+        page: matterPage,
+        pageSize: DEFAULT_MATTER_PAGE_SIZE,
+        sort: matterSort,
+        dir: matterDir,
+      }),
       getPostClosureData({
         status: closureStatusFilter,
         stage: closureStageFilter,
         attorney: closureAttorneyFilter,
         window: closureWindowFilter,
       }),
+      standardsReportRows({
+        from: standardsActiveFrom,
+        to: standardsActiveTo,
+      }),
     ]);
   } catch (error) {
     data = null;
     postClosure = null;
+    standardsRows = null;
     dataError = dashboardErrorMessage(error);
   }
-  if (!data || !postClosure) {
+  if (!data || !postClosure || !standardsRows) {
     return (
       <DashboardUnavailable
         connected={connected}
@@ -818,6 +864,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     );
   }
   const dashboardData = data;
+  const matterTotal = Number(dashboardData.matterTotal ?? 0);
+  const shownFrom = matterTotal === 0 ? 0 : (matterPage - 1) * DEFAULT_MATTER_PAGE_SIZE + 1;
+  const shownTo = Math.min(matterPage * DEFAULT_MATTER_PAGE_SIZE, matterTotal);
+  const pageCount = Math.max(1, Math.ceil(matterTotal / DEFAULT_MATTER_PAGE_SIZE));
   const postClosureData = postClosure;
   const auditBatchSize = Math.max(1, Number(process.env.AUDIT_BATCH_SIZE ?? "5") || 5);
   const totalCount = num(dashboardData.summary.total);
@@ -1016,10 +1066,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     checked: allWorkspaceRows.filter((item) => item.row.stepCode === code).length,
   }));
   const maxWorkflowCount = Math.max(1, ...workflowAreaBreakdown.map((item) => item.followUp));
-  const standardsDefaultFrom = lastWeekStart;
-  const standardsDefaultTo = lastWeekEnd;
-  const standardsActiveFrom = filters.from || standardsDefaultFrom;
-  const standardsActiveTo = filters.to || standardsDefaultTo;
   const kpiRows = allWorkspaceRows.filter(
     (item) =>
       KPI_WORKFLOW_CODES.has(item.row.stepCode) &&
@@ -1240,10 +1286,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     const params = new URLSearchParams({ window: "this-week", cmname: caseManager });
     return `/case-manager?${params.toString()}`;
   };
-  const standardsSheetPreviewRows = (await standardsReportRows({
-    from: standardsActiveFrom,
-    to: standardsActiveTo,
-  })).map((row) => ({
+  const standardsSheetPreviewRows = standardsRows.map((row) => ({
     caseManager: row.owner,
     sortDate: row.sortDate,
     date: row.date,
@@ -1312,6 +1355,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     if (searchParams.metrics === "failed") return searchParams.notice || "Metric update failed.";
     if (searchParams.sheets === "synced") return searchParams.notice || "Google Sheet updated.";
     if (searchParams.sheets === "failed") return searchParams.notice || "Google Sheets sync failed.";
+    if (searchParams.excel === "synced") return searchParams.notice || "Excel workbook updated.";
+    if (searchParams.excel === "failed") return searchParams.notice || "Excel workbook sync failed.";
     if (searchParams.clio === "connected") return "Clio connected successfully.";
     if (searchParams.clio === "failed") return `Clio connection failed${searchParams.reason ? `: ${searchParams.reason}` : "."}`;
     return "";
@@ -1351,7 +1396,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
       </section>
 
       {notice ? (
-        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" || searchParams.metrics === "failed" || searchParams.sheets === "failed" ? "notice danger" : "notice"}>
+        <section className={searchParams.audit === "failed" || searchParams.clio === "failed" || searchParams.postClosure === "failed" || searchParams.metrics === "failed" || searchParams.sheets === "failed" || searchParams.excel === "failed" ? "notice danger" : "notice"}>
           {notice}
         </section>
       ) : null}
@@ -2651,6 +2696,13 @@ Items Still Needing Action
           <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
           <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
           <input type="hidden" name="wstep" value={workspaceStepFilter} />
+          <input type="hidden" name="cm" value={workspaceCaseManagerFilter} />
+          <input type="hidden" name="closure_status" value={closureStatusFilter} />
+          <input type="hidden" name="closure_stage" value={closureStageFilter} />
+          <input type="hidden" name="closure_attorney" value={closureAttorneyFilter} />
+          <input type="hidden" name="closure_window" value={closureWindowFilter} />
+          <input type="hidden" name="sort" value={matterSort} />
+          <input type="hidden" name="dir" value={matterDir} />
           <label>
             Responsible Attorney
             <select name="attorney" defaultValue={filters.attorney}>
@@ -2683,10 +2735,10 @@ Items Still Needing Action
           <a className="button" href="/">Clear</a>
         </form>
         <div className="quick-filters">
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: today, to: today })}>Today</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: weekStart, to: today })}>This Week</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: monthStart, to: today })}>This Month</a>
-          <a className="button" href={filterLink({ ...filters, tab: activeTab, wstatus: workspaceStatusFilter, wfocus: workspaceFocusFilter, wstep: workspaceStepFilter, cm: workspaceCaseManagerFilter }, { from: "", to: "" })}>All Dates</a>
+          <a className="button" href={filterLink(urlState, { from: today, to: today, page: "1" })}>Today</a>
+          <a className="button" href={filterLink(urlState, { from: weekStart, to: today, page: "1" })}>This Week</a>
+          <a className="button" href={filterLink(urlState, { from: monthStart, to: today, page: "1" })}>This Month</a>
+          <a className="button" href={filterLink(urlState, { from: "", to: "", page: "1" })}>All Dates</a>
         </div>
         {hasFilters ? (
           <p className="filter-alert">
@@ -2695,6 +2747,7 @@ Items Still Needing Action
         ) : null}
         <div className="filter-summary">
           <span>{checkedCount} of {totalCount} audited</span>
+          <span>Showing {shownFrom}–{shownTo} of {matterTotal}</span>
           <span>{uncheckedCount > 0 ? `${uncheckedCount} ${waitingLabel} left` : "All discovered matters checked"}</span>
           {dashboardData.lastRun?.message ? <span>{dashboardData.lastRun.message}</span> : null}
         </div>
@@ -2916,6 +2969,20 @@ Items Still Needing Action
 
       {activeTab === "matters" ? (
       <section className="matter-list">
+        <div className="quick-filters">
+          <a className={matterSort === "date" ? "button primary" : "button"} href={sortLink(urlState, "date")}>Matter date</a>
+          <a className={matterSort === "attorney" ? "button primary" : "button"} href={sortLink(urlState, "attorney")}>Attorney</a>
+          <a className={matterSort === "case_manager" ? "button primary" : "button"} href={sortLink(urlState, "case_manager")}>Case manager</a>
+          <a className={matterSort === "compliance" ? "button primary" : "button"} href={sortLink(urlState, "compliance")}>Compliance</a>
+        </div>
+        <MatterBulkBar
+          filters={urlState}
+          matters={dashboardData.matters.map((m) => ({
+            id: String(m.matter_id),
+            name: `${m.client_first_name ?? ""} ${m.client_last_name ?? ""}`.trim() || m.matter_number,
+            excluded: Boolean(m.metric_excluded),
+          }))}
+        >
         {dashboardData.matters.length ? dashboardData.matters.map((m) => {
           const items = m.items as DashboardItem[];
           const evidenceItems = items.filter((i) => evidencePath(i));
@@ -2929,6 +2996,10 @@ Items Still Needing Action
             <article className="matter-card" key={m.matter_id}>
               <div className="matter-head">
                 <div>
+                  <MatterSelect
+                    matterId={String(m.matter_id)}
+                    name={`${m.client_first_name ?? ""} ${m.client_last_name ?? ""}`.trim() || m.matter_number}
+                  />
                   <h3>{`${m.client_first_name} ${m.client_last_name}`.trim() || "Unnamed Client"}</h3>
                   <p>{m.matter_number}</p>
                 </div>
@@ -2958,6 +3029,11 @@ Items Still Needing Action
                     <input type="hidden" name="tab" value={activeTab} />
                     <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
                     <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+                    <input type="hidden" name="wstep" value={workspaceStepFilter} />
+                    <input type="hidden" name="cm" value={workspaceCaseManagerFilter} />
+                    <input type="hidden" name="sort" value={matterSort} />
+                    <input type="hidden" name="dir" value={matterDir} />
+                    <input type="hidden" name="page" value={String(matterPage)} />
                     <button type="submit">Recheck Matter</button>
                   </form>
                   <form action="/api/metrics/exclusion" method="post">
@@ -2972,6 +3048,11 @@ Items Still Needing Action
                     <input type="hidden" name="tab" value={activeTab} />
                     <input type="hidden" name="wstatus" value={workspaceStatusFilter} />
                     <input type="hidden" name="wfocus" value={workspaceFocusFilter} />
+                    <input type="hidden" name="wstep" value={workspaceStepFilter} />
+                    <input type="hidden" name="cm" value={workspaceCaseManagerFilter} />
+                    <input type="hidden" name="sort" value={matterSort} />
+                    <input type="hidden" name="dir" value={matterDir} />
+                    <input type="hidden" name="page" value={String(matterPage)} />
                     <button className="metric-exclusion-button" type="submit">
                       {m.metric_excluded ? "Restore to Standards" : "Remove from Standards"}
                     </button>
@@ -3084,6 +3165,14 @@ Items Still Needing Action
             <p>{uncheckedCount > 0 ? "Click Run Audit Batch to pull the next safe batch from Clio." : "Try clearing filters or running a fresh batch."}</p>
           </section>
         )}
+        </MatterBulkBar>
+        {matterTotal > DEFAULT_MATTER_PAGE_SIZE ? (
+          <div className="quick-filters">
+            {matterPage > 1 ? <a className="button" href={filterLink(urlState, { page: String(matterPage - 1) })}>Previous</a> : null}
+            <span className="muted small">Page {matterPage} of {pageCount}</span>
+            {matterPage < pageCount ? <a className="button" href={filterLink(urlState, { page: String(matterPage + 1) })}>Next</a> : null}
+          </div>
+        ) : null}
       </section>
       ) : null}
 
