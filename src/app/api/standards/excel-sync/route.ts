@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   };
   try {
     await initDb();
-    const result = await syncStandardsToMicrosoftExcel(filters);
+    const result = await syncStandardsToMicrosoftExcel({ from: filters.from });
     return NextResponse.json({ ok: true, ...result, filters });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -49,11 +49,11 @@ export async function POST(request: NextRequest) {
   };
   try {
     await initDb();
-    const result = await syncStandardsToMicrosoftExcel(filters);
+    const result = await syncStandardsToMicrosoftExcel({ from: filters.from });
     return redirectBack(request, {
       ...filters,
       excel: "synced",
-      notice: `Excel workbook ${result.workbookTarget} updated (${result.authMode === "delegated" ? `delegated as ${result.authAccount}` : "application client-credentials"}): ${result.rowsSynced} row${result.rowsSynced === 1 ? "" : "s"} across ${result.sheetsUpdated} case-manager tabs.`,
+      notice: `Excel workbook ${result.workbookTarget} updated (${result.authMode === "delegated" ? `delegated as ${result.authAccount}` : "application client-credentials"}): ${result.rowsSynced} row${result.rowsSynced === 1 ? "" : "s"} rebuilt on the Data worksheet of ${result.workbookPath}${result.workbookCreated ? ", created this run from the template" : ""}.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

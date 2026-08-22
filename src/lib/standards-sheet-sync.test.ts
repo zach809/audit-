@@ -8,6 +8,7 @@ import {
   chicagoDateKey,
   collectArchiveRows,
   currentChicagoMonthRange,
+  eachChicagoDateKey,
   excelSerialFromDateKey,
   formatSheetStamp,
   publishOwnerTab,
@@ -144,6 +145,17 @@ describe("sheet dates and Chicago period", () => {
   it("defaults the Excel period to the current Chicago month through today", () => {
     const range = currentChicagoMonthRange(new Date("2026-08-15T16:00:00Z"));
     assert.deepEqual(range, { from: "2026-08-01", to: "2026-08-15" });
+  });
+
+  it("walks every day of a range inclusively, and neither drops nor doubles a day across DST", () => {
+    assert.deepEqual(eachChicagoDateKey("2026-08-01", "2026-08-04"), ["2026-08-01", "2026-08-02", "2026-08-03", "2026-08-04"]);
+    assert.deepEqual(eachChicagoDateKey("2026-08-31", "2026-08-31"), ["2026-08-31"]);
+    assert.deepEqual(eachChicagoDateKey("2026-08-04", "2026-08-01"), []);
+    assert.equal(eachChicagoDateKey("2026-03-01", "2026-03-31").length, 31);
+    assert.deepEqual(eachChicagoDateKey("2026-03-07", "2026-03-09"), ["2026-03-07", "2026-03-08", "2026-03-09"]);
+    assert.equal(eachChicagoDateKey("2026-11-01", "2026-11-30").length, 30);
+    assert.deepEqual(eachChicagoDateKey("2026-10-31", "2026-11-02"), ["2026-10-31", "2026-11-01", "2026-11-02"]);
+    assert.equal(new Set(eachChicagoDateKey("2026-01-01", "2026-12-31")).size, 365);
   });
 });
 

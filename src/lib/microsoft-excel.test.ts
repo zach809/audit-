@@ -4,7 +4,7 @@ import { after, afterEach, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { STANDARDS_SHEET_HEADERS } from "./dashboard-data";
 import * as excel from "./microsoft-excel";
-import type { SheetDailyRow } from "./standards-sheet-sync";
+import { excelSerialFromDateKey, type SheetDailyRow } from "./standards-sheet-sync";
 
 const ENV_KEYS = [
   "VERCEL_ENV",
@@ -12,13 +12,10 @@ const ENV_KEYS = [
   "MICROSOFT_CLIENT_ID",
   "MICROSOFT_CLIENT_SECRET",
   "MICROSOFT_EXCEL_USER_ID",
-  "MICROSOFT_EXCEL_WORKBOOK_SHARE_URL",
   "MICROSOFT_EXCEL_WORKBOOK_PATH",
-  "MICROSOFT_EXCEL_WORKBOOK_ITEM_ID",
+  "MICROSOFT_EXCEL_TEMPLATE_PATH",
   "MICROSOFT_EXCEL_WORKBOOK_WEB_URL",
-  "MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW",
   "MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW",
-  "MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW",
   "MICROSOFT_EXCEL_WORKBOOK_WEB_URL_PREVIEW",
   "MICROSOFT_EXCEL_REFRESH_TOKEN",
 ] as const;
@@ -49,7 +46,8 @@ function setExcelEnv(values: Record<string, string>) {
     MICROSOFT_TENANT_ID: "tenant-1",
     MICROSOFT_CLIENT_ID: "client-1",
     MICROSOFT_EXCEL_USER_ID: "zach@hirschlawgroup.com",
-    MICROSOFT_EXCEL_WORKBOOK_SHARE_URL: "https://example.com/workbook",
+    MICROSOFT_EXCEL_WORKBOOK_PATH: "CWCA/Standards {month}.xlsx",
+    MICROSOFT_EXCEL_TEMPLATE_PATH: "CWCA/Standards Template.xlsx",
     ...values,
   });
 }
@@ -186,50 +184,266 @@ describe("Microsoft Excel auth", () => {
   });
 });
 
-const PRODUCTION_TARGET = {
-  MICROSOFT_EXCEL_WORKBOOK_ITEM_ID: "prod-item-id-must-not-be-used",
-  MICROSOFT_EXCEL_WORKBOOK_PATH: "Production/real-standards.xlsx",
-  MICROSOFT_EXCEL_WORKBOOK_SHARE_URL: "https://example.com/production-workbook",
-  MICROSOFT_EXCEL_WORKBOOK_WEB_URL: "https://example.com/production-web-url",
-  MICROSOFT_EXCEL_REFRESH_TOKEN: "refresh-token-live-value",
-};
+const NOW = new Date("2026-08-15T16:00:00Z");
+const MONITOR_URL = "https://hirschlawgroup.sharepoint.com/_api/v2.0/monitor/copy-1";
+const TEMPLATE_COPY = "/users/zach%40hirschlawgroup.com/drive/root:/CWCA/Standards%20Template.xlsx:/copy?@microsoft.graph.conflictBehavior=fail";
+const DATA_RANGE = "/users/zach%40hirschlawgroup.com/drive/root:/CWCA/Standards%202026-08.xlsx:/workbook/worksheets('Data')/range(address='A1:J311')";
 
-function captureGraphUrls() {
-  const calls: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+type GraphCall = { method: string; url: string; body: string; authorization: string };
+
+function daily(owner: string, sortDate: string, extras: Partial<SheetDailyRow> = {}): SheetDailyRow {
+  const [year, month, day] = sortDate.split("-");
+  return {
+    owner,
+    date: `${Number(month)}/${Number(day)}/${year}`,
+    sortDate,
+    newMatters: 0,
+    attorneyCall: 0,
+    welcome: 0,
+    courtDate: 0,
+    weeklyCheckIns: 0,
+    completion: "0%",
+    ...extras,
+  };
+}
+
+function rowsFrom(rows: SheetDailyRow[]) {
+  return async () => rows;
+}
+
+function acceptedCopy() {
+  return new Response(null, { status: 202, headers: { location: MONITOR_URL } });
+}
+
+function completedCopy() {
+  return jsonResponse(200, { status: "completed", resourceId: "item-1" });
+}
+
+function nameTakenCopy() {
+  return jsonResponse(200, {
+    status: "failed",
+    error: { code: "generalException", message: "copy failed", details: [{ code: "nameAlreadyExists" }] },
+  });
+}
+
+function installGraphDouble(plan: { copy?: (attempt: number) => Response; monitor?: (attempt: number) => Response } = {}) {
+  const calls: GraphCall[] = [];
+  const copy: (attempt: number) => Response = plan.copy ?? (() => acceptedCopy());
+  const monitor: (attempt: number) => Response = plan.monitor ?? (() => completedCopy());
+  let copyAttempts = 0;
+  let monitorAttempts = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    calls.push(url);
-    if (url.includes("login.microsoftonline.com")) return jsonResponse(200, { access_token: "access-token" });
-    return jsonResponse(200, {});
+    const headers = new Headers(init?.headers ?? {});
+    const call: GraphCall = {
+      method: String(init?.method ?? "GET").toUpperCase(),
+      url,
+      body: String(init?.body ?? ""),
+      authorization: headers.get("authorization") ?? "",
+    };
+    calls.push(call);
+    if (url.startsWith("https://login.microsoftonline.com/")) return jsonResponse(200, { access_token: "delegated-access-token" });
+    if (url === MONITOR_URL) {
+      monitorAttempts += 1;
+      return monitor(monitorAttempts);
+    }
+    if (url.includes("/copy?")) {
+      copyAttempts += 1;
+      return copy(copyAttempts);
+    }
+    if (call.method === "PATCH" && url.includes("/workbook/")) return jsonResponse(200, {});
+    return assert.fail(`the Excel sync made an unexpected request: ${call.method} ${url}`);
   }) as typeof fetch;
   return calls;
 }
 
-function shareId(url: string) {
-  return `u!${Buffer.from(url).toString("base64url").replace(/=+$/g, "")}`;
+function graphWrites(calls: GraphCall[]) {
+  return calls.filter((call) => call.method !== "GET" && call.url.includes("graph.microsoft.com"));
 }
+
+function patchBodies(calls: GraphCall[]) {
+  return calls.filter((call) => call.method === "PATCH").map((call) => call.body);
+}
+
+function delegatedEnv() {
+  setExcelEnv({ MICROSOFT_EXCEL_REFRESH_TOKEN: "refresh-token-live-value" });
+}
+
+describe("Microsoft Excel month book", () => {
+  it("writes the Data worksheet and never addresses any other worksheet", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble();
+    const result = await excel.syncStandardsToMicrosoftExcel(
+      {},
+      { now: NOW, reportRows: rowsFrom([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })]) },
+    );
+
+    for (const write of graphWrites(calls)) {
+      assert.ok(
+        write.url.endsWith(TEMPLATE_COPY) || write.url.endsWith(DATA_RANGE),
+        `the sync wrote outside the Data worksheet: ${write.method} ${write.url}`,
+      );
+    }
+    const bodies = patchBodies(calls);
+    assert.equal(bodies.length, 1);
+    const patched = JSON.parse(bodies[0]) as { values: Array<Array<string | number>>; numberFormat: string[][] };
+    assert.deepEqual(patched.values[0].slice(0, STANDARDS_SHEET_HEADERS.length), STANDARDS_SHEET_HEADERS);
+    assert.match(String(patched.values[0][9]), /^Updated 2026-08-15 \d\d:\d\d America\/Chicago$/);
+    assert.equal(patched.values.length, 311);
+    assert.ok(patched.values.every((row) => row.length === 10));
+    assert.equal(patched.numberFormat.length, patched.values.length);
+    assert.equal(typeof patched.values[1][1], "number");
+    assert.equal(patched.numberFormat[1][1], "yyyy-mm-dd");
+    assert.equal(patched.numberFormat[1][0], "General");
+    assert.equal(result.workbookPath, "CWCA/Standards 2026-08.xlsx");
+    assert.equal(result.month, "2026-08");
+    assert.equal(result.rowsSynced, 150);
+    const monitorCalls = calls.filter((call) => call.url === MONITOR_URL);
+    assert.ok(monitorCalls.length >= 1, "the sync never polled the copy monitor");
+    assert.equal(monitorCalls.every((call) => call.authorization === ""), true);
+  });
+
+  it("creates one workbook for the month however the name conflict comes back", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({
+      copy: (attempt) => (attempt === 2 ? jsonResponse(409, { error: { code: "nameAlreadyExists" } }) : acceptedCopy()),
+      monitor: (attempt) => (attempt === 1 ? completedCopy() : nameTakenCopy()),
+    });
+    const runs = [];
+    for (let run = 0; run < 3; run += 1) {
+      runs.push(await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }));
+    }
+
+    assert.deepEqual(runs.map((run) => run.workbookCreated), [true, false, false]);
+    assert.equal(new Set(runs.map((run) => run.workbookPath)).size, 1);
+    const copies = calls.filter((call) => call.url.includes("/copy?"));
+    assert.equal(copies.length, 3);
+    assert.ok(copies.every((call) => call.body === JSON.stringify({ name: "Standards 2026-08.xlsx" })));
+    assert.equal(patchBodies(calls).length, 3);
+    assert.ok(!calls.some((call) => /conflictBehavior=(rename|replace)/.test(call.url)));
+  });
+
+  it("rebuilds a byte-identical Data worksheet whatever order the database returns rows in", async () => {
+    delegatedEnv();
+    const rows = [
+      daily("Lori", "2026-08-03", { newMatters: 2, attorneyCall: 1, completion: "100%" }),
+      daily("Ivan", "2026-08-11", { welcome: 3, completion: "50%" }),
+      daily("Lori", "2026-08-04", { weeklyCheckIns: 1, completion: "25%" }),
+    ];
+    const calls = installGraphDouble();
+    await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom(rows) });
+    await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([...rows].reverse()) });
+
+    const bodies = patchBodies(calls);
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0], bodies[1]);
+  });
+
+  it("gives a case manager with no activity all month his own block of zeroed days", () => {
+    const range = excel.resolveMonthRange({}, NOW);
+    const sheet = excel.buildDataSheet([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })], range, NOW);
+    const blockStart = (owner: string) => 1 + ["Svetlana", "Jesus", "Alessandra", "Ivan", "Ronald", "Camila", "Anahi", "Lori"].indexOf(owner) * 31;
+
+    assert.deepEqual(sheet.values[blockStart("Svetlana")], [
+      "Svetlana",
+      excelSerialFromDateKey("2026-08-01"),
+      0, 0, 0, 0, 0,
+      "No activity",
+      "", "",
+    ]);
+    const svetlana = sheet.values.slice(blockStart("Svetlana"), blockStart("Svetlana") + 31);
+    assert.equal(svetlana.filter((row) => row[0] === "Svetlana").length, 15);
+    assert.equal(svetlana[14][1], excelSerialFromDateKey("2026-08-15"));
+    assert.deepEqual(svetlana[15], ["", "", "", "", "", "", "", "", "", ""]);
+    assert.equal(sheet.values[blockStart("Lori") + 2][7], "100%");
+    assert.equal(sheet.values[blockStart("Lori")][7], "No activity");
+    assert.equal(sheet.address, "A1:J311");
+  });
+
+  it("writes nothing at all when the template is missing", async () => {
+    delegatedEnv();
+    const calls = installGraphDouble({ copy: () => jsonResponse(404, { error: { code: "itemNotFound" } }) });
+    await assert.rejects(
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      (error: unknown) => {
+        assert.ok(error instanceof excel.ExcelTemplateMissingError);
+        assert.match(error.message, /MICROSOFT_EXCEL_TEMPLATE_PATH/);
+        return true;
+      },
+    );
+    assert.equal(patchBodies(calls).length, 0);
+  });
+
+  it("resolves the month once and refuses a range that would straddle two workbooks", () => {
+    assert.deepEqual(excel.resolveMonthRange({}, NOW), { monthKey: "2026-08", from: "2026-08-01", to: "2026-08-15", daysInMonth: 31 });
+    assert.deepEqual(excel.resolveMonthRange({ from: "2026-08-01", to: "2026-08-31" }, NOW).to, "2026-08-15");
+    assert.deepEqual(excel.resolveMonthRange({ from: "2026-06-14" }, NOW), { monthKey: "2026-06", from: "2026-06-01", to: "2026-06-30", daysInMonth: 30 });
+    assert.deepEqual(excel.resolveMonthRange({ from: "2026-02-11", to: "2026-02-28" }, NOW), {
+      monthKey: "2026-02",
+      from: "2026-02-01",
+      to: "2026-02-28",
+      daysInMonth: 28,
+    });
+    assert.throws(() => excel.resolveMonthRange({ from: "2026-07-28", to: "2026-08-03" }, NOW), /one month per workbook/);
+    assert.throws(() => excel.resolveMonthRange({ from: "2027-08-01" }, NOW), /workbook for 2027-08.+current Chicago month is 2026-08/);
+    assert.equal(excel.monthWorkbookPath("CWCA/Standards {month}.xlsx", "2026-02"), "CWCA/Standards 2026-02.xlsx");
+  });
+});
+
+describe("excel-sync route defaults and writer guards", () => {
+  it("defaults Excel sync to the current Chicago month and writes only through the Data worksheet", () => {
+    const route = readFileSync(fileURLToPath(new URL("../app/api/standards/excel-sync/route.ts", import.meta.url)), "utf8");
+    const writer = readFileSync(fileURLToPath(new URL("./microsoft-excel.ts", import.meta.url)), "utf8");
+    assert.doesNotMatch(route, /lastCompletedWeekRange/);
+    assert.match(route, /currentChicagoMonthRange/);
+    assert.match(writer, /numberFormat/);
+    assert.doesNotMatch(writer, /clearRows|padRows\(\[\]/);
+    assert.doesNotMatch(
+      writer,
+      /collectArchiveRows|upsertDailyRows|createSession|worksheets\/add|conflictBehavior=rename|conflictBehavior=replace/,
+    );
+    const worksheetMentions = writer.match(/worksheets[^\n]*/g) ?? [];
+    assert.ok(worksheetMentions.length >= 1);
+    assert.ok(worksheetMentions.every((mention) => mention.startsWith("worksheets('Data')")), worksheetMentions.join(" | "));
+  });
+
+  it("reports the workbook it wrote to in both the JSON body and the redirect notice", () => {
+    const route = readFileSync(fileURLToPath(new URL("../app/api/standards/excel-sync/route.ts", import.meta.url)), "utf8");
+    const writer = readFileSync(fileURLToPath(new URL("./microsoft-excel.ts", import.meta.url)), "utf8");
+    assert.match(writer, /workbookTarget: scopedLabel\(workbookPath, config\.workbookScope\)/);
+    assert.match(writer, /workbookScope: config\.workbookScope/);
+    assert.match(route, /NextResponse\.json\(\{ ok: true, \.\.\.result, filters \}\)/);
+    assert.match(route, /Excel workbook \$\{result\.workbookTarget\} updated/);
+    assert.match(route, /Data worksheet of \$\{result\.workbookPath\}/);
+  });
+});
+
+const PRODUCTION_TARGET = {
+  MICROSOFT_EXCEL_WORKBOOK_PATH: "CWCA/Standards {month}.xlsx",
+  MICROSOFT_EXCEL_WORKBOOK_WEB_URL: "https://example.com/production-web-url",
+  MICROSOFT_EXCEL_REFRESH_TOKEN: "refresh-token-live-value",
+};
 
 describe("Microsoft Excel preview workbook target", () => {
   it("leaves production and local on the production workbook variables", async () => {
     setExcelEnv({
       ...PRODUCTION_TARGET,
       VERCEL_ENV: "production",
-      MICROSOFT_EXCEL_WORKBOOK_ITEM_ID: "",
-      MICROSOFT_EXCEL_WORKBOOK_SHARE_URL: "",
-      MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW: "CWCA/cwca-standards-test.xlsx",
+      MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW: "CWCA/cwca-standards-test {month}.xlsx",
       MICROSOFT_EXCEL_WORKBOOK_WEB_URL_PREVIEW: "https://example.com/preview-web-url",
     });
     assert.equal(excel.excelWorkbookScope(), "production");
-    assert.equal(excel.excelWorkbookLabel(), "Production/real-standards.xlsx (production)");
+    assert.equal(excel.excelWorkbookLabel(), "CWCA/Standards {month}.xlsx (production)");
     assert.equal(excel.microsoftExcelWorkbookUrl(), "https://example.com/production-web-url");
     assert.equal(excel.microsoftExcelConfigured(), true);
 
-    const calls = captureGraphUrls();
-    await assert.rejects(() => excel.syncStandardsToMicrosoftExcel(), /persistent Excel workbook session/);
-    const graph = calls.filter((url) => url.includes("graph.microsoft.com"));
-    assert.equal(graph.length, 1);
-    assert.match(graph[0], /root:\/Production\/real-standards\.xlsx:\/workbook\/createSession/);
-    assert.ok(!calls.some((url) => url.includes("cwca-standards-test")));
+    const calls = installGraphDouble();
+    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+    assert.equal(result.workbookPath, "CWCA/Standards 2026-08.xlsx");
+    assert.equal(result.workbookScope, "production");
+    assert.equal(result.workbookTarget, "CWCA/Standards 2026-08.xlsx (production)");
+    assert.equal(result.workbookUrl, "https://example.com/production-web-url");
+    assert.ok(!calls.some((call) => call.url.includes("cwca-standards-test")));
 
     delete process.env.VERCEL_ENV;
     assert.equal(excel.excelWorkbookScope(), "production");
@@ -238,165 +452,50 @@ describe("Microsoft Excel preview workbook target", () => {
 
   it("refuses a preview sync with no preview workbook and makes no HTTP call", async () => {
     setExcelEnv({ ...PRODUCTION_TARGET, VERCEL_ENV: "preview" });
-    const calls = captureGraphUrls();
+    const calls = installGraphDouble();
     assert.equal(excel.excelWorkbookScope(), "preview");
     assert.equal(excel.microsoftExcelConfigured(), false);
     assert.equal(excel.microsoftExcelWorkbookUrl(), "");
     assert.equal(excel.excelWorkbookLabel(), "unspecified (preview)");
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel(),
+      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.equal(error.message, excel.PREVIEW_WORKBOOK_REQUIRED_MESSAGE);
         assert.match(error.message, /never falls back to the production workbook/);
         assert.doesNotMatch(error.message, /Excel Online sync is not configured/);
-        assert.doesNotMatch(error.message, /prod-item-id-must-not-be-used|real-standards|production-workbook/);
+        assert.doesNotMatch(error.message, /Standards \{month\}|Standards Template|production-web-url/);
         return true;
       },
     );
     assert.deepEqual(calls, []);
   });
 
-  it("writes to the preview path even when the production item id is inherited", async () => {
+  it("copies and writes the preview workbook while the production path is inherited", async () => {
     setExcelEnv({
       ...PRODUCTION_TARGET,
       VERCEL_ENV: "preview",
-      MICROSOFT_EXCEL_WORKBOOK_SHARE_URL: "",
-      MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW: "CWCA/cwca-standards-test.xlsx",
+      MICROSOFT_EXCEL_WORKBOOK_PATH_PREVIEW: "CWCA/cwca-standards-test {month}.xlsx",
     });
-    assert.equal(process.env.MICROSOFT_EXCEL_WORKBOOK_ITEM_ID, "prod-item-id-must-not-be-used");
+    assert.equal(process.env.MICROSOFT_EXCEL_WORKBOOK_PATH, "CWCA/Standards {month}.xlsx");
     assert.equal(excel.microsoftExcelConfigured(), true);
-    assert.equal(excel.excelWorkbookLabel(), "CWCA/cwca-standards-test.xlsx (preview)");
+    assert.equal(excel.excelWorkbookLabel(), "CWCA/cwca-standards-test {month}.xlsx (preview)");
 
-    const calls = captureGraphUrls();
-    await assert.rejects(() => excel.syncStandardsToMicrosoftExcel(), /persistent Excel workbook session/);
-    const graph = calls.filter((url) => url.includes("graph.microsoft.com"));
-    assert.equal(graph.length, 1);
-    assert.match(graph[0], /root:\/CWCA\/cwca-standards-test\.xlsx:\/workbook\/createSession/);
-    assert.ok(!calls.some((url) => url.includes("prod-item-id-must-not-be-used")));
-    assert.ok(!calls.some((url) => url.includes("real-standards")));
-  });
+    const calls = installGraphDouble();
+    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+    assert.equal(result.workbookPath, "CWCA/cwca-standards-test 2026-08.xlsx");
+    assert.equal(result.workbookScope, "preview");
+    assert.equal(result.workbookTarget, "CWCA/cwca-standards-test 2026-08.xlsx (preview)");
 
-  it("uses the preview sharing link over an inherited production sharing link", async () => {
-    setExcelEnv({
-      ...PRODUCTION_TARGET,
-      VERCEL_ENV: "preview",
-      MICROSOFT_EXCEL_WORKBOOK_SHARE_URL_PREVIEW: "https://example.com/preview-workbook",
-      MICROSOFT_EXCEL_WORKBOOK_ITEM_ID_PREVIEW: "preview-item-id",
-    });
-    assert.equal(excel.excelWorkbookLabel(), "shared link (preview)");
-    assert.doesNotMatch(excel.excelWorkbookLabel(), /https?:|preview-workbook|production-workbook/);
-
-    const calls = captureGraphUrls();
-    await assert.rejects(() => excel.syncStandardsToMicrosoftExcel(), /could not resolve the Excel workbook sharing link/);
-    const graph = calls.filter((url) => url.includes("graph.microsoft.com"));
-    assert.equal(graph.length, 1);
-    assert.ok(graph[0].includes(`/shares/${shareId("https://example.com/preview-workbook")}/driveItem`));
-    assert.ok(!calls.some((url) => url.includes(shareId("https://example.com/production-workbook"))));
-    assert.ok(!calls.some((url) => url.includes("prod-item-id-must-not-be-used")));
-  });
-});
-
-function daily(owner: string, date: string, sortDate: string, extras: Partial<SheetDailyRow> = {}): SheetDailyRow {
-  return { owner, date, sortDate, newMatters: 0, attorneyCall: 0, welcome: 0, courtDate: 0, weeklyCheckIns: 0, completion: "No activity", ...extras };
-}
-
-function work(owner: string, date: string, sortDate: string, completion: string): SheetDailyRow {
-  return daily(owner, date, sortDate, { newMatters: 1, attorneyCall: 1, welcome: 1, courtDate: 1, weeklyCheckIns: 0, completion });
-}
-
-describe("Microsoft Excel daily write plan", () => {
-  const now = new Date("2026-08-15T16:00:00Z");
-
-  it("writes Date as an Excel serial with yyyy-mm-dd numberFormat, not a text date", () => {
-    const plan = excel.planExcelWorksheetValues({
-      owner: "Lori",
-      existingGrid: [STANDARDS_SHEET_HEADERS],
-      incoming: [work("Lori", "8/3/2026", "2026-08-03", "100%")],
-      now,
-    });
-    assert.equal(plan.values[0][1], "Date");
-    assert.equal(plan.values[1][1], 46237);
-    assert.equal(typeof plan.values[1][1], "number");
-    assert.equal(plan.numberFormat[1][1], "yyyy-mm-dd");
-    assert.notEqual(plan.values[1][1], "8/3/2026");
-    assert.notEqual(plan.values[1][1], "2026-08-03");
-  });
-
-  it("does not write a row for a date after today even when the requested range includes it", () => {
-    const plan = excel.planExcelWorksheetValues({
-      owner: "Lori",
-      existingGrid: [
-        STANDARDS_SHEET_HEADERS,
-        ["Lori", 46237, 1, 1, 1, 1, 0, "100%"],
-        ["Lori", 46255, 0, 0, 0, 0, 0, "0%"],
-        ["Lori", 46262, 0, 0, 0, 0, 0, "0%"],
-      ],
-      incoming: [
-        work("Lori", "8/3/2026", "2026-08-03", "100%"),
-        daily("Lori", "8/21/2026", "2026-08-21", { weeklyCheckIns: 0, completion: "0%" }),
-        daily("Lori", "8/28/2026", "2026-08-28", { weeklyCheckIns: 0, completion: "0%" }),
-      ],
-      now,
-    });
-    const dateSerials = plan.values.slice(1).map((row) => row[1]).filter((value) => value !== "");
-    assert.deepEqual(dateSerials, [46237]);
-    assert.ok(!dateSerials.includes(46255));
-    assert.ok(!dateSerials.includes(46262));
-    assert.equal(plan.values[2][1], "");
-    assert.equal(plan.values[3][1], "");
-  });
-
-  it("keeps a hand-written past date and does not clear-and-rewrite the archive", () => {
-    const plan = excel.planExcelWorksheetValues({
-      owner: "Lori",
-      existingGrid: [
-        STANDARDS_SHEET_HEADERS,
-        ["Lori", "7/1/2026", 12, 12, 12, 12, 4, "100%"],
-      ],
-      incoming: [work("Lori", "8/3/2026", "2026-08-03", "83%")],
-      now,
-    });
-    assert.equal(plan.values[1][0], "Lori");
-    assert.equal(plan.values[1][1], 46204);
-    assert.equal(plan.values[1][7], "100%");
-    assert.equal(plan.values[2][1], 46237);
-    assert.equal(plan.values[2][7], "83%");
-  });
-
-  it("uses No activity, never 0, for a past day with no completed work", () => {
-    const plan = excel.planExcelWorksheetValues({
-      owner: "Lori",
-      existingGrid: [STANDARDS_SHEET_HEADERS, ["Lori", 46237, 0, 0, 0, 0, 0, "0%"]],
-      incoming: [daily("Lori", "8/4/2026", "2026-08-04", { completion: "0%" })],
-      now,
-    });
-    const written = plan.values.filter((row) => row[0] === "Lori");
-    assert.ok(written.length >= 1);
-    assert.equal(written[0][7], "No activity");
-    assert.ok(written.every((row) => row[7] !== 0 && row[7] !== "0" && row[7] !== "0%"));
-    assert.equal(written.some((row) => row[1] === 46238), false);
-  });
-});
-
-describe("excel-sync route defaults and writer guards", () => {
-  it("defaults Excel sync to the current Chicago month and reuses the shared archive helpers", () => {
-    const route = readFileSync(fileURLToPath(new URL("../app/api/standards/excel-sync/route.ts", import.meta.url)), "utf8");
-    const writer = readFileSync(fileURLToPath(new URL("./microsoft-excel.ts", import.meta.url)), "utf8");
-    assert.doesNotMatch(route, /lastCompletedWeekRange/);
-    assert.match(route, /currentChicagoMonthRange/);
-    assert.match(writer, /planExcelWorksheetValues/);
-    assert.match(writer, /numberFormat/);
-    assert.doesNotMatch(writer, /clearRows|padRows\(\[\]/);
-    assert.match(writer, /collectArchiveRows|upsertDailyRows/);
-  });
-
-  it("reports the workbook it wrote to in both the JSON body and the redirect notice", () => {
-    const route = readFileSync(fileURLToPath(new URL("../app/api/standards/excel-sync/route.ts", import.meta.url)), "utf8");
-    const writer = readFileSync(fileURLToPath(new URL("./microsoft-excel.ts", import.meta.url)), "utf8");
-    assert.match(writer, /workbookTarget: config\.workbookLabel/);
-    assert.match(writer, /workbookScope: config\.workbookScope/);
-    assert.match(route, /NextResponse\.json\(\{ ok: true, \.\.\.result, filters \}\)/);
-    assert.match(route, /Excel workbook \$\{result\.workbookTarget\} updated/);
+    const copies = calls.filter((call) => call.url.includes("/copy?"));
+    assert.equal(copies.length, 1);
+    assert.equal(copies[0].body, JSON.stringify({ name: "cwca-standards-test 2026-08.xlsx" }));
+    const patches = calls.filter((call) => call.method === "PATCH");
+    assert.equal(patches.length, 1);
+    assert.match(patches[0].url, /root:\/CWCA\/cwca-standards-test%202026-08\.xlsx:\/workbook\/worksheets\('Data'\)/);
+    assert.ok(
+      !graphWrites(calls).some((call) => call.url.includes("Standards%202026-08.xlsx")),
+      "a preview run addressed the production month workbook",
+    );
   });
 });

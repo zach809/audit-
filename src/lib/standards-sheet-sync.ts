@@ -59,6 +59,19 @@ export function currentChicagoMonthRange(now = new Date()): { from: string; to: 
   return { from: chicagoDateKey(monthStart), to: today };
 }
 
+const DAY_MS = 86400000;
+
+/** Every date key from `from` to `to` inclusive. The arithmetic is UTC, so a Chicago DST
+ *  transition cannot drop or double a day the way a local-time cursor would. */
+export function eachChicagoDateKey(from: string, to: string): string[] {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) return [];
+  const keys: string[] = [];
+  for (let stamp = start; stamp <= end; stamp += DAY_MS) keys.push(new Date(stamp).toISOString().slice(0, 10));
+  return keys;
+}
+
 const EXCEL_SERIAL_EPOCH_UTC = Date.UTC(1899, 11, 30);
 
 export function dateKeyFromExcelSerial(serial: number): string {

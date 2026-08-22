@@ -1974,7 +1974,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <button className="button primary" type="submit" disabled={!excelSyncReady}>Sync Excel Workbook</button>
             </form>
             {excelWorkbookUrl ? <a className="button" href={excelWorkbookUrl} target="_blank" rel="noreferrer">Open Excel Workbook</a> : null}
-            {!excelSyncReady ? <small>Add Microsoft Excel env vars to turn on live Excel sync.</small> : <small>Updates the live Excel workbook, one tab per case manager.</small>}
+            {!excelSyncReady ? <small>Add Microsoft Excel env vars to turn on live Excel sync.</small> : <small>Rebuilds the single Data worksheet in this month&rsquo;s workbook &mdash; one Excel workbook per month.</small>}
             <form action="/api/standards/google-sync" method="post">
               <input type="hidden" name="from" value={standardsActiveFrom} />
               <input type="hidden" name="to" value={standardsActiveTo} />
