@@ -1,11 +1,17 @@
 import { optionalEnv } from "./config";
-import { STANDARD_CASE_MANAGERS, STANDARDS_SHEET_HEADERS, standardsReportRows, type DashboardFilters } from "./dashboard-data";
+import {
+  lastCompletedAuditAt,
+  STANDARD_CASE_MANAGERS,
+  STANDARDS_SHEET_HEADERS,
+  standardsReport,
+  type DashboardFilters,
+} from "./dashboard-data";
 import {
   activityCompletion,
   chicagoDateKey,
   eachChicagoDateKey,
   excelSerialFromDateKey,
-  formatSheetStamp,
+  formatSheetTimestamp,
   sheetDateKey,
   type SheetDailyRow,
 } from "./standards-sheet-sync";
@@ -283,7 +289,34 @@ export function monthWorkbookPath(pattern: string, monthKey: string): string {
 
 export const EXCEL_DATE_NUMBER_FORMAT = "yyyy-mm-dd";
 const DATA_COLUMNS = "ABCDEFGHIJ";
-const STAMP_COLUMN = DATA_COLUMNS.indexOf("J");
+// The ten designed tabs read Data through `$A$2:$H$5000`, so column A to H of row 2 onwards is the
+// grid and nothing may be inserted into it. Column J is outside every one of those references, which
+// is why the notes go there instead of into a banner above the headers.
+const NOTES_COLUMN = DATA_COLUMNS.indexOf("J");
+
+export type DataSheetNotes = {
+  writtenAt: Date;
+  lastAuditedAt: Date | null;
+  unmappedMatters: number;
+  unmappedAttorneys: string[];
+};
+
+/** What the workbook says about itself, in the workbook. The person who opens this file next week
+ *  never saw the screen that reported any of it.
+ *
+ *  Two timestamps, because one is misleading: a workbook written a minute ago can be full of
+ *  three-day-old audit data, and on preview it always is, because only Production runs the audit.
+ *  The gap between the two lines is the information. */
+export function dataSheetNotes(notes: DataSheetNotes): string[] {
+  return [
+    `Workbook written ${formatSheetTimestamp(notes.writtenAt)}`,
+    notes.lastAuditedAt
+      ? `Clio last audited ${formatSheetTimestamp(notes.lastAuditedAt)}`
+      : "Clio last audited: no completed audit run on record",
+    `Matters this month on no case manager tab: ${notes.unmappedMatters} (attorney has no case manager mapping)`,
+    `Attorneys with no case manager mapping: ${notes.unmappedAttorneys.join(", ") || "none"}`,
+  ];
+}
 
 function blankRow(): Array<string | number> {
   return Array.from({ length: DATA_COLUMNS.length }, () => "");
@@ -322,7 +355,7 @@ function dataRowValues(row: SheetDailyRow): Array<string | number> {
 export function buildDataSheet(
   rows: SheetDailyRow[],
   range: MonthRange,
-  now: Date,
+  notes: DataSheetNotes,
 ): { address: string; values: Array<Array<string | number>>; numberFormat: string[][] } {
   const byOwnerAndDate = new Map<string, SheetDailyRow>();
   for (const row of rows) {
@@ -337,7 +370,6 @@ export function buildDataSheet(
   STANDARDS_SHEET_HEADERS.forEach((label, column) => {
     header[column] = label;
   });
-  header[STAMP_COLUMN] = formatSheetStamp(now);
 
   const values: Array<Array<string | number>> = [header];
   for (const owner of STANDARD_CASE_MANAGERS) {
@@ -349,6 +381,11 @@ export function buildDataSheet(
       values.push(dataRowValues(byOwnerAndDate.get(`${dateKey} ${owner}`) ?? zeroRow(owner, dateKey)));
     }
   }
+  const noteLines = dataSheetNotes(notes);
+  while (values.length < noteLines.length) values.push(blankRow());
+  noteLines.forEach((line, row) => {
+    values[row][NOTES_COLUMN] = line;
+  });
   const numberFormat = values.map((row) =>
     row.map((_, column) => (column === 1 && typeof row[1] === "number" ? EXCEL_DATE_NUMBER_FORMAT : "General")),
   );
@@ -554,22 +591,39 @@ async function writeDataSheet(
   }
 }
 
-export type ExcelSyncDeps = { reportRows?: typeof standardsReportRows; now?: Date };
+/** The same two facts the workbook now carries, so a manual sync reports them on screen instead of
+ *  leaving them to be discovered when someone opens the file. */
+export function excelSyncNotice(result: ExcelSyncResult): string {
+  const auth = result.authMode === "delegated" ? `delegated as ${result.authAccount}` : "application client-credentials";
+  const created = result.workbookCreated ? ", created this run from the template" : "";
+  return [
+    `Excel workbook ${result.workbookTarget} updated (${auth}): ${result.rowsSynced} row${result.rowsSynced === 1 ? "" : "s"} rebuilt on the Data worksheet of ${result.workbookPath}${created}.`,
+    `Matters this month on no case manager tab: ${result.mattersOnNoTab} (attorney has no case manager mapping).`,
+    result.lastAuditedAt ? `Clio last audited ${result.lastAuditedAt}.` : "Clio last audited: no completed audit run on record.",
+  ].join(" ");
+}
 
-export async function syncStandardsToMicrosoftExcel(
-  filters: DashboardFilters = {},
-  deps: ExcelSyncDeps = {},
-): Promise<{
+export type ExcelSyncDeps = { report?: typeof standardsReport; lastAuditedAt?: typeof lastCompletedAuditAt; now?: Date };
+
+export type ExcelSyncResult = {
   workbookUrl: string;
   workbookPath: string;
   workbookScope: ExcelWorkbookScope;
   workbookTarget: string;
   workbookCreated: boolean;
   rowsSynced: number;
+  mattersOnNoTab: number;
+  unmappedAttorneys: string[];
+  lastAuditedAt: string;
   month: string;
   authMode: ExcelAuthMode;
   authAccount: string;
-}> {
+};
+
+export async function syncStandardsToMicrosoftExcel(
+  filters: DashboardFilters = {},
+  deps: ExcelSyncDeps = {},
+): Promise<ExcelSyncResult> {
   const config = assertMicrosoftExcelConfig();
   const disclosure = excelAuthDisclosure(config);
   if (disclosure.authMode === "delegated") {
@@ -581,8 +635,17 @@ export async function syncStandardsToMicrosoftExcel(
   const range = resolveMonthRange(filters, now);
   const workbookPath = monthWorkbookPath(config.workbookPath, range.monthKey);
   const workbookCreated = await ensureMonthWorkbook(config, workbookPath);
-  const rows = await (deps.reportRows ?? standardsReportRows)({ ...filters, from: range.from, to: range.to });
-  const sheet = buildDataSheet(rows, range, now);
+  const [report, lastAuditedAt] = await Promise.all([
+    (deps.report ?? standardsReport)({ ...filters, from: range.from, to: range.to }),
+    (deps.lastAuditedAt ?? lastCompletedAuditAt)(),
+  ]);
+  const notes: DataSheetNotes = {
+    writtenAt: now,
+    lastAuditedAt,
+    unmappedMatters: report.unmappedMatters,
+    unmappedAttorneys: report.unmappedAttorneys,
+  };
+  const sheet = buildDataSheet(report.rows, range, notes);
   await writeDataSheet(config, workbookPath, sheet);
   return {
     workbookUrl: microsoftExcelWorkbookUrl(),
@@ -591,6 +654,9 @@ export async function syncStandardsToMicrosoftExcel(
     workbookTarget: scopedLabel(workbookPath, config.workbookScope),
     workbookCreated,
     rowsSynced: sheet.values.slice(1).filter((row) => row[0] !== "").length,
+    mattersOnNoTab: report.unmappedMatters,
+    unmappedAttorneys: report.unmappedAttorneys,
+    lastAuditedAt: lastAuditedAt ? formatSheetTimestamp(lastAuditedAt) : "",
     month: range.monthKey,
     authMode: disclosure.authMode,
     authAccount: disclosure.authAccount,

@@ -1093,7 +1093,17 @@ function standardsOwnerSort(a: string, b: string): number {
   return aIndex - bIndex;
 }
 
-export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
+/** The workbook's daily grid, plus what the grid could not hold. `standardsCaseManagerFor` maps an
+ *  attorney to a case manager from a table in this file, and a matter whose attorney is missing from
+ *  that table reaches no tab at all. Counting the loss here, next to the filter that causes it, is
+ *  the only place the two can never drift apart. */
+export type StandardsReport = {
+  rows: StandardsReportRow[];
+  unmappedMatters: number;
+  unmappedAttorneys: string[];
+};
+
+export async function standardsReport(filters: DashboardFilters = {}): Promise<StandardsReport> {
   await initDb();
   const sql = db();
   const defaultRange = lastCompletedWeekRange();
@@ -1226,13 +1236,25 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     return current;
   };
 
-  const standardsItems = workspaceItems.filter((item) => {
+  const isNewMatterItem = (item: WorkspaceAuditItem) => {
     if (item.metric_excluded) return false;
-    if (!STANDARD_CASE_MANAGERS.includes(standardsCaseManagerFor(item) as (typeof STANDARD_CASE_MANAGERS)[number])) return false;
     if (!isStandardsStep(item.step_code)) return false;
     const createdKey = csvDateKey(item.matter_created_at);
     return Boolean(createdKey) && (!dateSet.size || dateSet.has(createdKey));
-  });
+  };
+  const hasCaseManagerTab = (item: WorkspaceAuditItem) =>
+    STANDARD_CASE_MANAGERS.includes(standardsCaseManagerFor(item) as (typeof STANDARD_CASE_MANAGERS)[number]);
+  const newMatterItems = workspaceItems.filter(isNewMatterItem);
+  const standardsItems = newMatterItems.filter(hasCaseManagerTab);
+  // A matter counts as missing only when NONE of its items reached a tab. standardsCaseManagerFor
+  // falls back to the review row's case_manager_name, which is stored per step, so one matter can
+  // resolve both ways across its own items and would otherwise be reported as dropped and shown.
+  const mattersOnATab = new Set(standardsItems.map((item) => String(item.matter_id)));
+  const droppedItems = newMatterItems.filter((item) => !hasCaseManagerTab(item) && !mattersOnATab.has(String(item.matter_id)));
+  const unmappedMatters = new Set(droppedItems.map((item) => String(item.matter_id)));
+  const unmappedAttorneys = Array.from(
+    new Set(droppedItems.map((item) => String(item.responsible_attorney_name ?? "").trim() || "(no responsible attorney)")),
+  ).sort((a, b) => a.localeCompare(b, "en-US"));
   const ongoingStandardsItems = workspaceItems.filter((item) => {
     if (item.metric_excluded) return false;
     if (!STANDARD_CASE_MANAGERS.includes(standardsCaseManagerFor(item) as (typeof STANDARD_CASE_MANAGERS)[number])) return false;
@@ -1300,7 +1322,7 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     }
   }
 
-  return Array.from(rowsByOwnerDate.values())
+  const rows = Array.from(rowsByOwnerDate.values())
     .filter((row) => row.newMatters.size > 0 || row.weeklyCheckIns > 0 || row.expectedStandards > 0)
     .sort((a, b) => standardsOwnerSort(a.owner, b.owner) || a.date.localeCompare(b.date))
     .map((row) => {
@@ -1319,6 +1341,30 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
         sortDate: row.date,
       };
     });
+
+  return { rows, unmappedMatters: unmappedMatters.size, unmappedAttorneys };
+}
+
+export async function standardsReportRows(filters: DashboardFilters = {}): Promise<StandardsReportRow[]> {
+  return (await standardsReport(filters)).rows;
+}
+
+/** When Clio was last actually walked, which is not when this data was last displayed. A run still in
+ *  flight has audited nothing yet, and a failed one left the rows as they were, so only a completed
+ *  run counts. */
+export async function lastCompletedAuditAt(): Promise<Date | null> {
+  await initDb();
+  const rows = await db()<Array<{ finished_at: string | Date | null }>>`
+    select finished_at
+    from audit_run
+    where status = 'completed' and finished_at is not null
+    order by finished_at desc
+    limit 1
+  `;
+  const finishedAt = rows[0]?.finished_at ?? null;
+  if (!finishedAt) return null;
+  const parsed = new Date(finishedAt);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 export async function standardsCsv(filters: DashboardFilters = {}): Promise<string> {

@@ -313,3 +313,70 @@ describe("standards report weekly check-ins", () => {
     assert.equal(total, 3);
   });
 });
+
+describe("standards matters the case manager map cannot place", () => {
+  const RANGE = { from: "2026-08-01", to: "2026-08-08" };
+
+  function newMatter(matterId: string, attorney: string) {
+    return {
+      matter_id: matterId,
+      matter_number: "3001",
+      client_first_name: "Robin",
+      client_last_name: "Client",
+      matter_created_at: "2026-08-04T15:00:00.000Z",
+      responsible_attorney_name: attorney,
+      step_code: "SETUP_WELCOME",
+      item_status: "On Time",
+      deadline_at: null,
+      evidence_ref_id: `ev-${matterId}`,
+      audit_version: "cwca-four-kpi-deduction-score-2026-08-10",
+    };
+  }
+
+  async function report(items: unknown[]) {
+    const globals = globalThis as { cwcaSql?: unknown; cwcaDbReady?: Promise<void> };
+    globals.cwcaSql = () => Promise.resolve(items);
+    globals.cwcaDbReady = Promise.resolve();
+    const { standardsReport } = await import("./dashboard-data");
+    return standardsReport(RANGE);
+  }
+
+  it("counts the matters it dropped and names the attorneys, without touching the rows it kept", async () => {
+    const result = await report([
+      newMatter("m-mapped", "Daniel Clifton"),
+      newMatter("m-unmapped-a", "Christine Moriarty"),
+      newMatter("m-unmapped-b", "Hirsch Law Group"),
+      { ...newMatter("m-unmapped-b", "Hirsch Law Group"), step_code: "SETUP_ATTY_CALL" },
+    ]);
+
+    assert.deepEqual(result.rows.map((row) => `${row.owner} ${row.sortDate}`), ["Jesus 2026-08-04"]);
+    assert.equal(result.rows[0].newMatters, 1);
+    assert.equal(result.unmappedMatters, 2);
+    assert.deepEqual(result.unmappedAttorneys, ["Christine Moriarty", "Hirsch Law Group"]);
+  });
+
+  it("does not call a matter missing when one of its own items did reach a tab", async () => {
+    const result = await report([
+      { ...newMatter("m-split", "Foo Bar"), case_manager_name: "Lori" },
+      { ...newMatter("m-split", "Foo Bar"), step_code: "SETUP_ATTY_CALL" },
+    ]);
+
+    assert.deepEqual(result.rows.map((row) => row.owner), ["Lori"]);
+    assert.equal(result.unmappedMatters, 0);
+    assert.deepEqual(result.unmappedAttorneys, []);
+  });
+
+  it("reports zero and no attorneys when every matter reaches a tab", async () => {
+    const result = await report([newMatter("m-mapped", "Daniel Clifton")]);
+
+    assert.equal(result.unmappedMatters, 0);
+    assert.deepEqual(result.unmappedAttorneys, []);
+  });
+
+  it("blames the exclusion, not the map, for a matter an admin excluded from the metrics", async () => {
+    const result = await report([{ ...newMatter("m-excluded", "Christine Moriarty"), metric_excluded: true }]);
+
+    assert.equal(result.unmappedMatters, 0);
+    assert.deepEqual(result.unmappedAttorneys, []);
+  });
+});

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initDb } from "@/lib/db";
-import { syncStandardsToMicrosoftExcel } from "@/lib/microsoft-excel";
+import { excelSyncNotice, syncStandardsToMicrosoftExcel } from "@/lib/microsoft-excel";
 import { isAuthorizedWorkerRequest, isValidSessionCookie } from "@/lib/session";
 import { currentChicagoMonthRange } from "@/lib/standards-sheet-sync";
 import { rejectNonProductionExcelSync } from "@/lib/write-guard";
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     return redirectBack(request, {
       ...filters,
       excel: "synced",
-      notice: `Excel workbook ${result.workbookTarget} updated (${result.authMode === "delegated" ? `delegated as ${result.authAccount}` : "application client-credentials"}): ${result.rowsSynced} row${result.rowsSynced === 1 ? "" : "s"} rebuilt on the Data worksheet of ${result.workbookPath}${result.workbookCreated ? ", created this run from the template" : ""}.`,
+      notice: excelSyncNotice(result),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

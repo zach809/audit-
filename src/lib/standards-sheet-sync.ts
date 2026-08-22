@@ -27,7 +27,9 @@ export function shouldPublishPeriod(auditStatus: string | null | undefined): boo
   return String(auditStatus ?? "").trim().toLowerCase() === "completed";
 }
 
-export function formatSheetStamp(now: Date, timeZone = "America/Chicago"): string {
+/** A wall-clock reading a reader can act on, with the zone spelled out so nobody reads it as their
+ *  own. Two of these appear side by side in the workbook and they routinely disagree. */
+export function formatSheetTimestamp(at: Date, timeZone = "America/Chicago"): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -36,9 +38,13 @@ export function formatSheetStamp(now: Date, timeZone = "America/Chicago"): strin
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(now);
+  }).formatToParts(at);
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-  return `Updated ${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timeZone}`;
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timeZone}`;
+}
+
+export function formatSheetStamp(now: Date, timeZone = "America/Chicago"): string {
+  return `Updated ${formatSheetTimestamp(now, timeZone)}`;
 }
 
 export function chicagoDateKey(date: Date, timeZone = "America/Chicago"): string {

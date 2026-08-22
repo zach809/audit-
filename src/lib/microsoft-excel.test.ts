@@ -208,9 +208,17 @@ function daily(owner: string, sortDate: string, extras: Partial<SheetDailyRow> =
   };
 }
 
-function rowsFrom(rows: SheetDailyRow[]) {
-  return async () => rows;
+function reportFrom(rows: SheetDailyRow[], unmappedMatters = 0, unmappedAttorneys: string[] = []) {
+  return async () => ({ rows, unmappedMatters, unmappedAttorneys });
 }
+
+const LAST_AUDITED = new Date("2026-08-12T05:30:00Z");
+
+function deps(rows: SheetDailyRow[] = [], extras: Partial<excel.ExcelSyncDeps> = {}): excel.ExcelSyncDeps {
+  return { now: NOW, report: reportFrom(rows), lastAuditedAt: async () => LAST_AUDITED, ...extras };
+}
+
+const NOTES: excel.DataSheetNotes = { writtenAt: NOW, lastAuditedAt: LAST_AUDITED, unmappedMatters: 0, unmappedAttorneys: [] };
 
 function acceptedCopy() {
   return new Response(null, { status: 202, headers: { location: MONITOR_URL } });
@@ -332,7 +340,7 @@ describe("Microsoft Excel month book", () => {
     const calls = installGraphDouble();
     const result = await excel.syncStandardsToMicrosoftExcel(
       {},
-      { now: NOW, reportRows: rowsFrom([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })]) },
+      deps([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })]),
     );
 
     for (const write of graphWrites(calls)) {
@@ -345,7 +353,7 @@ describe("Microsoft Excel month book", () => {
     assert.equal(bodies.length, 1);
     const patched = JSON.parse(bodies[0]) as { values: Array<Array<string | number>>; numberFormat: string[][] };
     assert.deepEqual(patched.values[0].slice(0, STANDARDS_SHEET_HEADERS.length), STANDARDS_SHEET_HEADERS);
-    assert.match(String(patched.values[0][9]), /^Updated 2026-08-15 \d\d:\d\d America\/Chicago$/);
+    assert.match(String(patched.values[0][9]), /^Workbook written 2026-08-15 \d\d:\d\d America\/Chicago$/);
     assert.equal(patched.values.length, 311);
     assert.ok(patched.values.every((row) => row.length === 10));
     assert.equal(patched.numberFormat.length, patched.values.length);
@@ -368,7 +376,7 @@ describe("Microsoft Excel month book", () => {
     });
     const runs = [];
     for (let run = 0; run < 3; run += 1) {
-      runs.push(await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }));
+      runs.push(await excel.syncStandardsToMicrosoftExcel({}, deps()));
     }
 
     assert.deepEqual(runs.map((run) => run.workbookCreated), [true, false, false]);
@@ -386,7 +394,7 @@ describe("Microsoft Excel month book", () => {
     const calls = installGraphDouble({ copy: () => generalExceptionCopy(), probe: () => workbookFound() });
     const result = await excel.syncStandardsToMicrosoftExcel(
       {},
-      { now: NOW, reportRows: rowsFrom([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })]) },
+      deps([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })]),
     );
 
     assert.equal(result.workbookCreated, false);
@@ -404,7 +412,7 @@ describe("Microsoft Excel month book", () => {
   it("keeps syncing when the copy monitor reports a failure it cannot name and the workbook is already there", async () => {
     delegatedEnv();
     const calls = installGraphDouble({ monitor: () => genericFailedCopy(), probe: () => workbookFound() });
-    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+    const result = await excel.syncStandardsToMicrosoftExcel({}, deps());
 
     assert.equal(result.workbookCreated, false);
     assert.equal(patchBodies(calls).length, 1);
@@ -415,7 +423,7 @@ describe("Microsoft Excel month book", () => {
   it("reads a name conflict Graph nested in innerError without asking the drive at all", async () => {
     delegatedEnv();
     const calls = installGraphDouble({ monitor: () => nestedNameTakenCopy() });
-    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+    const result = await excel.syncStandardsToMicrosoftExcel({}, deps());
 
     assert.equal(result.workbookCreated, false);
     assert.equal(patchBodies(calls).length, 1);
@@ -426,7 +434,7 @@ describe("Microsoft Excel month book", () => {
     delegatedEnv();
     const calls = installGraphDouble({ copy: () => generalExceptionCopy(), probe: () => workbookAbsent() });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelWorkbookCopyError);
         assert.match(error.message, /Graph answered 500/);
@@ -445,7 +453,7 @@ describe("Microsoft Excel month book", () => {
       probe: () => jsonResponse(503, { error: { code: "serviceNotAvailable" } }),
     });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelWorkbookCopyError);
         assert.match(error.message, /Graph answered 500/);
@@ -462,7 +470,7 @@ describe("Microsoft Excel month book", () => {
       probe: () => jsonResponse(200, { id: "item-1", name: "Standards 2026-08.xlsx", folder: { childCount: 0 } }),
     });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelWorkbookCopyError);
         assert.match(error.message, /Graph answered 500/, "the original failure has to survive the probe");
@@ -486,7 +494,7 @@ describe("Microsoft Excel month book", () => {
         }),
     });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelWorkbookCopyError);
         return true;
@@ -502,7 +510,7 @@ describe("Microsoft Excel month book", () => {
       probe: () => jsonResponse(200, { id: "item-1", name: "Standards 2026-08.xlsx", size: 0, file: { mimeType: "application/vnd.ms-excel" } }),
     });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelWorkbookCopyError);
         return true;
@@ -519,8 +527,8 @@ describe("Microsoft Excel month book", () => {
       daily("Lori", "2026-08-04", { weeklyCheckIns: 1, completion: "25%" }),
     ];
     const calls = installGraphDouble();
-    await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom(rows) });
-    await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([...rows].reverse()) });
+    await excel.syncStandardsToMicrosoftExcel({}, deps(rows));
+    await excel.syncStandardsToMicrosoftExcel({}, deps([...rows].reverse()));
 
     const bodies = patchBodies(calls);
     assert.equal(bodies.length, 2);
@@ -529,7 +537,7 @@ describe("Microsoft Excel month book", () => {
 
   it("gives a case manager with no activity all month his own block of zeroed days", () => {
     const range = excel.resolveMonthRange({}, NOW);
-    const sheet = excel.buildDataSheet([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })], range, NOW);
+    const sheet = excel.buildDataSheet([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })], range, NOTES);
     const blockStart = (owner: string) => 1 + ["Svetlana", "Jesus", "Alessandra", "Ivan", "Ronald", "Camila", "Anahi", "Lori"].indexOf(owner) * 31;
 
     assert.deepEqual(sheet.values[blockStart("Svetlana")], [
@@ -537,7 +545,8 @@ describe("Microsoft Excel month book", () => {
       excelSerialFromDateKey("2026-08-01"),
       0, 0, 0, 0, 0,
       "No activity",
-      "", "",
+      "",
+      "Clio last audited 2026-08-12 00:30 America/Chicago",
     ]);
     const svetlana = sheet.values.slice(blockStart("Svetlana"), blockStart("Svetlana") + 31);
     assert.equal(svetlana.filter((row) => row[0] === "Svetlana").length, 15);
@@ -552,7 +561,7 @@ describe("Microsoft Excel month book", () => {
     delegatedEnv();
     const calls = installGraphDouble({ copy: () => jsonResponse(404, { error: { code: "itemNotFound" } }) });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelTemplateMissingError);
         assert.match(error.message, /MICROSOFT_EXCEL_TEMPLATE_PATH/);
@@ -575,7 +584,7 @@ describe("Microsoft Excel month book", () => {
         }),
     });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelWorkbookBusyError);
         assert.match(error.message, /another editor has it open/);
@@ -593,7 +602,7 @@ describe("Microsoft Excel month book", () => {
     delegatedEnv();
     installGraphDouble({ write: () => jsonResponse(423, { error: { code: "resourceLocked" } }) });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof excel.ExcelWorkbookBusyError);
         assert.match(error.message, /CWCA\/Standards 2026-08\.xlsx/);
@@ -609,7 +618,7 @@ describe("Microsoft Excel month book", () => {
     delegatedEnv();
     installGraphDouble({ write: () => jsonResponse(500, { error: { code: "internalServerError", message: "GenericFileOpenError" } }) });
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.ok(!(error instanceof excel.ExcelWorkbookBusyError));
@@ -659,8 +668,80 @@ describe("excel-sync route defaults and writer guards", () => {
     assert.match(writer, /workbookTarget: scopedLabel\(workbookPath, config\.workbookScope\)/);
     assert.match(writer, /workbookScope: config\.workbookScope/);
     assert.match(route, /NextResponse\.json\(\{ ok: true, \.\.\.result, filters \}\)/);
-    assert.match(route, /Excel workbook \$\{result\.workbookTarget\} updated/);
-    assert.match(route, /Data worksheet of \$\{result\.workbookPath\}/);
+    assert.match(route, /notice: excelSyncNotice\(result\)/);
+    assert.match(writer, /Excel workbook \$\{result\.workbookTarget\} updated/);
+    assert.match(writer, /Data worksheet of \$\{result\.workbookPath\}/);
+  });
+
+  it("states both timestamps and the dropped-matter count in the workbook itself", () => {
+    const range = excel.resolveMonthRange({}, NOW);
+    const sheet = excel.buildDataSheet([], range, {
+      writtenAt: NOW,
+      lastAuditedAt: LAST_AUDITED,
+      unmappedMatters: 9,
+      unmappedAttorneys: ["Christine Moriarty", "Hirsch Law Group"],
+    });
+    const notes = sheet.values.slice(0, 4).map((row) => row[9]);
+
+    assert.deepEqual(notes, [
+      "Workbook written 2026-08-15 11:00 America/Chicago",
+      "Clio last audited 2026-08-12 00:30 America/Chicago",
+      "Matters this month on no case manager tab: 9 (attorney has no case manager mapping)",
+      "Attorneys with no case manager mapping: Christine Moriarty, Hirsch Law Group",
+    ]);
+    assert.notEqual(notes[0], notes[1].replace("Clio last audited", "Workbook written"));
+  });
+
+  it("says a workbook written against a never-audited database is exactly that", () => {
+    assert.deepEqual(excel.dataSheetNotes({ writtenAt: NOW, lastAuditedAt: null, unmappedMatters: 0, unmappedAttorneys: [] }), [
+      "Workbook written 2026-08-15 11:00 America/Chicago",
+      "Clio last audited: no completed audit run on record",
+      "Matters this month on no case manager tab: 0 (attorney has no case manager mapping)",
+      "Attorneys with no case manager mapping: none",
+    ]);
+  });
+
+  it("keeps the notes out of every cell the ten designed tabs read", () => {
+    const range = excel.resolveMonthRange({}, NOW);
+    const sheet = excel.buildDataSheet([daily("Lori", "2026-08-03", { newMatters: 2, completion: "100%" })], range, {
+      writtenAt: NOW,
+      lastAuditedAt: LAST_AUDITED,
+      unmappedMatters: 9,
+      unmappedAttorneys: ["Christine Moriarty", "Hirsch Law Group"],
+    });
+    const noteText = /Workbook written|Clio last audited|no case manager tab|no case manager mapping/;
+
+    // The designed tabs address Data!$A$2:$H$5000. Any note inside that block, or any row inserted
+    // above it, silently breaks all ten of them.
+    assert.equal(sheet.address, "A1:J311");
+    assert.deepEqual(sheet.values[0].slice(0, 8), STANDARDS_SHEET_HEADERS);
+    assert.equal(sheet.values[1][0], "Svetlana");
+    assert.equal(sheet.values[1][1], excelSerialFromDateKey("2026-08-01"));
+    for (const [index, row] of sheet.values.entries()) {
+      assert.equal(row.length, 10);
+      for (const cell of row.slice(0, 8)) {
+        assert.doesNotMatch(String(cell), noteText, `a note reached the designed tabs' range on row ${index + 1}`);
+      }
+      assert.equal(row[8], "");
+    }
+    assert.equal(sheet.values.filter((row) => noteText.test(String(row[9]))).length, 4);
+  });
+
+  it("hands the caller the same dropped-matter count and audit time it wrote into the workbook", async () => {
+    delegatedEnv();
+    installGraphDouble();
+    const result = await excel.syncStandardsToMicrosoftExcel(
+      {},
+      deps([], { report: reportFrom([], 9, ["Christine Moriarty", "Hirsch Law Group"]) }),
+    );
+
+    assert.equal(result.mattersOnNoTab, 9);
+    assert.deepEqual(result.unmappedAttorneys, ["Christine Moriarty", "Hirsch Law Group"]);
+    assert.equal(result.lastAuditedAt, "2026-08-12 00:30 America/Chicago");
+    const notice = excel.excelSyncNotice(result);
+    assert.match(notice, /Matters this month on no case manager tab: 9 \(attorney has no case manager mapping\)\./);
+    assert.match(notice, /Clio last audited 2026-08-12 00:30 America\/Chicago\./);
+    assert.equal(excel.excelSyncNotice({ ...result, lastAuditedAt: "" }).includes("no completed audit run on record"), true);
   });
 });
 
@@ -684,7 +765,7 @@ describe("Microsoft Excel preview workbook target", () => {
     assert.equal(excel.microsoftExcelConfigured(), true);
 
     const calls = installGraphDouble();
-    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+    const result = await excel.syncStandardsToMicrosoftExcel({}, deps());
     assert.equal(result.workbookPath, "CWCA/Standards 2026-08.xlsx");
     assert.equal(result.workbookScope, "production");
     assert.equal(result.workbookTarget, "CWCA/Standards 2026-08.xlsx (production)");
@@ -704,7 +785,7 @@ describe("Microsoft Excel preview workbook target", () => {
     assert.equal(excel.microsoftExcelWorkbookUrl(), "");
     assert.equal(excel.excelWorkbookLabel(), "unspecified (preview)");
     await assert.rejects(
-      () => excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) }),
+      () => excel.syncStandardsToMicrosoftExcel({}, deps()),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.equal(error.message, excel.PREVIEW_WORKBOOK_REQUIRED_MESSAGE);
@@ -728,7 +809,7 @@ describe("Microsoft Excel preview workbook target", () => {
     assert.equal(excel.excelWorkbookLabel(), "CWCA/cwca-standards-test {month}.xlsx (preview)");
 
     const calls = installGraphDouble();
-    const result = await excel.syncStandardsToMicrosoftExcel({}, { now: NOW, reportRows: rowsFrom([]) });
+    const result = await excel.syncStandardsToMicrosoftExcel({}, deps());
     assert.equal(result.workbookPath, "CWCA/cwca-standards-test 2026-08.xlsx");
     assert.equal(result.workbookScope, "preview");
     assert.equal(result.workbookTarget, "CWCA/cwca-standards-test 2026-08.xlsx (preview)");
