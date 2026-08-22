@@ -1237,7 +1237,6 @@ export async function standardsReportRows(filters: DashboardFilters = {}): Promi
     if (item.metric_excluded) return false;
     if (!STANDARD_CASE_MANAGERS.includes(standardsCaseManagerFor(item) as (typeof STANDARD_CASE_MANAGERS)[number])) return false;
     if (item.step_code !== "WEEKLY_CLIENT_CHECKIN") return false;
-    if (item.audit_version && item.audit_version !== APP_VERSION) return false;
     const dueKey = csvDateKey(item.deadline_at);
     return Boolean(dueKey) && (!dateSet.size || dateSet.has(dueKey));
   });
