@@ -1,5 +1,6 @@
 import { appConfig } from "./config";
 import { saveClioTokens, getClioTokens } from "./token-store";
+import { writesAllowed } from "./write-guard";
 
 type QueryValue = string | number | boolean | Date | null | undefined;
 type Query = Record<string, QueryValue>;
@@ -94,7 +95,11 @@ export async function exchangeClioCode(code: string, redirectUri?: string) {
   });
 }
 
+export const CLIO_REFRESH_BLOCKED_MESSAGE =
+  "Clio refresh blocked: only production refreshes Clio. This deployment reads a database branch that carries a copy of production's Clio refresh token, so refreshing here would ask Clio to reissue production's credential and would save the replacement where production cannot read it. Reconnect Clio from production, or give this deployment its own Clio application.";
+
 async function refreshAccessToken(): Promise<string> {
+  if (!writesAllowed()) throw new Error(CLIO_REFRESH_BLOCKED_MESSAGE);
   const config = appConfig();
   const tokens = await getClioTokens();
   if (!tokens?.refreshToken) throw new Error("Clio is not connected");

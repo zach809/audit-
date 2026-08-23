@@ -1,6 +1,5 @@
-import { optionalEnv } from "./config";
 import type { DashboardFilters } from "./dashboard-data";
-import { microsoftExcelConfigured, syncStandardsToMicrosoftExcel } from "./microsoft-excel";
+import { excelWorkbookLabel, microsoftExcelConfigured, syncStandardsToMicrosoftExcel } from "./microsoft-excel";
 import { currentChicagoMonthRange, shouldPublishPeriod } from "./standards-sheet-sync";
 
 export type StandardsPublishResult = {
@@ -17,19 +16,10 @@ type PublishDeps = {
   logError?: (message: string, error: unknown) => void;
 };
 
-function excelWorkbookTarget(): string {
-  return (
-    optionalEnv("MICROSOFT_EXCEL_WORKBOOK_ITEM_ID").trim() ||
-    optionalEnv("MICROSOFT_EXCEL_WORKBOOK_SHARE_URL").trim() ||
-    optionalEnv("MICROSOFT_EXCEL_WORKBOOK_PATH").trim() ||
-    "unspecified"
-  );
-}
-
 export async function publishConfiguredStandardsSheets(deps: PublishDeps = {}): Promise<StandardsPublishResult> {
   const excelOn = deps.excelConfigured ?? microsoftExcelConfigured;
   const syncExcel = deps.syncExcel ?? syncStandardsToMicrosoftExcel;
-  const workbookTarget = deps.workbookTarget ?? excelWorkbookTarget;
+  const workbookTarget = deps.workbookTarget ?? (() => excelWorkbookLabel());
   const logError = deps.logError ?? ((message, error) => console.error(message, error));
   const result: StandardsPublishResult = { google: "skipped", excel: "skipped" };
 

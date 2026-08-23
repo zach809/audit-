@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidSessionCookie } from "@/lib/session";
 import { syncPostClosureFollowups } from "@/lib/post-closure";
+import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export const maxDuration = 300;
 
@@ -13,6 +14,8 @@ function redirectBack(request: NextRequest, params: Record<string, string>) {
 }
 
 export async function POST(request: NextRequest) {
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   if (!isValidSessionCookie(request.cookies.get("cwca_session")?.value)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

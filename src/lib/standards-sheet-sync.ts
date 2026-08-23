@@ -27,7 +27,9 @@ export function shouldPublishPeriod(auditStatus: string | null | undefined): boo
   return String(auditStatus ?? "").trim().toLowerCase() === "completed";
 }
 
-export function formatSheetStamp(now: Date, timeZone = "America/Chicago"): string {
+/** A wall-clock reading a reader can act on, with the zone spelled out so nobody reads it as their
+ *  own. Two of these appear side by side in the workbook and they routinely disagree. */
+export function formatSheetTimestamp(at: Date, timeZone = "America/Chicago"): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -36,9 +38,13 @@ export function formatSheetStamp(now: Date, timeZone = "America/Chicago"): strin
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(now);
+  }).formatToParts(at);
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-  return `Updated ${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timeZone}`;
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${timeZone}`;
+}
+
+export function formatSheetStamp(now: Date, timeZone = "America/Chicago"): string {
+  return `Updated ${formatSheetTimestamp(now, timeZone)}`;
 }
 
 export function chicagoDateKey(date: Date, timeZone = "America/Chicago"): string {
@@ -57,6 +63,19 @@ export function currentChicagoMonthRange(now = new Date()): { from: string; to: 
   const monthStart = new Date(`${today}T12:00:00`);
   monthStart.setDate(1);
   return { from: chicagoDateKey(monthStart), to: today };
+}
+
+const DAY_MS = 86400000;
+
+/** Every date key from `from` to `to` inclusive. The arithmetic is UTC, so a Chicago DST
+ *  transition cannot drop or double a day the way a local-time cursor would. */
+export function eachChicagoDateKey(from: string, to: string): string[] {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) return [];
+  const keys: string[] = [];
+  for (let stamp = start; stamp <= end; stamp += DAY_MS) keys.push(new Date(stamp).toISOString().slice(0, 10));
+  return keys;
 }
 
 const EXCEL_SERIAL_EPOCH_UTC = Date.UTC(1899, 11, 30);

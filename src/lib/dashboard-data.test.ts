@@ -225,3 +225,158 @@ describe("matter bulk actions", () => {
     assert.match(page, /MatterBulkBar/);
   });
 });
+
+describe("standards report weekly check-ins", () => {
+  // eachDateKey parses "<date>T12:00:00" in the process zone, so the window edges shift by up to a
+  // day with TZ. The fixture days sit well inside this range so the assertions do not move with it.
+  const RANGE = { from: "2026-08-01", to: "2026-08-08" };
+  const STALE_VERSION = "cwca-an-older-build-2026-07-01";
+
+  function checkIn(attorney: string, deadline: string, complete: boolean, auditVersion: string) {
+    return {
+      matter_id: `m-${attorney}-${deadline}-${complete}`,
+      matter_number: "2001",
+      client_first_name: "Sam",
+      client_last_name: "Client",
+      matter_created_at: "2026-07-01T15:00:00.000Z",
+      responsible_attorney_name: attorney,
+      step_code: "WEEKLY_CLIENT_CHECKIN",
+      item_status: complete ? "On Time" : "Missing",
+      deadline_at: deadline,
+      evidence_ref_id: complete ? `ev-${deadline}` : null,
+      audit_version: auditVersion,
+    };
+  }
+
+  function setupItem(stepCode: string, complete: boolean) {
+    return {
+      matter_id: "m-setup-1",
+      matter_number: "2002",
+      client_first_name: "Dana",
+      client_last_name: "Client",
+      matter_created_at: "2026-08-03T15:00:00.000Z",
+      responsible_attorney_name: "Daniel Clifton",
+      step_code: stepCode,
+      item_status: complete ? "On Time" : "Missing",
+      deadline_at: null,
+      evidence_ref_id: complete ? `ev-${stepCode}` : null,
+      audit_version: STALE_VERSION,
+    };
+  }
+
+  const ITEMS = [
+    setupItem("SETUP_WELCOME", true),
+    setupItem("SETUP_ATTY_CALL", true),
+    setupItem("SETUP_COURT_DATE", false),
+    checkIn("Daniel Clifton", "2026-08-03T16:00:00.000Z", true, STALE_VERSION),
+    checkIn("Daniel Clifton", "2026-08-04T16:00:00.000Z", true, "cwca-four-kpi-deduction-score-2026-08-10"),
+    checkIn("Daniel Clifton", "2026-08-04T17:00:00.000Z", false, STALE_VERSION),
+    checkIn("Robert Kroeger", "2026-08-03T16:00:00.000Z", true, STALE_VERSION),
+  ];
+
+  async function reportRows() {
+    const globals = globalThis as { cwcaSql?: unknown; cwcaDbReady?: Promise<void> };
+    globals.cwcaSql = () => Promise.resolve(ITEMS);
+    globals.cwcaDbReady = Promise.resolve();
+    const { standardsReportRows } = await import("./dashboard-data");
+    const rows = await standardsReportRows(RANGE);
+    return new Map(rows.map((row) => [`${row.owner} ${row.sortDate}`, row]));
+  }
+
+  it("counts a completed check-in whose audit_version predates the deployed build", async () => {
+    const byOwnerDate = await reportRows();
+    const jesusDay1 = byOwnerDate.get("Jesus 2026-08-03");
+    assert.ok(jesusDay1, "expected a Jesus row for 2026-08-03");
+    assert.equal(jesusDay1.weeklyCheckIns, 1);
+    assert.equal(jesusDay1.newMatters, 1);
+    assert.equal(jesusDay1.attorneyCall, 1);
+    assert.equal(jesusDay1.welcome, 1);
+    assert.equal(jesusDay1.courtDate, 0);
+    assert.equal(jesusDay1.completion, "75%");
+  });
+
+  it("keeps a missed stale-version check-in in the denominator without counting it complete", async () => {
+    const byOwnerDate = await reportRows();
+    const jesusDay2 = byOwnerDate.get("Jesus 2026-08-04");
+    assert.ok(jesusDay2, "expected a Jesus row for 2026-08-04");
+    assert.equal(jesusDay2.weeklyCheckIns, 1);
+    assert.equal(jesusDay2.completion, "50%");
+  });
+
+  it("reports every case manager who had a check-in due, not only the current-version ones", async () => {
+    const byOwnerDate = await reportRows();
+    const anahi = byOwnerDate.get("Anahi 2026-08-03");
+    assert.ok(anahi, "expected an Anahi row for 2026-08-03");
+    assert.equal(anahi.weeklyCheckIns, 1);
+    assert.equal(anahi.completion, "100%");
+    const total = [...byOwnerDate.values()].reduce((sum, row) => sum + row.weeklyCheckIns, 0);
+    assert.equal(total, 3);
+  });
+});
+
+describe("standards matters the case manager map cannot place", () => {
+  const RANGE = { from: "2026-08-01", to: "2026-08-08" };
+
+  function newMatter(matterId: string, attorney: string) {
+    return {
+      matter_id: matterId,
+      matter_number: "3001",
+      client_first_name: "Robin",
+      client_last_name: "Client",
+      matter_created_at: "2026-08-04T15:00:00.000Z",
+      responsible_attorney_name: attorney,
+      step_code: "SETUP_WELCOME",
+      item_status: "On Time",
+      deadline_at: null,
+      evidence_ref_id: `ev-${matterId}`,
+      audit_version: "cwca-four-kpi-deduction-score-2026-08-10",
+    };
+  }
+
+  async function report(items: unknown[]) {
+    const globals = globalThis as { cwcaSql?: unknown; cwcaDbReady?: Promise<void> };
+    globals.cwcaSql = () => Promise.resolve(items);
+    globals.cwcaDbReady = Promise.resolve();
+    const { standardsReport } = await import("./dashboard-data");
+    return standardsReport(RANGE);
+  }
+
+  it("counts the matters it dropped and names the attorneys, without touching the rows it kept", async () => {
+    const result = await report([
+      newMatter("m-mapped", "Daniel Clifton"),
+      newMatter("m-unmapped-a", "Christine Moriarty"),
+      newMatter("m-unmapped-b", "Hirsch Law Group"),
+      { ...newMatter("m-unmapped-b", "Hirsch Law Group"), step_code: "SETUP_ATTY_CALL" },
+    ]);
+
+    assert.deepEqual(result.rows.map((row) => `${row.owner} ${row.sortDate}`), ["Jesus 2026-08-04"]);
+    assert.equal(result.rows[0].newMatters, 1);
+    assert.equal(result.unmappedMatters, 2);
+    assert.deepEqual(result.unmappedAttorneys, ["Christine Moriarty", "Hirsch Law Group"]);
+  });
+
+  it("does not call a matter missing when one of its own items did reach a tab", async () => {
+    const result = await report([
+      { ...newMatter("m-split", "Foo Bar"), case_manager_name: "Lori" },
+      { ...newMatter("m-split", "Foo Bar"), step_code: "SETUP_ATTY_CALL" },
+    ]);
+
+    assert.deepEqual(result.rows.map((row) => row.owner), ["Lori"]);
+    assert.equal(result.unmappedMatters, 0);
+    assert.deepEqual(result.unmappedAttorneys, []);
+  });
+
+  it("reports zero and no attorneys when every matter reaches a tab", async () => {
+    const result = await report([newMatter("m-mapped", "Daniel Clifton")]);
+
+    assert.equal(result.unmappedMatters, 0);
+    assert.deepEqual(result.unmappedAttorneys, []);
+  });
+
+  it("blames the exclusion, not the map, for a matter an admin excluded from the metrics", async () => {
+    const result = await report([{ ...newMatter("m-excluded", "Christine Moriarty"), metric_excluded: true }]);
+
+    assert.equal(result.unmappedMatters, 0);
+    assert.deepEqual(result.unmappedAttorneys, []);
+  });
+});

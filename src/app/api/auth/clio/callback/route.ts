@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exchangeClioCode } from "@/lib/clio";
+import { rejectNonProductionWrite } from "@/lib/write-guard";
 
 export async function GET(request: NextRequest) {
+  // Completing the exchange makes Clio issue a fresh refresh token. Production holds a copy of the
+  // one being replaced, so this is the one route whose side effect is not scoped to a deployment.
+  const blocked = rejectNonProductionWrite();
+  if (blocked) return blocked;
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");

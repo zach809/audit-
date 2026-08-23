@@ -12,11 +12,26 @@ import { GET as excelGet, POST as excelPost } from "../app/api/standards/excel-s
 import { GET as exportGet } from "../app/api/export.csv/route";
 import { getDashboardData } from "./dashboard-data";
 import { appConfig } from "./config";
-import { rejectNonProductionWrite, WRITE_BLOCKED_MESSAGE, writesAllowed } from "./write-guard";
+import {
+  previewExcelSyncAllowed,
+  rejectNonProductionExcelSync,
+  rejectNonProductionWrite,
+  WRITE_BLOCKED_MESSAGE,
+  writesAllowed,
+} from "./write-guard";
 const ENV_KEYS = [
-  "VERCEL_ENV", "CWCA_ALLOW_WRITES", "DATABASE_URL", "CLIO_CLIENT_ID", "CLIO_CLIENT_SECRET",
+  "VERCEL_ENV", "CWCA_ALLOW_WRITES", "CWCA_ALLOW_PREVIEW_EXCEL_SYNC", "DATABASE_URL",
+  "CLIO_CLIENT_ID", "CLIO_CLIENT_SECRET",
   "CLIO_REDIRECT_URI", "TOKEN_ENCRYPTION_KEY", "DASHBOARD_PASSWORD", "CRON_SECRET",
 ] as const;
+const GUARD_BY_ROUTE_FILE: Record<string, string> = {
+  "audit/run": "rejectNonProductionWrite",
+  "audit/recheck-items": "rejectNonProductionWrite",
+  "case-manager/complete": "rejectNonProductionWrite",
+  "metrics/exclusion": "rejectNonProductionWrite",
+  "standards/google-sync": "rejectNonProductionWrite",
+  "standards/excel-sync": "rejectNonProductionExcelSync",
+};
 const savedEnv: Record<string, string | undefined> = {};
 const HANDLERS: Array<{ route: string; method: string; handle: (req: NextRequest) => Promise<Response> }> = [
   { route: "/api/audit/run", method: "GET", handle: auditRunGet },
@@ -51,7 +66,7 @@ async function assertBlocked(res: Response) {
   assert.equal(res.status, 403);
   const body = await res.json();
   assert.equal(body.error, WRITE_BLOCKED_MESSAGE);
-  assert.match(JSON.stringify(body), /preview deployment pointed at the production database/);
+  assert.match(JSON.stringify(body), /Google Sheet and the Clio connection/);
 }
 async function assertNotBlocked(res: Response) {
   assert.notEqual(res.status, 403);
@@ -78,6 +93,7 @@ after(() => {
 afterEach(() => {
   delete process.env.VERCEL_ENV;
   delete process.env.CWCA_ALLOW_WRITES;
+  delete process.env.CWCA_ALLOW_PREVIEW_EXCEL_SYNC;
   delete (globalThis as { cwcaSql?: unknown }).cwcaSql;
   delete (globalThis as { cwcaDbReady?: Promise<void> }).cwcaDbReady;
 });
@@ -112,9 +128,10 @@ describe("preview write guard", () => {
       setEnv({ VERCEL_ENV: "production" });
       await assertNotBlocked(await handle(req(route, method)));
     }
-    for (const file of ["audit/run", "audit/recheck-items", "case-manager/complete", "metrics/exclusion", "standards/google-sync", "standards/excel-sync"]) {
+    for (const [file, guard] of Object.entries(GUARD_BY_ROUTE_FILE)) {
       const src = source(`../app/api/${file}/route.ts`);
-      assert.equal([...src.matchAll(/export async function (GET|POST)/g)].length, [...src.matchAll(/rejectNonProductionWrite\(/g)].length, file);
+      assert.equal([...src.matchAll(/export async function (GET|POST)/g)].length, [...src.matchAll(new RegExp(`${guard}\\(`, "g"))].length, file);
+      if (guard === "rejectNonProductionWrite") assert.doesNotMatch(src, /ExcelSync/, file);
     }
   });
 
@@ -151,6 +168,65 @@ describe("preview write guard", () => {
     await assertNotBlocked(await auditRunGet(req("/api/audit/run")));
     await assertNotBlocked(await googleGet(req("/api/standards/google-sync")));
     await assertNotBlocked(await excelGet(req("/api/standards/excel-sync")));
+  });
+
+  it("opens the Excel opt-in only on preview, only for 1 or true, and never widens the broad guard", () => {
+    for (const flag of ["1", "true", "TRUE"]) {
+      setEnv({ VERCEL_ENV: "preview", CWCA_ALLOW_PREVIEW_EXCEL_SYNC: flag });
+      assert.equal(previewExcelSyncAllowed(), true);
+      assert.equal(rejectNonProductionExcelSync(), null);
+      assert.equal(writesAllowed(), false);
+      assert.equal(rejectNonProductionWrite()?.status, 403);
+    }
+    for (const flag of [undefined, "", "0", "yes", "on", "no"]) {
+      setEnv({ VERCEL_ENV: "preview", CWCA_ALLOW_PREVIEW_EXCEL_SYNC: flag });
+      assert.equal(previewExcelSyncAllowed(), false);
+      assert.equal(rejectNonProductionExcelSync()?.status, 403);
+    }
+    for (const vercelEnv of [undefined, "", "development", "staging", "PREVIEW", "prod"]) {
+      setEnv({ VERCEL_ENV: vercelEnv, CWCA_ALLOW_PREVIEW_EXCEL_SYNC: "1" });
+      assert.equal(previewExcelSyncAllowed(), false);
+      assert.equal(rejectNonProductionExcelSync()?.status, 403);
+    }
+    setEnv({ VERCEL_ENV: "production", CWCA_ALLOW_PREVIEW_EXCEL_SYNC: undefined });
+    assert.equal(rejectNonProductionExcelSync(), null);
+    setEnv({ VERCEL_ENV: undefined, CWCA_ALLOW_WRITES: "1", CWCA_ALLOW_PREVIEW_EXCEL_SYNC: undefined });
+    assert.equal(rejectNonProductionExcelSync(), null);
+  });
+
+  it("keeps the four database routes and google-sync at 403 on preview even with the Excel opt-in set", async () => {
+    setEnv({ VERCEL_ENV: "preview", CWCA_ALLOW_PREVIEW_EXCEL_SYNC: "1" });
+    const blocked: string[] = [];
+    const allowed: string[] = [];
+    for (const { route, method, handle } of HANDLERS) {
+      const res = await handle(req(route, method));
+      if (res.status === 403) {
+        blocked.push(`${method} ${route}`);
+        assert.equal((await res.json()).error, WRITE_BLOCKED_MESSAGE);
+      } else {
+        allowed.push(`${method} ${route}`);
+        assert.doesNotMatch(await res.text(), /Write blocked/);
+      }
+    }
+    assert.deepEqual(blocked, [
+      "GET /api/audit/run",
+      "POST /api/audit/run",
+      "POST /api/audit/recheck-items",
+      "POST /api/case-manager/complete",
+      "POST /api/metrics/exclusion",
+      "GET /api/standards/google-sync",
+      "POST /api/standards/google-sync",
+    ]);
+    assert.deepEqual(allowed, ["GET /api/standards/excel-sync", "POST /api/standards/excel-sync"]);
+  });
+
+  it("leaves a preview deployment without the opt-in exactly as it behaves today", async () => {
+    for (const flag of [undefined, "0", ""]) {
+      setEnv({ VERCEL_ENV: "preview", CWCA_ALLOW_PREVIEW_EXCEL_SYNC: flag });
+      for (const { route, method, handle } of HANDLERS) {
+        await assertBlocked(await handle(req(route, method)));
+      }
+    }
   });
 
   it("refuses each bulk write the same way as a single write, including a forged admin role", async () => {
