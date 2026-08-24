@@ -5,7 +5,9 @@ export default async function LoginPage({ searchParams }: { searchParams: { erro
   if (hasDashboardSession()) redirect("/");
   return (
     <main className="login">
-      <h1>Clio Workflow Auditor</h1>
+      <div className="login-brand">CWCA</div>
+      <h1>CWCA Clio Workflow Compliance Auditor</h1>
+      <p className="login-kicker">Read-only workflow review for Clio Manage</p>
       <p className="muted">Enter the dashboard password to continue.</p>
       {searchParams.error ? <p className="danger">Incorrect password.</p> : null}
       <form action="/api/login" method="post">

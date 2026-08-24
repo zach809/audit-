@@ -738,7 +738,7 @@ function DashboardUnavailable({ message, connected }: { message: string; connect
             <span className="eyebrow">Internal Workflow Coaching</span>
             <span className="badge Pass">Read-Only Clio</span>
           </div>
-          <h1>Clio Workflow Auditor</h1>
+          <h1>CWCA Clio Workflow Compliance Auditor</h1>
           <p>Open matters, proof links, and follow-up in one focused workspace.</p>
         </div>
         <div className="actions header-actions">
@@ -1370,7 +1370,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <span className="eyebrow">Internal Workflow Coaching</span>
             <span className="badge Pass">Read-Only Clio</span>
           </div>
-          <h1>Clio Workflow Auditor</h1>
+          <h1>CWCA Clio Workflow Compliance Auditor</h1>
           <p>Open matters, proof links, and follow-up in one focused workspace.</p>
         </div>
         <div className="actions header-actions">

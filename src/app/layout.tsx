@@ -3,8 +3,8 @@ import "./design-system.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Clio Workflow Auditor",
-  description: "Clio Workflow Auditor",
+  title: "CWCA Clio Workflow Compliance Auditor",
+  description: "Read-only workflow compliance auditing for Clio Manage.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
