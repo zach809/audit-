@@ -7,14 +7,14 @@
 
 :root {
   color-scheme: light;
-  --cwca-canvas: #f8fafc;
+  --cwca-canvas: #fafafa;
   --cwca-surface: #ffffff;
   --cwca-surface-muted: #f1f5f9;
   --cwca-surface-blue: #eff6ff;
   --cwca-ink: #0f172a;
   --cwca-ink-soft: #334155;
   --cwca-muted: #64748b;
-  --cwca-border: #dbe3ee;
+  --cwca-border: #e2e8f0;
   --cwca-border-strong: #c3cfdd;
   --cwca-blue: #0052ff;
   --cwca-blue-bright: #4d7cff;
@@ -33,9 +33,9 @@
   --cwca-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
   --cwca-shadow-sm: 0 6px 18px rgba(15, 23, 42, 0.07);
   --cwca-shadow-md: 0 14px 34px rgba(15, 23, 42, 0.1);
-  --cwca-font-display: "Calistoga", Georgia, "Times New Roman", serif;
-  --cwca-font-ui: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --cwca-font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+  --cwca-font-display: var(--font-cwca-display), Georgia, "Times New Roman", serif;
+  --cwca-font-ui: var(--font-cwca-ui), "Segoe UI", system-ui, -apple-system, sans-serif;
+  --cwca-font-mono: var(--font-cwca-mono), Consolas, "Courier New", monospace;
 
   /* Compatibility tokens used throughout the legacy stylesheet. */
   --bg: var(--cwca-canvas);
@@ -904,11 +904,50 @@ tbody tr:hover td {
 }
 
 /* Login screens */
-.login,
-.cm-login-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
+.login {
+  width: min(calc(100% - 32px), 520px) !important;
+  min-height: 100vh !important;
+  margin: 0 auto !important;
+  padding: 48px 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.login-brand {
+  align-self: flex-start !important;
+  margin: 0 0 6px !important;
+  padding: 6px 10px !important;
+  border: 1px solid #bfd0ed !important;
+  border-radius: 999px !important;
+  background: var(--cwca-surface-blue) !important;
+  color: var(--cwca-blue-dark) !important;
+  font-family: var(--cwca-font-mono) !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+}
+
+.login h1 {
+  margin: 0 !important;
+  font-size: clamp(34px, 6vw, 48px) !important;
+  line-height: 1.04 !important;
+}
+
+.login-kicker,
+.login > .muted {
+  margin: 0 !important;
+}
+
+.login > .muted {
+  margin-bottom: 12px !important;
 }
 
 .login > form,
@@ -920,6 +959,18 @@ tbody tr:hover td {
   border-radius: 8px !important;
   background: var(--cwca-surface) !important;
   box-shadow: var(--cwca-shadow-md) !important;
+}
+
+.login > form {
+  display: grid !important;
+  gap: 12px !important;
+  margin: 0 !important;
+}
+
+.cm-login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
 }
 
 /* Motion is limited to useful feedback, never layout movement. */
@@ -1049,26 +1100,3 @@ tbody tr:hover td {
     transition-duration: 0.01ms !important;
   }
 }
-
-/* CWCA production surface: one authoritative, block-first visual layer. */
-:root { --cwca-bg:#0b1424; --cwca-surface:#111e31; --cwca-line:#38506b; --cwca-text:#f4f7fb; --cwca-muted:#b7c4d4; --cwca-blue:#2868e8; --cwca-blue-hover:#3d7cf0; }
-html, body { background:var(--cwca-bg) !important; color:var(--cwca-text) !important; }
-body { background-image:linear-gradient(rgba(56,80,107,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(56,80,107,.08) 1px,transparent 1px) !important; background-size:32px 32px !important; }
-.login { width:min(100% - 32px,520px) !important; min-height:0 !important; height:auto !important; margin:12vh auto 0 !important; padding:34px !important; background:var(--cwca-surface) !important; border:1px solid var(--cwca-line) !important; border-top:4px solid var(--cwca-blue) !important; border-radius:4px !important; box-shadow:0 24px 60px rgba(0,0,0,.3) !important; text-align:left !important; }
-.login-brand { display:inline-block; margin-bottom:18px; padding:6px 9px; background:var(--cwca-blue) !important; color:#fff !important; font-size:12px; font-weight:800; letter-spacing:.12em; }
-.login h1 { max-width:430px; margin:0 0 10px !important; color:var(--cwca-text) !important; font-size:clamp(28px,4vw,40px) !important; line-height:1.06 !important; }
-.login-kicker { margin:0 0 8px !important; color:#d4e3f5 !important; font-size:15px; font-weight:700; }
-.login > .muted { margin:0 0 26px !important; color:var(--cwca-muted) !important; }
-.login > form { display:grid !important; gap:14px !important; padding:0 !important; background:transparent !important; border:0 !important; box-shadow:none !important; }
-.login label { color:var(--cwca-text) !important; font-weight:700 !important; }
-.login input { width:100% !important; min-height:48px !important; margin-top:7px !important; padding:0 13px !important; background:#091321 !important; border:1px solid #526a86 !important; border-radius:3px !important; color:#fff !important; font-size:16px !important; }
-.login button.primary { width:100% !important; min-height:48px !important; border-radius:3px !important; background:var(--cwca-blue) !important; color:#fff !important; box-shadow:none !important; }
-/* Panels are operational blocks; status badges remain pills for quick scanning. */
-.panel,.app-header,.deployment-proof,.dashboard-tabs,.command-hero,.command-card,.matter-card,.workflow-checks,.evidence-panel,.problems-panel,.report-card,.cm-portal-header,.cm-task-card,.cm-queue-summary,.standards-panel,.excel-view,.table-wrap { border-radius:4px !important; border-color:var(--cwca-line) !important; }
-.panel,.command-card,.matter-card,.report-card,.standards-panel,.excel-view { background:var(--cwca-surface) !important; }
-button,.button,a.button,input,select,textarea { border-radius:3px !important; }
-button.primary,.button.primary,a.button.primary { background:var(--cwca-blue) !important; box-shadow:none !important; }
-button.primary:hover,.button.primary:hover,a.button.primary:hover { background:var(--cwca-blue-hover) !important; }
-.dashboard-tabs,.command-route-grid,.command-grid { background:var(--cwca-surface) !important; }
-.dashboard-tabs a,.dashboard-tabs button { border-radius:3px !important; }
-@media (max-width:680px) { .login { width:min(100% - 24px,520px) !important; margin-top:7vh !important; padding:24px !important; } }
