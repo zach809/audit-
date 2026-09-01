@@ -82,11 +82,11 @@ export const WORKFLOW_RULES: Record<string, WorkflowRule> = {
   },
   WEEKLY_CLIENT_CHECKIN: {
     label: "Weekly Client Check-In",
-    goal: "Verify the weekly client check-in/courtesy call one week plus one day after the last court date. CWCA waits until Friday 5:00 PM Illinois time of that check-in week before marking it missing.",
-    missing: "Weekly client check-in still needs calendar and phone-call proof in Clio.",
-    action: "Verify the weekly check-in calendar event and confirm a phone-call communication exists during that check-in week.",
-    late: "Weekly client check-in call proof was found, but it was completed after the Friday 5:00 PM weekly deadline.",
-    unknown: "Please recheck this matter before coaching. The app could not confirm the weekly check-in call from Clio.",
+    goal: "Complete the next weekly client check-in within 10 calendar days of the most recent meaningful outgoing client contact. If day 10 falls on a weekend, the target moves to the next business day at 5:00 PM Illinois time. CWCA then allows two additional business days before deducting points.",
+    missing: "The 10-day target and the two-business-day grace period passed, and CWCA could not find either a matching weekly check-in event or a completed outgoing call in Clio after a final recheck.",
+    action: "Contact the client, log the call in Communications, and keep the matching weekly check-in calendar event linked to the matter.",
+    late: "Weekly client check-in proof was completed after the 10-day target. Work completed during the grace period does not count as missing.",
+    unknown: "CWCA found only part of the proof or could not read one Clio source. Review the saved calendar or communication evidence before coaching; this review status does not count as missing.",
   },
 };
 

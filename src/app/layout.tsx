@@ -1,13 +1,6 @@
-import "./globals.css";
-import "./design-system.css";
+import "./cwca-ui.css";
 import type { Metadata } from "next";
 import { Calistoga, Inter, JetBrains_Mono } from "next/font/google";
-
-const displayFont = Calistoga({
-  subsets: ["latin"],
-  weight: "400",
-  variable: "--font-cwca-display",
-});
 
 const uiFont = Inter({
   subsets: ["latin"],
@@ -19,14 +12,20 @@ const monoFont = JetBrains_Mono({
   variable: "--font-cwca-mono",
 });
 
+const displayFont = Calistoga({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-cwca-display",
+});
+
 export const metadata: Metadata = {
-  title: "CWCA Clio Workflow Compliance Auditor",
+  title: "Clio Workflow Compliance Auditor",
   description: "Read-only workflow compliance auditing for Clio Manage.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${displayFont.variable} ${uiFont.variable} ${monoFont.variable}`}>
+    <html lang="en" className={`${uiFont.variable} ${monoFont.variable} ${displayFont.variable}`}>
       <body>
         {children}
       </body>

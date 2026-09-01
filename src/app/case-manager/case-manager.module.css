@@ -1,0 +1,623 @@
+.page {
+  min-height: 100vh;
+  padding: 32px 24px 64px;
+  background: #f3f6fa;
+  color: #172033;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.page > * {
+  width: min(1180px, 100%);
+  margin-inline: auto;
+}
+
+.portalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 28px 30px;
+  color: #f8fafc;
+  background: #101827;
+  border: 1px solid #273449;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+}
+
+.portalHeader h1,
+.scoreHeader h2,
+.sectionHeader h2,
+.deductionHeader h3 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.portalHeader h1 {
+  margin-top: 6px;
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.05;
+}
+
+.portalHeader p {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: #cbd5e1;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.portalHeader .eyebrow {
+  color: #93c5fd;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.account span {
+  padding: 9px 12px;
+  color: #bbf7d0;
+  background: #183328;
+  border: 1px solid #2f6b50;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.account button,
+.adminPicker button,
+.actions button,
+.actionsSingle button {
+  min-height: 40px;
+  padding: 9px 15px;
+  color: #fff;
+  background: #255fdb;
+  border: 1px solid #255fdb;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.account button {
+  color: #e2e8f0;
+  background: transparent;
+  border-color: #475569;
+}
+
+.adminPicker {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+}
+
+.adminPicker label,
+.actions label,
+.actionsSingle label {
+  display: grid;
+  gap: 7px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.adminPicker select {
+  min-width: 230px;
+  min-height: 42px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #b8c4d4;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.weekNav {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.weekNav a {
+  padding: 11px 18px;
+  color: #475569;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.weekNav .activeWeek {
+  color: #fff;
+  background: #255fdb;
+  border-color: #255fdb;
+}
+
+.notice,
+.successNotice {
+  margin-top: 16px;
+  padding: 13px 16px;
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.successNotice {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.cmCard {
+  margin-top: 18px;
+  background: #fff;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+  overflow: hidden;
+}
+
+.scoreSummary,
+.cardSection {
+  padding: 24px;
+}
+
+.cardSection {
+  border-top: 2px solid #d8e0eb;
+}
+
+.scoreHeader,
+.sectionHeader,
+.deductionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.scoreHeader h2,
+.sectionHeader h2 {
+  margin-top: 5px;
+  font-size: 24px;
+}
+
+.scoreHeader p,
+.sectionHeader p,
+.deductionHeader p {
+  margin: 5px 0 0;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.scoreGood,
+.scoreWatch,
+.scoreLow {
+  min-width: 94px;
+  padding: 13px 16px;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 7px;
+  font-size: 25px;
+  text-align: center;
+}
+
+.scoreWatch {
+  color: #854d0e;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.scoreLow {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.overallRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.overallRow > strong {
+  color: #166534;
+  font-size: 25px;
+}
+
+.track {
+  position: relative;
+  height: 14px;
+  overflow: hidden;
+  background: #e7edf4;
+  border-radius: 4px;
+}
+
+.track > span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+}
+
+.overallFill,
+.fillGood {
+  background: #22a862;
+}
+
+.fillLate {
+  background: #d99b2b;
+}
+
+.fillMissing {
+  background: #c2413b;
+}
+
+.formula {
+  margin: 9px 0 14px;
+  color: #475569;
+  font-weight: 700;
+}
+
+.scoreExplanation {
+  margin-bottom: 22px;
+  padding: 14px 16px;
+  color: #1e3a5f;
+  background: #eef6ff;
+  border: 1px solid #b9d7f4;
+  border-left: 4px solid #2774ae;
+  border-radius: 4px;
+}
+
+.scoreExplanation p {
+  margin: 5px 0 0;
+  color: #334e68;
+  line-height: 1.5;
+}
+
+.kpiList {
+  border-top: 1px solid #e2e8f0;
+}
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.25fr) minmax(200px, 2fr) minmax(120px, auto) minmax(105px, auto) 52px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.kpiRow > span {
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.kpiRow .good {
+  color: #166534;
+}
+
+.kpiRow .watch {
+  color: #9a6700;
+}
+
+.kpiRow .bad {
+  color: #b42318;
+}
+
+.sectionHeader > strong {
+  padding: 8px 12px;
+  color: #334155;
+  background: #eef2f7;
+  border-radius: 6px;
+}
+
+.cardList {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.deductionCard {
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #d8e0eb;
+  border-left-width: 5px;
+  border-radius: 7px;
+}
+
+.missingCard {
+  border-left-color: #c2413b;
+}
+
+.lateCard {
+  border-left-color: #d99b2b;
+}
+
+.upcomingCard {
+  border-left-color: #2774ae;
+}
+
+.deductionHeader h3 {
+  margin-top: 4px;
+  font-size: 21px;
+}
+
+.pointsMissing,
+.pointsLate {
+  padding: 8px 11px;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.dueToday,
+.dueSoon,
+.upcomingStatus {
+  padding: 8px 11px;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.dueSoon {
+  color: #854d0e;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.upcomingStatus {
+  color: #1e3a5f;
+  background: #eaf3fb;
+  border-color: #9fc5e8;
+}
+
+.pointsLate {
+  color: #854d0e;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.explanation {
+  margin-top: 16px;
+  padding: 14px 16px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #dbe4ef;
+  border-radius: 6px;
+}
+
+.explanation p {
+  margin: 5px 0 0;
+  line-height: 1.5;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.facts div {
+  min-width: 0;
+  padding: 12px;
+  background: #f4f7fb;
+  border: 1px solid #dbe4ef;
+  border-radius: 6px;
+}
+
+.facts dt {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.facts dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.linkRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.primaryLink,
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 9px 14px;
+  color: #fff;
+  background: #255fdb;
+  border: 1px solid #255fdb;
+  border-radius: 6px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.secondaryLink {
+  color: #334155;
+  background: #fff;
+  border-color: #b8c4d4;
+}
+
+.actions,
+.actionsSingle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.actionsSingle {
+  grid-template-columns: 1fr;
+}
+
+.actions details,
+.actionsSingle details {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.actions summary,
+.actionsSingle summary {
+  padding: 13px 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.actions form,
+.actionsSingle form {
+  display: grid;
+  gap: 11px;
+  padding: 0 15px 15px;
+}
+
+.actions textarea,
+.actionsSingle textarea {
+  width: 100%;
+  min-height: 82px;
+  padding: 10px;
+  resize: vertical;
+  color: #172033;
+  background: #fff;
+  border: 1px solid #b8c4d4;
+  border-radius: 5px;
+  font: inherit;
+}
+
+.actions p,
+.actionsSingle p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.actions .reviewButton {
+  color: #7c2d12;
+  background: #ffedd5;
+  border-color: #fdba74;
+}
+
+.allClear {
+  margin-top: 18px;
+  padding: 28px;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 7px;
+  text-align: center;
+}
+
+.allClear p {
+  margin: 6px 0 0;
+}
+
+@media (max-width: 900px) {
+  .portalHeader,
+  .scoreHeader,
+  .sectionHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account {
+    justify-content: space-between;
+  }
+
+  .kpiRow {
+    grid-template-columns: 1fr auto;
+  }
+
+  .kpiRow .track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .facts {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .page {
+    padding: 14px 10px 40px;
+  }
+
+  .portalHeader,
+  .scoreSummary,
+  .cardSection {
+    padding: 18px;
+  }
+
+  .account,
+  .adminPicker,
+  .linkRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .weekNav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .weekNav a,
+  .primaryLink,
+  .secondaryLink {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .kpiRow {
+    grid-template-columns: 1fr auto;
+    gap: 9px;
+  }
+
+  .facts,
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .deductionHeader {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page * {
+    scroll-behavior: auto;
+  }
+}

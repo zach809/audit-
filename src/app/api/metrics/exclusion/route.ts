@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, initDb } from "@/lib/db";
 import { caseManagerSession, isValidSessionCookie } from "@/lib/session";
 import { rejectNonProductionWrite } from "@/lib/write-guard";
+import { caseManagerCanAccessMatter } from "@/lib/case-manager-access";
 
 function redirectBack(request: NextRequest, path: string, params: Record<string, string>) {
   const url = new URL(path, request.url);
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
   const window = String(form.get("window") ?? "").trim();
   const q = String(form.get("q") ?? "").trim();
   const cmname = String(form.get("cmname") ?? "").trim();
+  const week = String(form.get("week") ?? "").trim();
 
   if (!matterId) {
     return redirectBack(request, action === "request" ? "/case-manager" : "/", {
@@ -59,6 +61,13 @@ export async function POST(request: NextRequest) {
   if (action === "request") {
     const caseManagerName = caseManagerSession(request.cookies.get("cwca_cm_session")?.value);
     if (!caseManagerName) return NextResponse.redirect(new URL("/case-manager/login", request.url), 303);
+    if (!(await caseManagerCanAccessMatter(caseManagerName, matterId))) {
+      return redirectBack(request, "/case-manager", {
+        week,
+        metrics: "denied",
+        message: "This matter is not assigned to your case-manager account.",
+      });
+    }
     await sql`
       insert into audit_metric_exclusion (
         matter_id, active, requested_by, request_reason, updated_at
@@ -71,7 +80,7 @@ export async function POST(request: NextRequest) {
         updated_at = now()
     `;
     return redirectBack(request, "/case-manager", {
-      window,
+      week: week || (window === "past-week" ? "past" : "current"),
       q,
       cmname,
       attorney,

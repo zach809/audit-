@@ -182,14 +182,14 @@ describe("parseCallDurationSeconds", () => {
 });
 
 describe("connected call follow-up completeness", () => {
-  it("a 14-second Dialpad call still counts as a missed follow-up", () => {
+  it("a 14-second Dialpad call does not count, but remains not due inside the 10-day window", () => {
     const communications = [...unansweredPair(), dialpadCall(21, "Call duration: 00m14s")];
     const followUp = followUpItem(matter(), communications);
     const weekly = weeklyItem(matter(), communications);
     assert.equal(followUp?.status, "Missing");
     assert.equal(followUp?.reasonCode, "CURRENT_UNANSWERED_CLIENT_MESSAGES");
-    assert.equal(weekly?.status, "Missing");
-    assert.equal(weekly?.reasonCode, "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND");
+    assert.equal(weekly?.status, "Pending");
+    assert.equal(weekly?.operationalState, "Not Due Yet");
   });
 
   it("a 16-second Dialpad call is not a missed follow-up", () => {
@@ -225,6 +225,119 @@ describe("connected call follow-up completeness", () => {
     assert.equal(baselineFollowUp?.reasonCode, null);
     assert.equal(baselineWeekly?.status, "On Time");
     assert.equal(baselineWeekly?.evidenceRefId, "31");
+  });
+});
+
+describe("rolling 10-day weekly client check-in window", () => {
+  it("does not count a future weekly event as completed proof", () => {
+    const futureEvent = { ...weeklyEvent(), id: 78, start_at: zonedDateTimeToUtc(2026, 8, 20, 10, 0, 0).toISOString() };
+    const weekly = weeklyItem(matter(), [], [futureEvent]);
+    assert.equal(weekly?.status, "Pending");
+    assert.equal(weekly?.operationalState, "Not Due Yet");
+    assert.equal(weekly?.evidenceRefId, null);
+  });
+
+  it("sends partial calendar proof to review instead of deducting the score", () => {
+    const afterWindow = zonedDateTimeToUtc(2026, 8, 20, 18, 0, 0);
+    const weekly = auditMatter(matter(), { communications: [], calendars: [weeklyEvent()], errors: {} }, afterWindow).items.find(
+      (item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN",
+    );
+    assert.equal(weekly?.status, "Unknown");
+    assert.equal(weekly?.operationalState, "Needs Review - Call Proof");
+    assert.equal(weekly?.reasonCode, "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND");
+  });
+
+  it("marks the check-in missing only when both proof sources are absent after the grace period", () => {
+    const afterWindow = zonedDateTimeToUtc(2026, 8, 20, 18, 0, 0);
+    const weekly = auditMatter(matter(), { communications: [], calendars: [], errors: {} }, afterWindow).items.find(
+      (item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN",
+    );
+    assert.equal(weekly?.status, "Missing");
+    assert.equal(weekly?.operationalState, "Overdue After Grace Period");
+    assert.equal(weekly?.reasonCode, "WEEKLY_CLIENT_CONTACT_OVERDUE");
+  });
+
+  it("rolls a weekend day-10 deadline to Monday at 5 PM Illinois time", () => {
+    const created = zonedDateTimeToUtc(2026, 8, 19, 10, 0, 0);
+    const mondayBeforeFive = zonedDateTimeToUtc(2026, 8, 31, 16, 59, 0);
+    const mondayAfterFive = zonedDateTimeToUtc(2026, 8, 31, 17, 1, 0);
+    const wednesdayAfterFive = zonedDateTimeToUtc(2026, 9, 2, 17, 1, 0);
+    const before = auditMatter(matter(created), { communications: [], calendars: [], errors: {} }, mondayBeforeFive).items.find(
+      (item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN",
+    );
+    const duringGrace = auditMatter(matter(created), { communications: [], calendars: [], errors: {} }, mondayAfterFive).items.find(
+      (item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN",
+    );
+    const afterGrace = auditMatter(matter(created), { communications: [], calendars: [], errors: {} }, wednesdayAfterFive).items.find(
+      (item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN",
+    );
+    assert.equal(before?.status, "Pending");
+    assert.equal(before?.deadlineAt?.toISOString(), zonedDateTimeToUtc(2026, 8, 31, 17, 0, 0).toISOString());
+    assert.equal(duringGrace?.status, "Pending");
+    assert.equal(duringGrace?.operationalState, "Grace Period - No Score Deduction");
+    assert.equal(duringGrace?.correctiveDeadlineAt?.toISOString(), zonedDateTimeToUtc(2026, 9, 2, 17, 0, 0).toISOString());
+    assert.equal(afterGrace?.status, "Missing");
+  });
+
+  it("gives a documented outgoing call attempt three business days of grace", () => {
+    const attemptAt = zonedDateTimeToUtc(2026, 8, 18, 10, 0, 0);
+    const attempt: ClioCommunication = {
+      id: 91,
+      subject: "Attempted call - no answer - left voicemail",
+      type: "PhoneCommunication",
+      date: attemptAt.toISOString(),
+      senders: [{ id: 2, name: "Alex Kim", type: "User" }],
+      receivers: [{ id: 9, name: "Jordan Reyes", type: "Contact" }],
+    };
+    const duringGrace = zonedDateTimeToUtc(2026, 8, 19, 12, 0, 0);
+    const weekly = auditMatter(matter(), { communications: [attempt], calendars: [], errors: {} }, duringGrace).items.find(
+      (item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN",
+    );
+    assert.equal(weekly?.status, "Pending");
+    assert.equal(weekly?.operationalState, "Contact Attempted - Grace Period");
+    assert.equal(weekly?.reasonCode, "WEEKLY_CONTACT_ATTEMPT_GRACE");
+    assert.equal(weekly?.evidenceRefId, "91");
+  });
+
+  it("a newer outgoing email completes the check-in and starts a new 10-day window", () => {
+    const contactAt = zonedDateTimeToUtc(2026, 8, 16, 9, 0, 0);
+    const outgoingEmail: ClioCommunication = {
+      id: 90,
+      subject: "Case update",
+      type: "EmailCommunication",
+      date: contactAt.toISOString(),
+      senders: [{ id: 2, name: "Alex Kim", type: "User" }],
+      receivers: [{ id: 9, name: "Jordan Reyes", type: "Contact" }],
+    };
+    const afterOriginalWindow = zonedDateTimeToUtc(2026, 8, 18, 18, 0, 0);
+    const weekly = auditMatter(
+      matter(),
+      { communications: [outgoingEmail], calendars: [weeklyEvent()], errors: {} },
+      afterOriginalWindow,
+    ).items.find((item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN");
+    assert.equal(weekly?.status, "On Time");
+    assert.equal(weekly?.operationalState, "On Track");
+    assert.equal(weekly?.evidenceRefId, "90");
+  });
+
+  it("an outgoing SMS completes the check-in without requiring a calendar event", () => {
+    const contactAt = zonedDateTimeToUtc(2026, 8, 16, 11, 0, 0);
+    const outgoingSms: ClioCommunication = {
+      id: 92,
+      subject: "[SMS] Outbound - Case update sent to client",
+      type: "TextCommunication",
+      date: contactAt.toISOString(),
+      senders: [{ id: 2, name: "Alex Kim", type: "User" }],
+      receivers: [{ id: 9, name: "Jordan Reyes", type: "Contact" }],
+    };
+    const weekly = auditMatter(
+      matter(),
+      { communications: [outgoingSms], calendars: [], errors: {} },
+      zonedDateTimeToUtc(2026, 8, 18, 18, 0, 0),
+    ).items.find((item) => item.stepCode === "WEEKLY_CLIENT_CHECKIN");
+    assert.equal(weekly?.status, "On Time");
+    assert.equal(weekly?.operationalState, "On Track");
+    assert.equal(weekly?.evidenceRefId, "92");
   });
 });
 

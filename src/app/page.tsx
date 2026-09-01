@@ -168,7 +168,7 @@ function ongoingReminderText(stepCode: string): string {
     case "CLIENT_CONTACT":
       return "Please confirm the client was contacted. Proof can be an email, phone-call log, or communication note in Clio.";
     case "WEEKLY_CLIENT_CHECKIN":
-      return "Please confirm the weekly client check-in event and call proof by 5:00 PM Illinois time one week plus one day after the last court date.";
+      return "Please confirm a weekly check-in calendar event and real phone-call communication within 10 days of the last outgoing client contact.";
     case "COURT_REMINDER_CALL":
       return "Please confirm the court reminder email template was sent by 5:00 PM Illinois time on the court date.";
     default:
@@ -738,7 +738,7 @@ function DashboardUnavailable({ message, connected }: { message: string; connect
             <span className="eyebrow">Internal Workflow Coaching</span>
             <span className="badge Pass">Read-Only Clio</span>
           </div>
-          <h1>CWCA Clio Workflow Compliance Auditor</h1>
+          <h1>Clio Workflow Compliance Auditor</h1>
           <p>Open matters, proof links, and follow-up in one focused workspace.</p>
         </div>
         <div className="actions header-actions">
@@ -928,6 +928,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     filters.to ? new Date(`${filters.to}T12:00:00`) : new Date(),
     !filters.to,
   );
+  const weeklyPreviousMissing = weeklyComplianceSections.reduce(
+    (total, section) => total + section.rows.reduce((sectionTotal, row) => sectionTotal + row.previousWeek, 0),
+    0,
+  );
+  const weeklyCurrentMissing = weeklyComplianceSections.reduce(
+    (total, section) => total + section.rows.reduce((sectionTotal, row) => sectionTotal + row.currentWeek, 0),
+    0,
+  );
+  const weeklyMissingChange = weeklyCurrentMissing - weeklyPreviousMissing;
   const caseManagerWorkspaceRows = allWorkspaceRows.filter(
     (item) => !workspaceCaseManagerFilter || item.caseManager.toLowerCase() === workspaceCaseManagerFilter.toLowerCase(),
   );
@@ -1370,7 +1379,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
             <span className="eyebrow">Internal Workflow Coaching</span>
             <span className="badge Pass">Read-Only Clio</span>
           </div>
-          <h1>CWCA Clio Workflow Compliance Auditor</h1>
+          <h1>Clio Workflow Compliance Auditor</h1>
           <p>Open matters, proof links, and follow-up in one focused workspace.</p>
         </div>
         <div className="actions header-actions">
@@ -2479,6 +2488,28 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
               <button className="primary compact" type="submit">Download Comparison CSV</button>
             </form>
           </div>
+          <div className="weekly-report-summary" aria-label="Weekly report summary">
+            <div className={`weekly-report-metric ${weeklyCurrentMissing === 0 ? "clear" : "attention"}`}>
+              <span>Current Week</span>
+              <strong>{weeklyCurrentMissing}</strong>
+              <small>{weeklyCurrentMissing === 0 ? "All tracked items are clear" : "Missing items need attention"}</small>
+            </div>
+            <div className="weekly-report-metric neutral">
+              <span>Previous Week</span>
+              <strong>{weeklyPreviousMissing}</strong>
+              <small>Comparison baseline</small>
+            </div>
+            <div className={`weekly-report-metric ${weeklyMissingChange < 0 ? "improved" : weeklyMissingChange > 0 ? "worse" : "steady"}`}>
+              <span>Week-to-Week</span>
+              <strong>{weeklyMissingChange > 0 ? `+${weeklyMissingChange}` : weeklyMissingChange}</strong>
+              <small>{weeklyMissingChange < 0 ? "Improved" : weeklyMissingChange > 0 ? "More items are missing" : "No change"}</small>
+            </div>
+          </div>
+          <div className="weekly-report-legend" aria-label="Report color key">
+            <span className="legend-clear">Clear or improving</span>
+            <span className="legend-watch">Open with no change</span>
+            <span className="legend-worse">More items missing</span>
+          </div>
           <div className="weekly-compliance-list">
             {weeklyComplianceSections.map((section) => (
               <details className="weekly-compliance-section" key={section.caseManager} open={section.rows.some((row) => row.currentWeek > 0 || row.previousWeek > 0)}>
@@ -2498,7 +2529,18 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
                     </thead>
                     <tbody>
                       {section.rows.map((row) => (
-                        <tr key={`${section.caseManager}-${row.category}`}>
+                        <tr
+                          className={
+                            row.currentWeek === 0
+                              ? "report-row-clear"
+                              : row.change < 0
+                                ? "report-row-improved"
+                                : row.change > 0
+                                  ? "report-row-worse"
+                                  : "report-row-watch"
+                          }
+                          key={`${section.caseManager}-${row.category}`}
+                        >
                           <td>{row.category}</td>
                           <td>{row.previousWeek}</td>
                           <td>{row.currentWeek}</td>

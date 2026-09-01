@@ -9,6 +9,7 @@ import {
   isCourtEvent,
   isCourtReminderTemplate,
   isCourtResultTemplate,
+  isDocumentedCallAttempt,
   isPossibleCourtEvent,
   isPhoneCallCommunication,
   isWelcomeTemplate,
@@ -196,6 +197,28 @@ function isFirmPhoneCall(comm: ClioCommunication, clientId: string | null): bool
   return true;
 }
 
+function isFirmCallAttempt(comm: ClioCommunication, clientId: string | null): boolean {
+  if (isOutbound(comm, clientId) !== true) return false;
+  return isDocumentedCallAttempt(communicationSearchText(comm, true));
+}
+
+function isAutomatedCommunication(comm: ClioCommunication): boolean {
+  const text = communicationSearchText(comm, true);
+  return [
+    "automatic reply",
+    "automated reply",
+    "auto reply",
+    "out of office",
+    "mail delivery subsystem",
+    "delivery status notification",
+    "undeliverable",
+    "do not reply",
+    "no-reply",
+    "noreply",
+    "system notification",
+  ].some((pattern) => text.includes(pattern));
+}
+
 function isPettyTrafficMatter(record: MatterRecord): boolean {
   return haystack(record.matter_number).includes("petty traffic");
 }
@@ -228,31 +251,6 @@ function isMoreThanOneLocalMonthAway(courtAt: Date, now: Date): boolean {
   if (monthsAhead > 1) return true;
   if (monthsAhead < 1) return false;
   return courtParts.day > nowParts.day;
-}
-
-function startOfLocalWeek(date: Date): Date {
-  const parts = localParts(date);
-  const weekdayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday);
-  const daysSinceMonday = weekdayIndex === -1 ? 0 : (weekdayIndex + 6) % 7;
-  return zonedDateTimeToUtc(parts.year, parts.month, parts.day - daysSinceMonday, 0, 0, 0);
-}
-
-function endOfLocalWeek(date: Date): Date {
-  const start = startOfLocalWeek(date);
-  const parts = localParts(start);
-  return zonedDateTimeToUtc(parts.year, parts.month, parts.day + 6, 23, 59, 59);
-}
-
-function endOfLocalWorkWeek(date: Date): Date {
-  const start = startOfLocalWeek(date);
-  const parts = localParts(start);
-  return zonedDateTimeToUtc(parts.year, parts.month, parts.day + 4, 17, 0, 0);
-}
-
-function isInLocalWeek(date: Date, anchor: Date): boolean {
-  const start = startOfLocalWeek(anchor);
-  const end = endOfLocalWeek(anchor);
-  return date >= start && date <= end;
 }
 
 function nearestByLocalDate<T>(items: Evidence<T>[], anchor: Date, maxDistanceDays: number): (Evidence<T> & { distance: number }) | null {
@@ -554,7 +552,6 @@ export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now 
   const setup = setupDeadlines(record.matter_created_at);
   const clientDeadline = addBusinessDaysDeadline(record.effective_intake_at, 1);
   const appearanceDeadline = addWeekdayHours(record.matter_created_at, 48);
-  const firstWeeklyCheckInDeadline = addBusinessDaysDeadline(record.effective_intake_at, 5);
   const commError = evidence.errors.communications;
   const calendarError = evidence.errors.calendars;
 
@@ -645,79 +642,153 @@ export function auditMatter(record: MatterRecord, evidence: EvidenceBundle, now 
   const weeklyCheckInEvents = evidence.calendars
     .map((cal): Evidence<ClioCalendarEntry> | null => {
       const at = parseDate(cal.start_at);
-      if (!at) return null;
+      if (!at || at > now) return null;
       if (!isWeeklyClientCheckIn(calendarSearchText(cal))) return null;
       return { item: cal, at, source: "Calendar", url: evidenceUrl("calendar_entries", cal.id) };
     })
-    .filter(Boolean) as Evidence<ClioCalendarEntry>[];
-
-  const weeklyCheckInCourtDeadline = lastCourtEnd ? businessDayEnd(addDaysRaw(lastCourtEnd, 8)) : null;
-  const weeklyCheckInDueAnchor = weeklyCheckInCourtDeadline ?? now;
-  const weeklyCheckInCycleEvents = weeklyCheckInEvents
-    .filter((event) => isInLocalWeek(event.at, weeklyCheckInDueAnchor))
-    .sort((a, b) => a.at.getTime() - b.at.getTime());
-  const dueWeeklyCheckInEvents = weeklyCheckInCycleEvents.filter((event) => endOfLocalBusinessDay(event.at) <= now);
-  const futureWeeklyCheckInEvents = weeklyCheckInCycleEvents.filter((event) => endOfLocalBusinessDay(event.at) > now);
-  const nearestDueWeeklyCheckInEvent = nearestByLocalDate(dueWeeklyCheckInEvents, weeklyCheckInDueAnchor, weeklyCheckInCourtDeadline ? 3 : 7);
-  const nextWeeklyCheckIn = futureWeeklyCheckInEvents[0] ?? null;
-  const weeklyCheckInEvent =
-    nearestDueWeeklyCheckInEvent ??
-    dueWeeklyCheckInEvents[dueWeeklyCheckInEvents.length - 1] ??
-    nextWeeklyCheckIn;
-  const weeklyCheckInCalendarDeadline = weeklyCheckInEvent ? endOfLocalBusinessDay(weeklyCheckInEvent.at) : null;
-  const weeklyCheckInDueDate = weeklyCheckInCourtDeadline ?? weeklyCheckInCalendarDeadline ?? firstWeeklyCheckInDeadline;
-  const weeklyCheckInDeadline = weeklyCheckInDueDate ? endOfLocalWorkWeek(weeklyCheckInDueDate) : null;
-  const weeklyCheckInCallAnchor = weeklyCheckInEvent?.at ?? weeklyCheckInDueDate ?? weeklyCheckInDeadline;
+    .filter((entry): entry is Evidence<ClioCalendarEntry> => entry !== null)
+    .sort((a, b) => b.at.getTime() - a.at.getTime());
   const weeklyPhoneCalls = evidence.communications
     .map((comm): Evidence<ClioCommunication> | null => {
       const at = commDate(comm);
-      if (!at || !isFirmPhoneCall(comm, record.client_id)) return null;
+      if (!at || at < record.effective_intake_at || at > now || !isFirmPhoneCall(comm, record.client_id)) return null;
       return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
     })
-    .filter(Boolean) as Evidence<ClioCommunication>[];
+    .filter((entry): entry is Evidence<ClioCommunication> => entry !== null)
+    .sort((a, b) => b.at.getTime() - a.at.getTime());
   const caseManagerWeeklyCalls = weeklyPhoneCalls.filter((call) => attributeCallRole(call.item, record) !== "attorney");
   const attributedWeeklyCalls = caseManagerWeeklyCalls.length > 0 ? caseManagerWeeklyCalls : weeklyPhoneCalls;
-  const weeklyCheckInWeekCalls = attributedWeeklyCalls.filter((call) => isInLocalWeek(call.at, weeklyCheckInCallAnchor));
-  const weeklyCheckInCall = earliest(
-    weeklyCheckInWeekCalls.filter((call) => !weeklyCheckInDeadline || call.at <= weeklyCheckInDeadline),
+  const weeklyCallAttempts = evidence.communications
+    .map((comm): Evidence<ClioCommunication> | null => {
+      const at = commDate(comm);
+      if (!at || at < record.effective_intake_at || at > now || !isFirmCallAttempt(comm, record.client_id)) return null;
+      return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+    })
+    .filter((entry): entry is Evidence<ClioCommunication> => entry !== null)
+    .sort((a, b) => b.at.getTime() - a.at.getTime());
+  const meaningfulOutgoingContacts = evidence.communications
+    .map((comm): Evidence<ClioCommunication> | null => {
+      const at = commDate(comm);
+      if (!at || at < record.effective_intake_at || at > now) return null;
+      if (isOutbound(comm, record.client_id) !== true) return null;
+      if (isAutomatedCommunication(comm)) return null;
+      if (isFirmCallAttempt(comm, record.client_id)) return null;
+      if (isPhoneCallCommunication(communicationSearchText(comm, true)) && isTooShortToCountAsFollowUp(comm)) return null;
+      return { item: comm, at, source: "Communication", url: evidenceUrl("communications", comm.id) };
+    })
+    .filter((entry): entry is Evidence<ClioCommunication> => entry !== null)
+    .sort((a, b) => b.at.getTime() - a.at.getTime());
+  const latestClientContact = meaningfulOutgoingContacts[0] ?? null;
+  const weeklyCheckInAnchor = latestClientContact?.at ?? record.effective_intake_at;
+  const weeklyCheckInDeadline = businessDayEnd(addDaysRaw(weeklyCheckInAnchor, 10));
+  const latestWeeklyCheckInPair = attributedWeeklyCalls.reduce<{
+    call: Evidence<ClioCommunication>;
+    event: Evidence<ClioCalendarEntry> & { distance: number };
+  } | null>((match, call) => {
+    if (match) return match;
+    const event = nearestByLocalDate(weeklyCheckInEvents, call.at, 5);
+    return event ? { call, event } : null;
+  }, null);
+  const pairIsLatestContact = Boolean(
+    latestWeeklyCheckInPair &&
+      latestClientContact &&
+      String(latestWeeklyCheckInPair.call.item.id) === String(latestClientContact.item.id),
   );
-  const nearbyWeeklyCheckInCall = nearestByLocalDate(weeklyCheckInWeekCalls, weeklyCheckInCallAnchor, 3);
-  const weeklyCallWithoutCalendar = !weeklyCheckInEvent
-    ? earliest(weeklyCheckInWeekCalls.filter((call) => call.at <= now))
-    : null;
+  const latestWeeklyCheckInEvent = weeklyCheckInEvents[0] ?? null;
+  const latestWeeklyCall = attributedWeeklyCalls[0] ?? null;
+  const latestWeeklyCallAttempt = weeklyCallAttempts[0] ?? null;
+  const weeklyCheckInGraceDeadline = addBusinessDaysDeadline(weeklyCheckInDeadline, 2);
+  const callAttemptGraceDeadline = latestWeeklyCallAttempt ? addBusinessDaysDeadline(latestWeeklyCallAttempt.at, 3) : null;
+  const weeklyCheckInScoreDeadline =
+    callAttemptGraceDeadline && callAttemptGraceDeadline > weeklyCheckInGraceDeadline
+      ? callAttemptGraceDeadline
+      : weeklyCheckInGraceDeadline;
   const weeklyCheckInItem = (() => {
     if (calendarError) {
       return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, calendarError);
     }
-    if (!weeklyCheckInEvent) {
-      if (weeklyCallWithoutCalendar && weeklyCheckInDeadline && now > weeklyCheckInDeadline) {
-        return withEvidence(
-          base("WEEKLY_CLIENT_CHECKIN", "Late", "Timing Review", weeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
-          weeklyCallWithoutCalendar,
-        );
-      }
-      return classify("WEEKLY_CLIENT_CHECKIN", null, weeklyCheckInDeadline, {
-        operationalState: weeklyCheckInCourtDeadline ? "Waiting until Friday 5 PM of the weekly check-in week" : "Waiting for weekly check-in window",
-        reasonCode: "WEEKLY_CALENDAR_EVENT_NOT_FOUND",
-        now,
-      });
-    }
-    if (weeklyCheckInCall) {
-      return classify("WEEKLY_CLIENT_CHECKIN", weeklyCheckInCall, weeklyCheckInDeadline, {
-        reasonCode: weeklyCheckInDeadline && weeklyCheckInCall.at > weeklyCheckInDeadline ? "CALL_FOUND_NEARBY_DATE" : null,
-        now,
-      });
-    }
-    if (nearbyWeeklyCheckInCall && nearbyWeeklyCheckInCall.distance > 0 && weeklyCheckInDeadline && now > weeklyCheckInDeadline) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Late", "Late", weeklyCheckInDeadline, null, "CALL_FOUND_NEARBY_DATE"), nearbyWeeklyCheckInCall);
-    }
-    if (!weeklyCheckInDeadline || now <= weeklyCheckInDeadline) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Pending", "Not Due Yet", weeklyCheckInDeadline, null), weeklyCheckInEvent);
-    }
     if (commError) {
-      return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError), weeklyCheckInEvent);
+      return base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Unknown", weeklyCheckInDeadline, null, commError);
     }
-    return withEvidence(base("WEEKLY_CLIENT_CHECKIN", "Missing", "Needs Same-Day Call Proof", weeklyCheckInDeadline, null, "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND"), weeklyCheckInEvent);
+    // A substantive outgoing call, email, or SMS is the actual client check-in.
+    // Calendar entries help reviewers find planned work, but they are not required
+    // when Clio Communications already confirms that the client was contacted.
+    if (latestClientContact && now <= weeklyCheckInDeadline) {
+      return withEvidence(
+        base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Track", weeklyCheckInDeadline, null),
+        latestClientContact,
+      );
+    }
+    if (pairIsLatestContact && latestWeeklyCheckInPair && now <= weeklyCheckInDeadline) {
+      return withEvidence(
+        base("WEEKLY_CLIENT_CHECKIN", "On Time", "On Time", weeklyCheckInDeadline, null),
+        latestWeeklyCheckInPair.call,
+      );
+    }
+    if (now <= weeklyCheckInDeadline) {
+      const dueSoon = weeklyCheckInDeadline.getTime() - now.getTime() <= 2 * 24 * 60 * 60 * 1000;
+      const pending = base("WEEKLY_CLIENT_CHECKIN", "Pending", dueSoon ? "Due Soon" : "Not Due Yet", weeklyCheckInDeadline, null);
+      return latestClientContact
+        ? withEvidence(pending, latestClientContact)
+        : latestWeeklyCheckInEvent
+          ? withEvidence(pending, latestWeeklyCheckInEvent)
+          : pending;
+    }
+    if (
+      latestWeeklyCallAttempt &&
+      callAttemptGraceDeadline &&
+      callAttemptGraceDeadline >= weeklyCheckInGraceDeadline &&
+      now <= callAttemptGraceDeadline
+    ) {
+      return withEvidence(
+        base(
+          "WEEKLY_CLIENT_CHECKIN",
+          "Pending",
+          "Contact Attempted - Grace Period",
+          weeklyCheckInDeadline,
+          callAttemptGraceDeadline,
+          "WEEKLY_CONTACT_ATTEMPT_GRACE",
+        ),
+        latestWeeklyCallAttempt,
+      );
+    }
+    if (now <= weeklyCheckInGraceDeadline) {
+      const grace = base(
+        "WEEKLY_CLIENT_CHECKIN",
+        "Pending",
+        "Grace Period - No Score Deduction",
+        weeklyCheckInDeadline,
+        weeklyCheckInGraceDeadline,
+        "WEEKLY_CHECKIN_GENERAL_GRACE",
+      );
+      return latestWeeklyCallAttempt
+        ? withEvidence(grace, latestWeeklyCallAttempt)
+        : latestWeeklyCheckInEvent
+          ? withEvidence(grace, latestWeeklyCheckInEvent)
+          : latestClientContact
+            ? withEvidence(grace, latestClientContact)
+            : grace;
+    }
+    if (latestWeeklyCall && !nearestByLocalDate(weeklyCheckInEvents, latestWeeklyCall.at, 5)) {
+      return withEvidence(
+        base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Needs Review - Calendar Proof", weeklyCheckInDeadline, null, "WEEKLY_CALL_FOUND_EVENT_NOT_FOUND"),
+        latestWeeklyCall,
+      );
+    }
+    if (latestWeeklyCheckInEvent && !latestWeeklyCheckInPair) {
+      return withEvidence(
+        base("WEEKLY_CLIENT_CHECKIN", "Unknown", "Needs Review - Call Proof", weeklyCheckInDeadline, null, "WEEKLY_EVENT_FOUND_CALL_NOT_FOUND"),
+        latestWeeklyCheckInEvent,
+      );
+    }
+    return base(
+      "WEEKLY_CLIENT_CHECKIN",
+      "Missing",
+      "Overdue After Grace Period",
+      weeklyCheckInDeadline,
+      weeklyCheckInScoreDeadline,
+      "WEEKLY_CLIENT_CONTACT_OVERDUE",
+    );
   })();
 
   const courtAdded = earliest(

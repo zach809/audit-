@@ -139,11 +139,11 @@ function guidanceForStep(stepCode: string) {
     },
     WEEKLY_CLIENT_CHECKIN: {
       clioArea: "Calendar and Communications tabs",
-      expectedProof: "A weekly check-in/courtesy/follow-up call calendar event and a real phone call communication for the client. When there is a past court date, CWCA waits until one week plus one day after that court date, due by 5:00 PM Illinois time.",
-      searchTips: "Open Calendar for the last court date and weekly check-in event, then open Communications and confirm a real phone call occurred by the court-based due date or within a nearby date window.",
-      ifProofExists: "If the event and call proof exist by the court-based due date, mark Resolved. If the call is nearby or late, treat it as timing review rather than missing work.",
-      ifProofMissing: "If the court-based due date has passed and either the calendar event or nearby phone-call proof is missing, keep Still Needs Follow-Up.",
-      possibleFalsePositive: "If the due date has not reached one week plus one day after the last court date, this should be Not Due Yet. Recheck the matter after the current audit version runs.",
+      expectedProof: "A past weekly check-in/courtesy/follow-up calendar event and a real outgoing phone-call communication for the client. The next check-in is due 10 calendar days after the most recent meaningful outgoing client contact.",
+      searchTips: "Open Communications to find the latest outgoing client contact, then confirm a real phone call and matching weekly check-in event exist. Future calendar events do not count as completed work.",
+      ifProofExists: "If the matching event and call are the latest client contact and remain inside the 10-day window, mark Resolved.",
+      ifProofMissing: "If 10 days have passed since the latest meaningful outgoing contact and either the event or phone-call proof is missing, keep Still Needs Follow-Up.",
+      possibleFalsePositive: "If the latest outgoing client contact was less than 10 days ago, this should be Not Due Yet. Recheck the matter after the current audit version runs.",
     },
   };
 
@@ -158,7 +158,7 @@ function whereCwcaLooked(stepCode: string): string {
     return "CWCA looked at matter-linked Clio Calendar entries returned by the read-only API, including title, description, event type, date/time, calendar owner, and stored evidence references.";
   }
   if (stepCode === "WEEKLY_CLIENT_CHECKIN") {
-    return "CWCA looked for the last court Calendar entry, a matter-linked weekly check-in Calendar entry, and a real phone-call Communication returned by the read-only API. When there is a past court date, the check-in is not due until one week plus one day later at 5:00 PM Illinois time. Nearby-date calls are treated as completed late/timing review.";
+    return "CWCA looked for the most recent meaningful outgoing client contact, a past matter-linked weekly check-in Calendar entry, and a real phone-call Communication returned by the read-only API. The next check-in is due 10 calendar days after that latest contact; future events never count as completed proof.";
   }
   return "CWCA looked at matter-linked Clio evidence returned by the read-only API and the saved CWCA audit metadata for this item.";
 }

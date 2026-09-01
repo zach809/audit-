@@ -5,6 +5,7 @@ import { saveAuditReview } from "@/lib/review-notes";
 import { caseManagerSession } from "@/lib/session";
 import { workflowLabel } from "@/lib/workflow-rules";
 import { rejectNonProductionWrite } from "@/lib/write-guard";
+import { caseManagerCanAccessMatter } from "@/lib/case-manager-access";
 
 function portalRedirect(request: NextRequest, params: Record<string, string>) {
   const search = new URLSearchParams(params);
@@ -24,13 +25,21 @@ export async function POST(request: NextRequest) {
   const stepCode = String(form.get("step_code") ?? "").trim();
   const note = String(form.get("note") ?? "").trim();
   const proofReference = String(form.get("proof_reference") ?? "").trim();
+  const week = String(form.get("week") ?? "current").trim() === "past" ? "past" : "current";
   const label = workflowLabel(stepCode);
 
   if (!matterId || !stepCode) {
-    return portalRedirect(request, { cm: "failed", message: "Task details were missing. Please try again." });
+    return portalRedirect(request, { week, cm: "failed", message: "Task details were missing. Please try again." });
   }
 
   try {
+    if (!(await caseManagerCanAccessMatter(caseManagerName, matterId))) {
+      return portalRedirect(request, {
+        week,
+        cm: "denied",
+        message: "This matter is not assigned to your case-manager account.",
+      });
+    }
     await initDb();
     await auditOneMatterById(undefined, matterId);
 
@@ -65,6 +74,7 @@ export async function POST(request: NextRequest) {
         reviewedBy: caseManagerName,
       });
       return portalRedirect(request, {
+        week,
         cm: "proof-missing",
         message: `${label} stayed open because CWCA rechecked Clio and did not find proof yet.`,
       });
@@ -85,11 +95,12 @@ export async function POST(request: NextRequest) {
     });
 
     return portalRedirect(request, {
+      week,
       cm: "cleared",
       message: `${label} was verified in Clio and cleared.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return portalRedirect(request, { cm: "failed", message: message.slice(0, 220) });
+    return portalRedirect(request, { week, cm: "failed", message: message.slice(0, 220) });
   }
 }

@@ -336,28 +336,53 @@ export const CALENDAR_PATTERNS = {
     "weekly follow up",
     "weekly client check-in",
     "weekly client check in",
+    "weekly client checkin",
     "weekly client checkup",
     "weekly client check up",
+    "weekly client phone call",
+    "weekly phone call",
     "weekly client touch base",
     "weekly touch base",
+    "weekly touchbase",
     "weekly status call",
     "weekly status update",
     "weekly update call",
+    "weekly case update call",
+    "weekly client care call",
     "check-in call",
     "check in call",
+    "checkin call",
+    "client check-in call",
+    "client check in call",
+    "client checkin call",
     "checkup call",
+    "phone check-in",
+    "phone check in",
+    "phone checkin",
     "touch base call",
+    "touchbase call",
     "client touch base call",
+    "client touchbase call",
     "client status call",
+    "case status call",
+    "status update call",
     "client update call",
+    "case update call",
+    "client care call",
     "follow up client",
     "follow-up client",
+    "followup with client",
+    "follow-up with client",
+    "follow up with client",
     "weekly check-in",
     "weekly check in",
     "weekly checkup",
     "weekly check up",
     "weekly courtesy call",
     "weekly client courtesy call",
+    "courtesy check-in",
+    "courtesy check in",
+    "courtesy checkin",
     "client weekly call",
     "client weekly follow up",
     "client weekly follow-up",
@@ -371,9 +396,23 @@ export const CALENDAR_PATTERNS = {
     "client follow-up call",
     "client follow up call",
     "llamada semanal",
+    "llamada semanal al cliente",
+    "llamada semanal con cliente",
     "seguimiento semanal",
+    "seguimiento semanal al cliente",
+    "seguimiento semanal con cliente",
     "llamada de seguimiento",
+    "llamada de seguimiento semanal",
     "seguimiento con cliente",
+    "llamada de cortesia",
+    "llamada de cortesía",
+    "llamada de actualizacion",
+    "llamada de actualización",
+    "llamada para actualizar",
+    "actualizacion del caso",
+    "actualización del caso",
+    "contacto semanal",
+    "chequeo semanal",
   ],
 };
 
@@ -471,7 +510,9 @@ export function isCalendarEmailContact(text: string): boolean {
 export function isWeeklyClientCheckIn(text: string): boolean {
   const normalized = normalizeText(text);
   if (!includesAny(normalized, CALENDAR_PATTERNS.weeklyClientCheckIn)) return false;
-  if (isCourtEvent(normalized) || isCourtReminderTemplate(normalized)) return false;
+  // A recognized check-in title wins over broad court tokens such as "status"
+  // and "court" substrings in words like "courtesy" or Spanish "cortesia".
+  if (isCourtReminderTemplate(normalized)) return false;
   return true;
 }
 
@@ -499,5 +540,44 @@ export function isPhoneCallCommunication(text: string): boolean {
     "call with client",
     "call to client",
     "llamada",
+  ]);
+}
+
+export function isDocumentedCallAttempt(text: string): boolean {
+  const normalized = normalizeText(text);
+  if (includesAny(normalized, ["missed inbound call", "inbound sms", "outbound sms", "sms", "text message"])) {
+    return false;
+  }
+  return includesAny(normalized, [
+    "call attempt",
+    "attempted call",
+    "attempted to call",
+    "tried to call",
+    "called no answer",
+    "no answer",
+    "left voicemail",
+    "left voice mail",
+    "left a voicemail",
+    "left message",
+    "voicemail left",
+    "voice mail left",
+    "lvm",
+    "unable to reach",
+    "could not reach",
+    "no response by phone",
+    "intento de llamada",
+    "intente llamar",
+    "intenté llamar",
+    "se intento llamar",
+    "se intentó llamar",
+    "no contesto",
+    "no contestó",
+    "sin respuesta",
+    "deje mensaje",
+    "dejé mensaje",
+    "deje voicemail",
+    "dejé voicemail",
+    "buzon de voz",
+    "buzón de voz",
   ]);
 }

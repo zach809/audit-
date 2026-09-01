@@ -1042,7 +1042,7 @@ export function standardsCaseManagerFor(item: CaseManagerMapItem): string {
   if (attorney.includes("alex") && attorney.includes("blum")) return "Lori";
   if (attorney.includes("elanna myers")) return isParkCityMatter(item) ? "Ronald" : "Lori";
   if (attorney.includes("andrea neumann")) return "Nathaly";
-  if (attorney.includes("james b") || attorney.includes("james brzezinski")) return isParkCityMatter(item) ? "Ronald" : "Ronald";
+  if (attorney.includes("james b") || attorney.includes("james brzezinski")) return "Lori";
   if ((attorney.includes("michelle") && (attorney.includes("mcclellan") || attorney.includes("mc clellan"))) || attorney.includes("thomas carrasco")) return "Ronald";
   if (attorney.includes("arnold pula")) return "Svetlana";
   return manualCaseManager || "Unassigned";
@@ -1051,7 +1051,7 @@ export function standardsCaseManagerFor(item: CaseManagerMapItem): string {
 function standardsAssignmentNote(item: WorkspaceAuditItem): string {
   const attorney = normalizeOwnerName(item.responsible_attorney_name);
   if (attorney.includes("james b") || attorney.includes("james brzezinski")) {
-    return isParkCityMatter(item) ? "James B. Park City rule" : "James B. assigned to Ronald; Park City location not stored separately";
+    return "James Brzezinski assigned to Lori";
   }
   if (attorney.includes("elanna myers")) {
     return isParkCityMatter(item) ? "Elanna Myers Park City best-effort match" : "Elanna Myers all other locations";

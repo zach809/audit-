@@ -9,6 +9,7 @@ import {
   parseMatterDir,
   parseMatterPage,
   parseMatterSort,
+  standardsCaseManagerFor,
 } from "./dashboard-data";
 
 function source(rel: string) {
@@ -315,6 +316,19 @@ describe("standards report weekly check-ins", () => {
 });
 
 describe("standards matters the case manager map cannot place", () => {
+  it("assigns every James Brzezinski matter to Lori", () => {
+    assert.equal(
+      standardsCaseManagerFor({
+        responsible_attorney_name: "James Brzezinski",
+        case_manager_name: "Ronald",
+        matter_number: "park-city-123",
+        client_first_name: "Example",
+        client_last_name: "Client",
+      }),
+      "Lori",
+    );
+  });
+
   const RANGE = { from: "2026-08-01", to: "2026-08-08" };
 
   function newMatter(matterId: string, attorney: string) {
